@@ -118,8 +118,12 @@ namespace stdc {
         double toDouble(double defaultValue = 0) const;
         int64_t toInt(int64_t defaultValue = 0) const;
         std::string_view toStringView(std::string_view defaultValue = {}) const;
+        /// \warning When the type differs, the returned reference points at \a defaultValue.
+        ///          A temporary default lives only until the end of the full expression.
         const std::string &toString(const std::string &defaultValue = {}) const;
         array_view<uint8_t> toBinaryView(array_view<uint8_t> defaultValue = {}) const;
+        /// \warning When the type differs, the returned reference points at \a defaultValue.
+        ///          A temporary default lives only until the end of the full expression.
         const std::vector<uint8_t> &toBinary(const std::vector<uint8_t> &defaultValue = {}) const;
         const JsonArray &toArray() const;
         const JsonArray &toArray(const JsonArray &defaultValue) const;

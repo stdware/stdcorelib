@@ -460,7 +460,8 @@ namespace stdc {
         vlarray(const vlarray &other) : vlarray(other.get_allocator()) {
             this->assign(other);
         }
-        vlarray(vlarray &&other) noexcept : vlarray(other.get_allocator()) {
+        vlarray(vlarray &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
+            : vlarray(other.get_allocator()) {
             this->assign(std::move(other));
         }
 
@@ -485,7 +486,7 @@ namespace stdc {
             this->assign(other);
             return *this;
         }
-        vlarray &operator=(vlarray &&other) noexcept {
+        vlarray &operator=(vlarray &&other) noexcept(std::is_nothrow_move_constructible_v<T>) {
             this->assign(std::move(other));
             return *this;
         }

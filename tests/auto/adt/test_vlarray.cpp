@@ -3,6 +3,7 @@
 #include <stdcorelib/adt/vlarray.h>
 
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -45,6 +46,22 @@ namespace {
 
         static inline int g_count = 0;
     };
+
+    struct ThrowingMove {
+        ThrowingMove() = default;
+        ThrowingMove(const ThrowingMove &) = default;
+        ThrowingMove(ThrowingMove &&) noexcept(false) {
+        }
+        ThrowingMove &operator=(const ThrowingMove &) = default;
+        ThrowingMove &operator=(ThrowingMove &&) noexcept(false) {
+            return *this;
+        }
+    };
+
+    static_assert(std::is_nothrow_move_constructible_v<vlarray<Counted, 4>>);
+    static_assert(std::is_nothrow_move_assignable_v<vlarray<Counted, 4>>);
+    static_assert(!std::is_nothrow_move_constructible_v<vlarray<ThrowingMove, 4>>);
+    static_assert(!std::is_nothrow_move_assignable_v<vlarray<ThrowingMove, 4>>);
 
 }
 

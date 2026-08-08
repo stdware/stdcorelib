@@ -395,10 +395,24 @@ BOOST_AUTO_TEST_CASE(test_regkey_ownership) {
     BOOST_CHECK(moved.handle() == raw);
     BOOST_CHECK(!key.isValid());
 
+    // Move assignment exchanges ownership without closing either handle during the assignment.
+    RegKey assigned = hkcuKey.create(L"SOFTWARE\\test_registry_ownership\\assigned", ec,
+                                     RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
+    BOOST_REQUIRE(assigned.isValid());
+    HKEY assignedRaw = assigned.handle();
+    assigned = std::move(moved);
+    BOOST_CHECK(assigned.handle() == raw);
+    BOOST_CHECK(moved.handle() == assignedRaw);
+
+    BOOST_CHECK(moved.close(ec));
+    BOOST_CHECK(!ec);
+    BOOST_CHECK(assigned.removeKey(L"assigned", ec));
+    BOOST_CHECK(!ec);
+
     // take() hands the handle over, so the wrapper stops owning it
-    HKEY taken = moved.take();
+    HKEY taken = assigned.take();
     BOOST_CHECK(taken == raw);
-    BOOST_CHECK(!moved.isValid());
+    BOOST_CHECK(!assigned.isValid());
 
     // wrapping without owning leaves it open for the caller to close
     {

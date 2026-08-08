@@ -389,7 +389,13 @@ namespace stdc::windows {
         RHS._owns = false;
     }
 
-    RegKey &RegKey::operator=(RegKey &&RHS) noexcept = default;
+    RegKey &RegKey::operator=(RegKey &&RHS) noexcept {
+        std::swap(_hkey, RHS._hkey);
+        std::swap(_owns, RHS._owns);
+        std::swap(_max_key_name_size, RHS._max_key_name_size);
+        std::swap(_max_value_name_size, RHS._max_value_name_size);
+        return *this;
+    }
 
     RegKey RegKey::open(const std::wstring &path, std::error_code &ec, int access) noexcept {
         ec.clear();
