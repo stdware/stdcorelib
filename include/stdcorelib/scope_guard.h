@@ -17,13 +17,15 @@ namespace stdc {
     template <class F>
     class scope_guard {
     public:
-        explicit scope_guard(F &&f) noexcept : m_func(std::move(f)) {
+        explicit scope_guard(F &&f) noexcept(std::is_nothrow_move_constructible_v<F>)
+            : m_func(std::move(f)) {
         }
 
-        explicit scope_guard(const F &f) noexcept : m_func(f) {
+        explicit scope_guard(const F &f) noexcept(std::is_nothrow_copy_constructible_v<F>)
+            : m_func(f) {
         }
 
-        scope_guard(scope_guard &&RHS) noexcept
+        scope_guard(scope_guard &&RHS) noexcept(std::is_nothrow_move_constructible_v<F>)
             : m_func(std::move(RHS.m_func)), m_active(std::exchange(RHS.m_active, false)) {
         }
 

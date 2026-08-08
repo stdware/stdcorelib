@@ -156,9 +156,9 @@ namespace stdc {
         /// \param json The text to parse.
         /// \param ignoreComments Whether comments should be ignored and treated like whitespace
         ///        (true) or yield a parse error (false)
-        /// \param error Set to why the text was rejected, and left alone otherwise. A rejected
-        ///        document and the text \c null both come back as a null value, so this is what
-        ///        tells them apart, which means it has to start out empty.
+        /// \param error Set to why the text was rejected, or cleared on success. A rejected
+        ///        document and the text \c null both come back as a null value, so this tells
+        ///        them apart.
         static JsonValue fromJson(std::string_view json, bool ignoreComments,
                                   std::string *error = nullptr);
 

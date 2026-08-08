@@ -108,7 +108,7 @@ namespace stdc {
     /// \sa any, DynamicRegistry
     class type_id {
     public:
-        /// An id that stands for no type and matches nothing, not even itself.
+        /// An id that stands for no type. Two such ids compare equal.
         constexpr type_id() = default;
 
         /// The id for \a T. Const and reference qualifiers are stripped, so \c int and
@@ -132,7 +132,7 @@ namespace stdc {
 
         friend bool operator==(type_id lhs, type_id rhs) {
             if (!lhs._entry || !rhs._entry) {
-                return false; // an id for no type is not equal to anything, including itself
+                return lhs._entry == rhs._entry;
             }
             if (lhs._entry == rhs._entry) {
                 return true; // one module, which is every comparison that never leaves home

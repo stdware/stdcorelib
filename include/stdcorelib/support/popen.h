@@ -453,9 +453,12 @@ namespace stdc {
         /// The pipe for that stream. Not open unless it was set to \c PIPE.
         ///
         /// \warning These reference storage inside the Popen, so they do not outlive it.
-        Stream &stdin_() const;
-        Stream &stdout_() const;
-        Stream &stderr_() const;
+        Stream &stdin_();
+        const Stream &stdin_() const;
+        Stream &stdout_();
+        const Stream &stdout_() const;
+        Stream &stderr_();
+        const Stream &stderr_() const;
 
         int pid() const;
 

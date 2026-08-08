@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+#include <chrono>
+#include <future>
 #include <memory>
 #include <string>
 #include <thread>
@@ -124,6 +126,34 @@ BOOST_AUTO_TEST_CASE(test_listeners) {
     reg.remove_listener(&listener);
     make("two", 2);
     BOOST_CHECK_EQUAL(listener.added.size(), 1u); // no longer told
+}
+
+BOOST_AUTO_TEST_CASE(test_removing_listener_waits_for_callbacks) {
+    RegistryGuard guard;
+    auto &reg = WidgetRegistry::instance();
+
+    class BlockingListener : public WidgetRegistry::Listener {
+    public:
+        void entry_added(const WidgetRegistry::EntryPointer &) override {
+            entered.set_value();
+            release.get_future().wait();
+        }
+
+        std::promise<void> entered;
+        std::promise<void> release;
+    } listener;
+
+    auto entered = listener.entered.get_future();
+    reg.add_listener(&listener);
+    std::thread notifier([&] { make("blocked", 1); });
+    entered.wait();
+
+    auto removed = std::async(std::launch::async, [&] { reg.remove_listener(&listener); });
+    BOOST_CHECK(removed.wait_for(std::chrono::milliseconds(20)) == std::future_status::timeout);
+
+    listener.release.set_value();
+    notifier.join();
+    removed.get();
 }
 
 // One that overrides nothing is told the same things and does nothing with them. Both halves are

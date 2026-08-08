@@ -4,6 +4,8 @@
 #define STDCORELIB_DYNAMICREGISTRY_H
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <map>
 #include <memory>
@@ -16,6 +18,7 @@
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/type_id.h>
 #include <stdcorelib/adt/vlarray.h>
+#include <stdcorelib/scope_guard.h>
 
 namespace stdc {
 
@@ -54,8 +57,7 @@ namespace stdc {
     /// \note Thread safe. add(), remove() and the lookups may be called from any thread.
     ///       Entries are handed out as shared_ptr, so one stays alive in the caller's hands even
     ///       if another thread removes it meanwhile.
-    /// \warning The listener callbacks run while the registering thread is inside add() or
-    ///          remove(). Calling back into the registry from one deadlocks.
+    /// \warning Do not call remove_listener() from inside a listener callback.
     ///
     /// \sa StaticRegistry, for what is known at link time
     template <class T>
@@ -140,7 +142,17 @@ namespace stdc {
                 }
                 _entries.emplace(entry->name(), entry);
                 listeners = _listeners;
+                if (!listeners.empty()) {
+                    ++_activeNotifications;
+                }
             }
+            auto finished = make_scope_guard([this, notify = !listeners.empty()] {
+                if (!notify) {
+                    return;
+                }
+                --_activeNotifications;
+                _notificationsFinished.notify_all();
+            });
             for (Listener *listener : listeners) {
                 listener->entry_added(entry);
             }
@@ -178,7 +190,17 @@ namespace stdc {
                 entry = it->second;
                 _entries.erase(it);
                 listeners = _listeners;
+                if (!listeners.empty()) {
+                    ++_activeNotifications;
+                }
             }
+            auto finished = make_scope_guard([this, notify = !listeners.empty()] {
+                if (!notify) {
+                    return;
+                }
+                --_activeNotifications;
+                _notificationsFinished.notify_all();
+            });
             for (Listener *listener : listeners) {
                 listener->entry_removed(entry);
             }
@@ -240,6 +262,10 @@ namespace stdc {
             std::unique_lock<std::shared_mutex> lock(_mutex);
             _listeners.erase(std::remove(_listeners.begin(), _listeners.end(), listener),
                              _listeners.end());
+            lock.unlock();
+            std::unique_lock<std::mutex> notificationLock(_notificationMutex);
+            _notificationsFinished.wait(notificationLock,
+                                        [this] { return _activeNotifications == 0; });
         }
 
         /// @}
@@ -258,6 +284,9 @@ namespace stdc {
         // std::less<> so a string_view looks up without building a string first.
         std::map<std::string, EntryPointer, std::less<>> _entries;
         ListenerList _listeners;
+        std::atomic<size_t> _activeNotifications{0};
+        std::mutex _notificationMutex;
+        std::condition_variable _notificationsFinished;
 
         STDC_DISABLE_COPY_MOVE(DynamicRegistry)
     };

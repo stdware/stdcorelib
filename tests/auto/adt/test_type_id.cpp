@@ -59,15 +59,15 @@ BOOST_AUTO_TEST_CASE(test_qualifiers_are_stripped) {
     BOOST_CHECK(type_id::of<int *>() != type_id::of<const int *>());
 }
 
-// The default is not a type. Making it equal to itself would let a container of ids report a hit
-// on a slot nobody filled in.
-BOOST_AUTO_TEST_CASE(test_the_empty_id_matches_nothing) {
+BOOST_AUTO_TEST_CASE(test_empty_ids_compare_equal) {
     type_id none;
     BOOST_CHECK(!none);
     BOOST_CHECK(none.name().empty());
     BOOST_CHECK(none != type_id::of<int>());
-    BOOST_CHECK(none != none);
-    BOOST_CHECK(!(none == type_id()));
+    BOOST_CHECK(none == none);
+    BOOST_CHECK(none == type_id());
+    BOOST_CHECK(!(none != type_id()));
+    BOOST_CHECK_EQUAL(std::hash<type_id>()(none), std::hash<type_id>()(type_id()));
 
     BOOST_CHECK(static_cast<bool>(type_id::of<int>()));
 }

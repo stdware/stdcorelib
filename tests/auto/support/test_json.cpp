@@ -66,7 +66,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Types) {
     // separate constructor from the one every case above reaches with a temporary.
     {
         JsonArray array{JsonValue(1), JsonValue(2)};
-        JsonObject object{{"a", JsonValue(1)}};
+        JsonObject object{
+            {"a", JsonValue(1)}
+        };
         JsonValue wrapped_array(array);
         JsonValue wrapped_object(object);
 
@@ -198,6 +200,23 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Parse) {
         BOOST_CHECK(v["a"].toInt() == 1);
         BOOST_CHECK(v["b"].toInt() == 2);
     }
+}
+
+BOOST_AUTO_TEST_CASE(test_JsonValue_ParseClearsOldErrors) {
+    std::string error = "old error";
+    BOOST_CHECK(JsonValue::fromJson("null", false, &error).isNull());
+    BOOST_CHECK(error.empty());
+
+    error = "old error";
+    BOOST_CHECK_EQUAL(JsonValue::fromCbor(JsonValue(42).toCbor(), &error).toInt(), 42);
+    BOOST_CHECK(error.empty());
+
+    BOOST_CHECK(JsonValue::fromJson("{not json", false, &error).isNull());
+    BOOST_CHECK(!error.empty());
+
+    const uint8_t garbage[] = {0xFF};
+    BOOST_CHECK(JsonValue::fromCbor(garbage, &error).isNull());
+    BOOST_CHECK(!error.empty());
 }
 
 BOOST_AUTO_TEST_CASE(test_JsonValue_Serialize) {
@@ -612,8 +631,8 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_CborIndefiniteLength) {
     }
     // (_ "strea", "ming")
     {
-        const auto v = decode({0x7F, 0x65, 0x73, 0x74, 0x72, 0x65, 0x61, 0x64, 0x6D, 0x69, 0x6E,
-                               0x67, 0xFF});
+        const auto v =
+            decode({0x7F, 0x65, 0x73, 0x74, 0x72, 0x65, 0x61, 0x64, 0x6D, 0x69, 0x6E, 0x67, 0xFF});
         BOOST_REQUIRE(v.isString());
         BOOST_CHECK(v.toString() == "streaming");
     }

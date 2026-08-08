@@ -869,7 +869,8 @@ namespace {
                         return false;
                     }
                     if (uint8_t(initial >> 5) != major) {
-                        return fail("an indefinite-length string is made of strings of its own kind");
+                        return fail(
+                            "an indefinite-length string is made of strings of its own kind");
                     }
                     if ((initial & 0x1F) == 31) {
                         return fail("a piece of an indefinite-length string has to have a length");
@@ -1344,6 +1345,9 @@ namespace stdc {
     }
 
     JsonValue JsonValue::fromJson(std::string_view json, bool ignoreComments, std::string *error) {
+        if (error) {
+            error->clear();
+        }
         Parser parser(json, ignoreComments);
         JsonValue res;
         if (!parser.parse(&res)) {
@@ -1362,6 +1366,9 @@ namespace stdc {
     }
 
     JsonValue JsonValue::fromCbor(stdc::array_view<uint8_t> cbor, std::string *error) {
+        if (error) {
+            error->clear();
+        }
         cbor::Decoder decoder(cbor);
         JsonValue res;
         if (!decoder.decode(&res)) {

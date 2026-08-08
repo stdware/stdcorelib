@@ -628,17 +628,32 @@ namespace stdc {
         return impl.args;
     }
 
-    Popen::Stream &Popen::stdin_() const {
+    Popen::Stream &Popen::stdin_() {
         stdc_impl_t;
         return impl.stdin_stream;
     }
 
-    Popen::Stream &Popen::stdout_() const {
+    const Popen::Stream &Popen::stdin_() const {
+        stdc_impl_t;
+        return impl.stdin_stream;
+    }
+
+    Popen::Stream &Popen::stdout_() {
         stdc_impl_t;
         return impl.stdout_stream;
     }
 
-    Popen::Stream &Popen::stderr_() const {
+    const Popen::Stream &Popen::stdout_() const {
+        stdc_impl_t;
+        return impl.stdout_stream;
+    }
+
+    Popen::Stream &Popen::stderr_() {
+        stdc_impl_t;
+        return impl.stderr_stream;
+    }
+
+    const Popen::Stream &Popen::stderr_() const {
         stdc_impl_t;
         return impl.stderr_stream;
     }

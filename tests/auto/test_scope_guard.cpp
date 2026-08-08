@@ -2,6 +2,7 @@
 
 #include <stdcorelib/scope_guard.h>
 
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -10,6 +11,36 @@
 using namespace stdc;
 
 BOOST_AUTO_TEST_SUITE(test_scope_guard)
+
+namespace {
+
+    struct ThrowingCallable {
+        ThrowingCallable() = default;
+        ThrowingCallable(const ThrowingCallable &) noexcept(false) {
+        }
+        ThrowingCallable(ThrowingCallable &&) noexcept(false) {
+        }
+        void operator()() const noexcept {
+        }
+    };
+
+    static_assert(
+        !std::is_nothrow_constructible_v<scope_guard<ThrowingCallable>, ThrowingCallable &&>);
+    static_assert(!std::is_nothrow_move_constructible_v<scope_guard<ThrowingCallable>>);
+
+}
+
+BOOST_AUTO_TEST_CASE(test_class_template_argument_deduction) {
+    int calls = 0;
+    {
+        scope_guard guard([&] { ++calls; });
+    }
+    auto callable = [&] { ++calls; };
+    {
+        scope_guard guard(callable);
+    }
+    BOOST_CHECK_EQUAL(calls, 2);
+}
 
 BOOST_AUTO_TEST_CASE(test_runs_on_scope_exit) {
     int calls = 0;
