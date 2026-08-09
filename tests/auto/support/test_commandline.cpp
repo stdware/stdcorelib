@@ -692,12 +692,11 @@ BOOST_AUTO_TEST_CASE(test_each_occurrence_reads_the_way_a_command_does) {
     BOOST_CHECK(given->allValues(0) == std::vector<std::string>({"a", "b", "x", "y"}));
     BOOST_CHECK(given->allValues(1) == std::vector<std::string>({"d1", "d2"}));
 
-    // Past the last one answers with nothing rather than being a mistake, the way an index
-    // nobody declared does.
-    BOOST_CHECK(!given->at(2).value(0).has_value());
-    BOOST_CHECK(given->at(2).values(0) == std::vector<std::string>());
-    BOOST_CHECK(!given->at(-1).value(0).has_value());
+    // An index nobody declared still answers with nothing, which is the rule everywhere a
+    // value is read. An occurrence nobody wrote is a different thing and is at()'s
+    // precondition, so there is nothing to ask here about at(2) or at(-1).
     BOOST_CHECK(!given->at(0).value(9).has_value());
+    BOOST_CHECK(given->at(1).values(9) == std::vector<std::string>());
 
     // The shape that tells the two readings apart: an argument that may be left out, left out
     // the first time and given the second. The option's own reads the first occurrence, which

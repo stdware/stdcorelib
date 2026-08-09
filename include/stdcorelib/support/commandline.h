@@ -1058,9 +1058,9 @@ namespace stdc::cli {
         /// with the same four questions asked of it in the same four words, and OptionResult
         /// is these in a row.
         ///
-        /// \warning A view onto a view. Outliving the ParseResult is what to avoid, and asking
-        ///          OptionResult::at() for one past the last is not: everything it is asked
-        ///          answers with nothing, the way an index nobody declared does.
+        /// \warning A view onto a view, so it lasts as long as the ParseResult and not a line
+        ///          longer. One always stands for an occurrence that happened, which is what
+        ///          OptionResult::at()'s precondition is for.
         class STDC_EXPORT Occurrence {
         public:
             /// The \a index'th argument's first value, as text, or the default value where
@@ -1130,6 +1130,12 @@ namespace stdc::cli {
         ///       take(given.at(n).values());
         ///   }
         /// \endcode
+        ///
+        /// \pre \a n is at least zero and less than count(). Anything else is undefined, and
+        ///      is asserted in a debug build. An Occurrence is a view onto one that happened,
+        ///      so there is no such thing as an empty one to hand back and nothing on it to
+        ///      ask, which is the same reason ParseResult::option() answers with an optional
+        ///      and OptionResult does not.
         Occurrence at(int n) const;
 
         /// The four below are the first occurrence's four, said shorter. An option given once
@@ -1145,7 +1151,10 @@ namespace stdc::cli {
             return at(0).rawValues(index);
         }
         /// \code
-        ///   int jobs = result.option("-j").value<int>().value_or(default_jobs());
+        ///   int jobs = default_jobs();
+        ///   if (auto given = result.option("-j")) {
+        ///       jobs = given->value<int>().value_or(jobs);
+        ///   }
         /// \endcode
         template <class T = std::string>
         std::optional<T> value(int index = 0) const {

@@ -259,19 +259,18 @@ namespace stdc::cli {
     }
 
     OptionResult::Occurrence OptionResult::at(int n) const {
+        assert(n >= 0 && n < count() && "there was no such occurrence of this option");
         return {_data, n};
     }
 
     namespace {
 
-        /// The slots of one occurrence, or null where there is no such occurrence. Out of range
-        /// reads as nothing rather than as a mistake, the way an index nobody declared does.
-        const ArgumentSlots *slots_at(const void *data, int n) {
-            auto option = static_cast<const OptionData *>(data);
-            if (n < 0 || size_t(n) >= option->occurrences.size()) {
-                return nullptr;
-            }
-            return &option->occurrences[size_t(n)];
+        /// The slots of one occurrence. Which occurrence is at()'s precondition, so there is
+        /// nothing left to check here and nothing to answer with where there is no such one.
+        const ArgumentSlots &slots_of(const void *data, int n) {
+            const auto &occurrences = static_cast<const OptionData *>(data)->occurrences;
+            assert(n >= 0 && size_t(n) < occurrences.size());
+            return occurrences[size_t(n)];
         }
 
     }
@@ -280,21 +279,20 @@ namespace stdc::cli {
     // whether the token in it is empty are different questions, which is why nothing here is
     // reported as empty text.
     std::optional<std::string_view> OptionResult::Occurrence::rawValue(int index) const {
-        auto slots = slots_at(_data, _n);
-        if (!slots || index < 0 || size_t(index) >= slots->size() ||
-            (*slots)[size_t(index)].empty()) {
+        const auto &slots = slots_of(_data, _n);
+        if (index < 0 || size_t(index) >= slots.size() || slots[size_t(index)].empty()) {
             return std::nullopt;
         }
-        return std::string_view((*slots)[size_t(index)].front());
+        return std::string_view(slots[size_t(index)].front());
     }
 
     std::vector<std::string_view> OptionResult::Occurrence::rawValues(int index) const {
         std::vector<std::string_view> res;
-        auto slots = slots_at(_data, _n);
-        if (!slots || index < 0 || size_t(index) >= slots->size()) {
+        const auto &slots = slots_of(_data, _n);
+        if (index < 0 || size_t(index) >= slots.size()) {
             return res;
         }
-        for (const auto &item : (*slots)[size_t(index)]) {
+        for (const auto &item : slots[size_t(index)]) {
             res.emplace_back(item);
         }
         return res;
