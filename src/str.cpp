@@ -349,6 +349,26 @@ namespace stdc {
             return heap_buffer;
         }
 
+        int strcasecmp(const std::string_view &s, const std::string_view &other) {
+            const auto &lowered = [](char c) {
+                return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c;
+            };
+            size_t shared = std::min(s.size(), other.size());
+            for (size_t i = 0; i < shared; ++i) {
+                // As unsigned, or a byte above 0x7F sorts before every letter where char is
+                // signed.
+                auto a = static_cast<unsigned char>(lowered(s[i]));
+                auto b = static_cast<unsigned char>(lowered(other[i]));
+                if (a != b) {
+                    return a < b ? -1 : 1;
+                }
+            }
+            if (s.size() == other.size()) {
+                return 0;
+            }
+            return s.size() < other.size() ? -1 : 1;
+        }
+
     }
 
 #ifdef _WIN32

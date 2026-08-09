@@ -35,24 +35,6 @@ namespace stdc::cli {
                 return token;
             }
 
-            char lowered(char c) {
-                return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c;
-            }
-
-            /// Both sides are folded, not just the first. Folding one is enough for a comparison
-            /// against a literal that is already lower case, and wrong for anything else.
-            bool equals_ignoring_case(std::string_view token, std::string_view other) {
-                if (token.size() != other.size()) {
-                    return false;
-                }
-                for (size_t i = 0; i < token.size(); ++i) {
-                    if (lowered(token[i]) != lowered(other[i])) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
         }
 
         bool parse_signed(std::string_view token, int64_t *out, int64_t min, int64_t max) {
@@ -117,13 +99,13 @@ namespace stdc::cli {
             static const std::string_view yes[] = {"true", "yes", "on", "1"};
             static const std::string_view no[] = {"false", "no", "off", "0"};
             for (auto word : yes) {
-                if (equals_ignoring_case(token, word)) {
+                if (str::strcasecmp(token, word) == 0) {
                     *out = true;
                     return true;
                 }
             }
             for (auto word : no) {
-                if (equals_ignoring_case(token, word)) {
+                if (str::strcasecmp(token, word) == 0) {
                     *out = false;
                     return true;
                 }
@@ -178,7 +160,7 @@ namespace stdc::cli {
             if (!ignore_case) {
                 return a == b;
             }
-            return detail::equals_ignoring_case(a, b);
+            return str::strcasecmp(a, b) == 0;
         }
 
     }
@@ -1273,7 +1255,7 @@ namespace stdc::cli {
             }
             for (auto &item : r->options) {
                 for (const auto &spelling : item.option->tokens()) {
-                    if (detail::equals_ignoring_case(spelling, token)) {
+                    if (str::strcasecmp(spelling, token) == 0) {
                         return &item;
                     }
                 }
@@ -1724,15 +1706,27 @@ namespace stdc::cli {
         int text_width = 0;
         int indent = 4;
         int spacing = 4;
+
+        /// Asked where a tree arrives and again where one is parsed, since the parse options
+        /// decide whether two names differing only in case are one name and nothing before the
+        /// parse knows which way the line will be read. A release build asks nothing: the body
+        /// is the assert and nothing else, so no tree is walked.
+        static void assertNames(const Command &command, bool ignoreOptionCase = false,
+                                bool ignoreCommandCase = false) {
+            assert(Command::namesAreUnambiguous(command, ignoreOptionCase, ignoreCommandCase) &&
+                   "two options in scope at one command answer to the same spelling, or two "
+                   "subcommands share a name");
+            (void) command;
+            (void) ignoreOptionCase;
+            (void) ignoreCommandCase;
+        }
     };
 
     Parser::Parser() : _impl(std::make_unique<Impl>()) {
     }
 
     Parser::Parser(Command root) : _impl(std::make_unique<Impl>()) {
-        assert(Command::namesAreUnambiguous(root) &&
-               "two options in scope at one command answer to the same spelling, or two "
-               "subcommands share a name");
+        Impl::assertNames(root);
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1747,9 +1741,7 @@ namespace stdc::cli {
         // out shares this pointer and holds raw pointers into what it addresses, so assigning
         // through it leaves them all reading freed vectors. Checked: assigning through it dies
         // under ASAN in test_a_parser_is_reusable_and_its_tree_can_be_replaced.
-        assert(Command::namesAreUnambiguous(root) &&
-               "two options in scope at one command answer to the same spelling, or two "
-               "subcommands share a name");
+        Impl::assertNames(root);
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1825,14 +1817,8 @@ namespace stdc::cli {
 
     ParseResult Parser::parse(const std::vector<std::string> &args,
                               ParseOptions parseOptions) const {
-        // The rest of the tree was asked when it arrived. This asks again with the options the
-        // line is about to be read with, since two names differing only in case are one name
-        // under those and nothing before now knew which way it would be read.
-        assert((!parseOptions.test_flag(IgnoreOptionCase) &&
-                !parseOptions.test_flag(IgnoreCommandCase)) ||
-               Command::namesAreUnambiguous(*_impl->root,
-                                            parseOptions.test_flag(IgnoreOptionCase),
-                                            parseOptions.test_flag(IgnoreCommandCase)));
+        Impl::assertNames(*_impl->root, parseOptions.test_flag(IgnoreOptionCase),
+                          parseOptions.test_flag(IgnoreCommandCase));
 
         ParseResult result;
         result._impl->root = _impl->root;

@@ -542,10 +542,14 @@ namespace stdc {
 
         STDC_EXPORT std::string vasprintf(const char *fmt, va_list args);
 
+        /// \c strcasecmp() over views, folding the ASCII letters and nothing else.
+        STDC_EXPORT int strcasecmp(const std::string_view &s, const std::string_view &other);
+
     }
 
     using str::asprintf;
     using str::vasprintf;
+    using str::strcasecmp;
 
 #ifdef _WIN32
     STDC_EXPORT const std::error_category &windows_utf8_category() noexcept;

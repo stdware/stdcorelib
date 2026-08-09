@@ -55,6 +55,7 @@
 
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/console.h>
+#include <stdcorelib/str.h>
 #include <stdcorelib/flags.h>
 #include <stdcorelib/adt/array_view.h>
 
@@ -141,21 +142,7 @@ namespace stdc::cli {
         /// Whether two declared names are the same name, which under a case-insensitive parse
         /// they are without being the same text.
         inline bool same_name(std::string_view a, std::string_view b, bool ignore_case) {
-            if (!ignore_case) {
-                return a == b;
-            }
-            if (a.size() != b.size()) {
-                return false;
-            }
-            const auto &lowered = [](char c) {
-                return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c;
-            };
-            for (size_t i = 0; i < a.size(); ++i) {
-                if (lowered(a[i]) != lowered(b[i])) {
-                    return false;
-                }
-            }
-            return true;
+            return ignore_case ? str::strcasecmp(a, b) == 0 : a == b;
         }
 
         /// What a ParseResult holds.

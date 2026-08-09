@@ -159,6 +159,41 @@ BOOST_AUTO_TEST_CASE(test_case_conversion) {
     BOOST_CHECK_EQUAL(to_lower(std::string("ABC")), "abc");
 }
 
+// Ours rather than the platform's, whose folding follows the locale, so what it answers is
+// checked here rather than assumed.
+BOOST_AUTO_TEST_CASE(test_strcasecmp) {
+    BOOST_CHECK_EQUAL(str::strcasecmp("Hello", "hello"), 0);
+    BOOST_CHECK_EQUAL(str::strcasecmp("HELLO", "hello"), 0);
+    BOOST_CHECK_EQUAL(str::strcasecmp("", ""), 0);
+
+    // Ordered by the folded bytes, and by length where one runs out.
+    BOOST_CHECK_LT(str::strcasecmp("abc", "abd"), 0);
+    BOOST_CHECK_GT(str::strcasecmp("ABD", "abc"), 0);
+    BOOST_CHECK_LT(str::strcasecmp("abc", "abcd"), 0);
+    BOOST_CHECK_GT(str::strcasecmp("abcd", "ABC"), 0);
+
+    // A view is not null terminated, and neither is a piece of one.
+    const std::string line = "--OUTPUT=x";
+    BOOST_CHECK_EQUAL(str::strcasecmp(std::string_view(line).substr(0, 8), "--output"), 0);
+
+    // Only the ASCII letters fold. UTF-8 bytes have no case and must come through as they are.
+    BOOST_CHECK_EQUAL(str::strcasecmp("\xE4\xB8\xAD", "\xE4\xB8\xAD"), 0);
+    BOOST_CHECK_EQUAL(str::strcasecmp("a\xE4\xB8\xAD"
+                                      "z",
+                                      "A\xE4\xB8\xAD"
+                                      "Z"),
+                      0);
+    BOOST_CHECK_NE(str::strcasecmp("_", "?"), 0);
+
+    // Bytes above 0x7F sort after every letter, which they do only when the comparison treats
+    // them as unsigned. Left as char they are negative wherever char is signed.
+    BOOST_CHECK_GT(str::strcasecmp("\xE4", "z"), 0);
+    BOOST_CHECK_LT(str::strcasecmp("z", "\xE4"), 0);
+
+    // also reachable unqualified from namespace stdc
+    BOOST_CHECK_EQUAL(strcasecmp("--INPUT", "--input"), 0);
+}
+
 BOOST_AUTO_TEST_CASE(test_starts_ends_with) {
     BOOST_CHECK(str::starts_with("hello world", "hello"));
     BOOST_CHECK(!str::starts_with("hello world", "world"));
