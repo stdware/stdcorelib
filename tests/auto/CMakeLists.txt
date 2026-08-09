@@ -57,6 +57,19 @@ set_target_properties(test_plugin PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
+# A module for the SharedLibrary tests, which have to watch one being loaded and unloaded. It
+# cannot be test_plugin: the any tests load that one, and a module another suite left loaded
+# answers "still loaded" whatever ownership did. Nothing else in the binary touches this one, so
+# what it says is about the case that is asking.
+add_library(test_unloadable MODULE plugins/test_unloadable.cpp)
+set_target_properties(test_unloadable PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
 # A program for the popen tests to start. The shell covers most of what a child has to do, but
 # it cannot report the argument vector it was given, since it parses the command line a second
 # time before the program sees it.
@@ -68,9 +81,10 @@ set_target_properties(test_child PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
-add_dependencies(${PROJECT_NAME} test_plugin test_child)
+add_dependencies(${PROJECT_NAME} test_plugin test_unloadable test_child)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_PLUGIN_PATH="$<TARGET_FILE:test_plugin>"
+    TEST_UNLOADABLE_PATH="$<TARGET_FILE:test_unloadable>"
     TEST_CHILD_PATH="$<TARGET_FILE:test_child>"
 )
 

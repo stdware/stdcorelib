@@ -3,6 +3,18 @@
 #include <filesystem>
 #include <utility>
 
+#ifdef _WIN32
+#  ifndef NOMINMAX
+#    define NOMINMAX // or windows.h's max() and min() reach flags.h below
+#  endif
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#else
+#  include <dlfcn.h>
+#endif
+
 #include <stdcorelib/scope_guard.h>
 #include <stdcorelib/support/sharedlibrary.h>
 
@@ -15,6 +27,27 @@ using namespace stdc;
 BOOST_AUTO_TEST_SUITE(test_library)
 
 namespace {
+
+    // Whether the loader still holds this module, asked of the loader rather than of the object
+    // that was supposed to have let go of it. Nothing else in this binary loads it, so what
+    // comes back is about the case that asked.
+    bool still_loaded(const fs::path &path) {
+#ifdef _WIN32
+        return ::GetModuleHandleW(path.c_str()) != nullptr;
+#else
+        // RTLD_NOLOAD answers without loading, but it does take a reference to what is already
+        // there, so the answer has to be given back.
+        void *handle = ::dlopen(path.c_str(), RTLD_NOLOAD | RTLD_LAZY);
+        if (handle) {
+            ::dlclose(handle);
+        }
+        return handle != nullptr;
+#endif
+    }
+
+    fs::path unloadable() {
+        return fs::path(TEST_UNLOADABLE_PATH);
+    }
 
     // A library that is guaranteed to be present, plus a symbol it is guaranteed to export.
     // Returns an empty path when the platform has no dependable candidate, in which case the
@@ -175,24 +208,70 @@ BOOST_AUTO_TEST_CASE(test_move) {
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_release) {
-    auto candidate = system_library();
-    if (candidate.path.empty()) {
-        return;
-    }
+// What release() promises is that the destructor will not unload, and the case that used to
+// stand for it opened libm, which the test process is holding open anyway. It passed whatever
+// ownership did. This one asks the loader about a module nothing else here touches.
+BOOST_AUTO_TEST_CASE(test_release_keeps_the_library_loaded) {
+    BOOST_REQUIRE(fs::exists(unloadable()));
+    BOOST_REQUIRE_MESSAGE(!still_loaded(unloadable()), "another case left this module loaded");
 
-    // release() gives up ownership: close() then forgets the handle without unloading
+    // Ordinary ownership first, so the query is known to answer both ways.
+    {
+        SharedLibrary lib;
+        BOOST_REQUIRE(lib.open(unloadable()));
+        BOOST_CHECK(still_loaded(unloadable()));
+    }
+    BOOST_CHECK(!still_loaded(unloadable()));
+
+    // Released and then destroyed, which is the whole of what release() is for.
+    void *handle = nullptr;
+    {
+        SharedLibrary lib;
+        BOOST_REQUIRE(lib.open(unloadable()));
+        handle = lib.handle();
+        lib.release();
+    }
+    BOOST_CHECK(still_loaded(unloadable()));
+
+    // The handle is still good, since nobody closed it.
+    SharedLibrary again;
+    BOOST_REQUIRE(again.open(unloadable()));
+    BOOST_CHECK(again.handle() == handle);
+    BOOST_CHECK(again.resolve("test_unloadable_answer") != nullptr);
+    BOOST_CHECK(again.close());
+
+    // Two references were taken and one was given back, so it is still there. The one release()
+    // gave up is given back here so the rest of the binary starts from where it began.
+#ifdef _WIN32
+    BOOST_CHECK(::FreeLibrary(static_cast<HMODULE>(handle)));
+#else
+    BOOST_CHECK_EQUAL(::dlclose(handle), 0);
+#endif
+    BOOST_CHECK(!still_loaded(unloadable()));
+}
+
+// Released and then closed by hand, which is the other half: close() forgets the handle rather
+// than unloading it, and the object is empty afterwards either way.
+BOOST_AUTO_TEST_CASE(test_release_then_close_forgets_without_unloading) {
+    BOOST_REQUIRE(!still_loaded(unloadable()));
+
     SharedLibrary lib;
-    BOOST_REQUIRE(lib.open(candidate.path));
+    BOOST_REQUIRE(lib.open(unloadable()));
+    void *handle = lib.handle();
     lib.release();
+
     BOOST_CHECK(lib.close());
     BOOST_CHECK(!lib.isOpen());
     BOOST_CHECK(lib.path().empty());
+    BOOST_CHECK(lib.handle() == nullptr);
+    BOOST_CHECK(still_loaded(unloadable()));
 
-    // the library is still loaded, so opening it again works
-    SharedLibrary again;
-    BOOST_CHECK(again.open(candidate.path));
-    BOOST_CHECK(again.resolve(candidate.symbol) != nullptr);
+#ifdef _WIN32
+    BOOST_CHECK(::FreeLibrary(static_cast<HMODULE>(handle)));
+#else
+    BOOST_CHECK_EQUAL(::dlclose(handle), 0);
+#endif
+    BOOST_CHECK(!still_loaded(unloadable()));
 }
 
 // isLibrary() is a name check: it never looks at the filesystem.

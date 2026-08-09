@@ -54,6 +54,12 @@ namespace stdc {
     };
 
     SharedLibrary::Impl::~Impl() {
+        // What release() is for. Impl::close() is the unload itself and asks nothing, so an
+        // object destroyed after release() used to unload anyway, and the flag only did
+        // anything for a caller who went on to call the public close() as well.
+        if (released) {
+            return;
+        }
         std::ignore = close();
     }
 
