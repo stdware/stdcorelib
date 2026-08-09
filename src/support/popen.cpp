@@ -180,6 +180,43 @@ namespace stdc {
             return false;
         }
 
+        // A std::string can hold a NUL and neither exec nor CreateProcess can carry one: both
+        // read to the first one and stop. So a caller could be told the child started and be
+        // wrong about what it was given, which is the one thing an argument vector is for.
+        // Refused here rather than in either platform, since it is the same lie on both.
+        const auto has_nul = [](const std::string &text) {
+            return text.find('\0') != std::string::npos;
+        };
+        for (const auto &arg : args) {
+            if (has_nul(arg)) {
+                error_code = std::make_error_code(std::errc::invalid_argument);
+                error_msg = "an argument contains a NUL, which no platform can pass on";
+                return false;
+            }
+        }
+        if (env) {
+            for (const auto &pair : *env) {
+                if (pair.first.empty()) {
+                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    error_msg = "an environment variable has no name";
+                    return false;
+                }
+                if (has_nul(pair.first) || has_nul(pair.second)) {
+                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    error_msg =
+                        formatN("environment variable \"%1\" contains a NUL", pair.first.c_str());
+                    return false;
+                }
+                // The name is everything before the first one, so a name carrying its own would
+                // arrive as a different variable.
+                if (pair.first.find('=') != std::string::npos) {
+                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    error_msg = formatN("illegal environment variable name: %1", pair.first);
+                    return false;
+                }
+            }
+        }
+
         const auto is_pipe = [](const IODev &dev) {
             return dev.kind == IODev::Builtin && dev.data.builtin == IOType::PIPE;
         };

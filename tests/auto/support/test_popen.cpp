@@ -246,6 +246,57 @@ BOOST_AUTO_TEST_CASE(test_start_retry) {
     }
 }
 
+// A std::string can hold a NUL and no platform can pass one on, so a child would have been
+// started with an argument that is not the one it was given. Refused before anything is created.
+BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused) {
+    const std::string embedded("a\0b", 3);
+
+    const auto &refused = [](Popen &p) {
+        std::string err;
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(p.error_code() == std::errc::invalid_argument);
+        BOOST_CHECK(!err.empty());
+        // Nothing was created, so there is nothing to wait for and nothing to reap.
+        BOOST_CHECK(!p.returncode().has_value());
+    };
+
+    {
+        Popen p;
+        p.args({TEST_POPEN_CHILD_PATH, "argv", embedded});
+        refused(p);
+    }
+    {
+        Popen p;
+        p.args({std::string(TEST_POPEN_CHILD_PATH) + embedded, "argv"});
+        refused(p);
+    }
+    {
+        Popen p;
+        p.args({TEST_POPEN_CHILD_PATH, "argv"}).env({{"NAME", embedded}});
+        refused(p);
+    }
+    {
+        Popen p;
+        p.args({TEST_POPEN_CHILD_PATH, "argv"}).env({{embedded, "value"}});
+        refused(p);
+    }
+    {
+        Popen p;
+        p.args({TEST_POPEN_CHILD_PATH, "argv"}).env({{"", "value"}});
+        refused(p);
+    }
+
+    // Corrected, the same object starts, so the refusal changed nothing.
+    Popen p;
+    p.args({TEST_POPEN_CHILD_PATH, "argv", embedded}).stdout_(Popen::PIPE);
+    std::string err;
+    BOOST_CHECK(!p.start(&err));
+    p.args({TEST_POPEN_CHILD_PATH, "argv", "ab"});
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, ignored] = p.communicate({}, Timeout);
+    BOOST_CHECK(out.find("ab") != std::string::npos);
+}
+
 // A bare name is looked up along PATH, the same way a shell would find it.
 BOOST_AUTO_TEST_CASE(test_path_lookup) {
     Popen p;
