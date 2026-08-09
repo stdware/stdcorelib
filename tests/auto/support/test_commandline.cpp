@@ -295,7 +295,7 @@ BOOST_AUTO_TEST_CASE(test_option_is_built_several_ways) {
 
     // Defaults, so that what a bare option means is written down somewhere.
     BOOST_CHECK(!from_list.isRequired());
-    BOOST_CHECK(!from_list.isGlobal());
+    BOOST_CHECK(!from_list.isRecursive());
     BOOST_CHECK(from_list.role() == Option::NoRole);
     BOOST_CHECK(from_list.prior() == Option::NoPrior);
     BOOST_CHECK(from_list.shortMatch() == Option::NoShortMatch);
@@ -329,7 +329,7 @@ BOOST_AUTO_TEST_CASE(test_option_setters_chain) {
                    .shortMatch(Option::ShortMatchSingleChar)
                    .prior(Option::IgnoreMissingArguments)
                    .required()
-                   .global();
+                   .recursive();
 
     BOOST_REQUIRE_EQUAL(opt.arguments().size(), 1u);
     BOOST_CHECK_EQUAL(opt.arguments().front().name(), "expr");
@@ -341,7 +341,7 @@ BOOST_AUTO_TEST_CASE(test_option_setters_chain) {
     BOOST_CHECK(opt.shortMatch() == Option::ShortMatchSingleChar);
     BOOST_CHECK(opt.prior() == Option::IgnoreMissingArguments);
     BOOST_CHECK(opt.isRequired());
-    BOOST_CHECK(opt.isGlobal());
+    BOOST_CHECK(opt.isRecursive());
 
     // An optional argument, and one built up on its own.
     auto with_optional = Option("-w").arg("file", false);
@@ -736,7 +736,7 @@ BOOST_AUTO_TEST_CASE(test_nested_subcommands) {
 
 BOOST_AUTO_TEST_CASE(test_global_options_reach_subcommands) {
     Parser parser(Command("prog")
-                      .addOption(Option({"-V", "--verbose"}, "Talk more").global())
+                      .addOption(Option({"-V", "--verbose"}, "Talk more").recursive())
                       .addOption(Option({"-q"}, "Local to the root"))
                       .addCommand(Command("copy")));
 
@@ -1251,12 +1251,13 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_name_used_as_a_value) {
     BOOST_CHECK_EQUAL(result.command()->name(), "copy");
     BOOST_CHECK_EQUAL(must(result.value(0)), "copy");
 
-    // An option in front of it does not stop the descent. The global is read against the root,
-    // which declared it, and the subcommand is still reached.
-    Parser global(Command("prog")
-                      .addOption(Option({"-V"}, "Verbose").global())
-                      .addCommand(Command("copy").addArgument(Argument("src"))));
-    auto after = ok(global, {"-V", "copy", "x"});
+    // An option in front of it ends the path, so what follows is too late to be a command. The
+    // recursive one is written after the command it reaches, like every other option.
+    Parser recursive(Command("prog")
+                         .addOption(Option({"-V"}, "Verbose").recursive())
+                         .addCommand(Command("copy").addArgument(Argument("src"))));
+    bad(recursive, {"-V", "copy", "x"}, ParseResult::UnknownCommand);
+    auto after = ok(recursive, {"copy", "-V", "x"});
     BOOST_CHECK_EQUAL(after.command()->name(), "copy");
     BOOST_CHECK(after.option("-V").has_value());
     BOOST_CHECK_EQUAL(must(after.value(0)), "x");
@@ -1478,7 +1479,7 @@ namespace {
             .addCommands("Buildsystem Commands", {"configure"});
 
         Parser parser(Command("prog", "What the program is for")
-                          .addOptions({Option(Option::Help), Option(Option::Verbose).global()})
+                          .addOptions({Option(Option::Help), Option(Option::Verbose).recursive()})
                           .addCommands({
                               Command("copy", "Copy things")
                                   .addArguments({Argument("src", "Where from").multi(),
@@ -2330,7 +2331,7 @@ BOOST_AUTO_TEST_CASE(test_the_error_points_at_the_help_this_program_has) {
 
     // A subcommand names itself and the option it inherited.
     Parser parser(Command("prog")
-                      .addOption(Option(Option::Help).global())
+                      .addOption(Option(Option::Help).recursive())
                       .addCommand(Command("build").addArgument(Argument("target"))));
     auto result = parser.parse(argv({"build"}));
     BOOST_REQUIRE(!result.isValid());
@@ -2554,8 +2555,8 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
     const auto &tree = [] {
         Parser parser(Command("prog")
                           .addOptions({
-                              Option({"-v", "--verbose"}, "Say more").global(),
-                              Option({"-C"}, "Work here").arg("dir").global().required(),
+                              Option({"-v", "--verbose"}, "Say more").recursive(),
+                              Option({"-C"}, "Work here").arg("dir").recursive().required(),
                               Option({"--local"}, "Root only"),
                           })
                           .addCommand(Command("build", "Build it")
@@ -2587,7 +2588,8 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
     auto refused = parser.parse(argv({"build", "x"}));
     BOOST_REQUIRE(!refused.isValid());
     BOOST_CHECK(has(refused.errorText(), "-C"));
-    BOOST_CHECK(ok(parser, {"-C", "somewhere", "build", "x"}).option("-C").has_value());
+    // Written after the command that was reached, which is where every option is written.
+    BOOST_CHECK(ok(parser, {"build", "-C", "somewhere", "x"}).option("-C").has_value());
 
     // The root has nothing above it, so it has no such section.
     BOOST_CHECK(!has(parser.parse(argv({})).helpText(), "Global options:"));
@@ -2596,12 +2598,12 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
 // A global written wherever it is in scope, on a line that walks down through three commands and
 // picks one up at each. Every command below where it was declared can be written before, and the
 // ones above have nothing to say about it.
-BOOST_AUTO_TEST_CASE(test_globals_written_between_the_commands_that_declare_them) {
+BOOST_AUTO_TEST_CASE(test_recursive_options_are_written_after_the_command_that_was_reached) {
     const auto &tree = [] {
         Parser parser(Command("prog")
-                          .addOption(Option({"--root-wide"}, "From the top").global())
+                          .addOption(Option({"--root-wide"}, "From the top").recursive())
                           .addCommand(Command("remote")
-                                          .addOption(Option({"--mid"}, "From the middle").global())
+                                          .addOption(Option({"--mid"}, "From the middle").recursive())
                                           .addCommand(Command("add")
                                                           .addOption(Option({"--leaf"}, "Here"))
                                                           .addArgument(Argument("name")))));
@@ -2609,27 +2611,21 @@ BOOST_AUTO_TEST_CASE(test_globals_written_between_the_commands_that_declare_them
         return parser;
     };
 
-    // One picked up at each step down, which is the shape a program with layered options has.
+    // Every one of them after the command that was reached, which is the only place any option
+    // is written. Two levels of recursive and the leaf's own, side by side.
     auto parser = tree();
-    auto walked = ok(parser, {"--root-wide", "remote", "--mid", "add", "--leaf", "x"});
-    BOOST_CHECK(walked.commandPath() == std::vector<std::string>({"prog", "remote", "add"}));
-    BOOST_CHECK(walked.option("--root-wide").has_value());
-    BOOST_CHECK(walked.option("--mid").has_value());
-    BOOST_CHECK(walked.option("--leaf").has_value());
-    BOOST_CHECK_EQUAL(must(walked.value(0)), "x");
-
-    // All of them at the end reads the same, since a global stays in scope rather than being
-    // spent where it was written.
     auto trailing = ok(parser, {"remote", "add", "--root-wide", "--mid", "--leaf", "x"});
+    BOOST_CHECK(trailing.commandPath() == std::vector<std::string>({"prog", "remote", "add"}));
     BOOST_CHECK(trailing.option("--root-wide").has_value());
     BOOST_CHECK(trailing.option("--mid").has_value());
     BOOST_CHECK(trailing.option("--leaf").has_value());
+    BOOST_CHECK_EQUAL(must(trailing.value(0)), "x");
 
-    // And so does every arrangement in between.
+    // In any order among themselves, since where an option sits after the command says nothing.
     for (const auto &line : {
-             std::vector<std::string>{"--root-wide", "remote", "add", "--mid", "--leaf", "x"},
-             std::vector<std::string>{"remote", "--root-wide", "--mid", "add", "--leaf", "x"},
-             std::vector<std::string>{"remote", "--mid", "add", "--root-wide", "x", "--leaf"},
+             std::vector<std::string>{"remote", "add", "--mid", "--leaf", "--root-wide", "x"},
+             std::vector<std::string>{"remote", "add", "--leaf", "x", "--root-wide", "--mid"},
+             std::vector<std::string>{"remote", "add", "x", "--root-wide", "--mid", "--leaf"},
          }) {
         std::vector<std::string> args{"prog"};
         args.insert(args.end(), line.begin(), line.end());
@@ -2641,22 +2637,26 @@ BOOST_AUTO_TEST_CASE(test_globals_written_between_the_commands_that_declare_them
         BOOST_CHECK_EQUAL(must(result.value(0)), "x");
     }
 
+    // The path is a run of names and nothing between them. An option ends it, whoever declared
+    // that option, so what follows is no longer a command and is said to be too late.
+    bad(parser, {"--root-wide", "remote", "add", "--leaf", "x"}, ParseResult::UnknownCommand);
+    bad(parser, {"remote", "--mid", "add", "--leaf", "x"}, ParseResult::UnknownCommand);
+
     // Written above where it was declared it is nobody's option, which is the rule that lets a
     // subcommand name one thing what its parent names another.
     bad(parser, {"--mid", "remote", "add", "x"}, ParseResult::UnknownOption);
     bad(parser, {"remote", "--leaf", "add", "x"}, ParseResult::UnknownOption);
 
-    // Twice is once too many unless it said otherwise, on either side of a step down the same
-    // as anywhere else. Being global buys it no extra turns.
-    bad(parser, {"--root-wide", "remote", "--root-wide", "add", "x"},
+    // Twice is once too many unless it said otherwise. Being recursive buys it no extra turns.
+    bad(parser, {"remote", "add", "--root-wide", "--root-wide", "x"},
         ParseResult::OptionOccurTooMuch);
 
-    // Having said otherwise, both are counted, and the step down between them is nothing to it.
+    // Having said otherwise, both are counted.
     Parser repeatable(Command("prog")
-                          .addOption(Option({"-v"}, "Say more").global().multi())
+                          .addOption(Option({"-v"}, "Say more").recursive().multi())
                           .addCommand(Command("remote").addCommand(
                               Command("add").addArgument(Argument("name")))));
-    auto twice = ok(repeatable, {"-v", "remote", "-v", "add", "x"});
+    auto twice = ok(repeatable, {"remote", "add", "-v", "-v", "x"});
     BOOST_REQUIRE(twice.option("-v").has_value());
     BOOST_CHECK_EQUAL(twice.option("-v")->count(), 2);
 
@@ -2692,9 +2692,9 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
 // Inheritance is from every command above, not only the one directly above.
 BOOST_AUTO_TEST_CASE(test_globals_reach_a_grandchild) {
     Parser parser(Command("prog")
-                      .addOption(Option({"--root-wide"}, "From the top").global())
+                      .addOption(Option({"--root-wide"}, "From the top").recursive())
                       .addCommand(Command("remote", "Remotes")
-                                      .addOption(Option({"--mid"}, "From the middle").global())
+                                      .addOption(Option({"--mid"}, "From the middle").recursive())
                                       .addOption(Option({"--mid-local"}, "Not inherited"))
                                       .addCommand(Command("add", "Add one")
                                                       .addArgument(Argument("name")))));
@@ -3457,7 +3457,7 @@ BOOST_AUTO_TEST_CASE(test_a_result_answers_for_what_its_help_is_made_from) {
 
     auto sub = parser.parse(argv({"copy", "a", "b"}));
     BOOST_REQUIRE_EQUAL(sub.inheritedOptions().size(), 1u);
-    BOOST_CHECK(sub.inheritedOptions().front()->isGlobal());
+    BOOST_CHECK(sub.inheritedOptions().front()->isRecursive());
 }
 
 // The measuring a formatter needs to lay a block out itself, lent out rather than written again.

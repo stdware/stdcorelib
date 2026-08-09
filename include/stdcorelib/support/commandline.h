@@ -534,9 +534,12 @@ namespace stdc::cli {
             _prior = level;
             return *this;
         }
-        /// Visible to this command's subcommands as well as to itself.
-        inline Option &global(bool on = true) {
-            _global = on;
+        /// In scope for every command below this one as well as for this one.
+        ///
+        /// Without it an option can be given only where the command declaring it is the one that
+        /// was reached, since every option is written after its own command.
+        inline Option &recursive(bool on = true) {
+            _recursive = on;
             return *this;
         }
         /// How many times it may be given, zero meaning without limit. The last argument added is
@@ -562,8 +565,8 @@ namespace stdc::cli {
         inline bool isRequired() const {
             return _required;
         }
-        inline bool isGlobal() const {
-            return _global;
+        inline bool isRecursive() const {
+            return _recursive;
         }
         inline Role role() const {
             return _role;
@@ -619,7 +622,7 @@ namespace stdc::cli {
         Prior _prior = NoPrior;
         int _maxOccurrence = 1;
         bool _required = false;
-        bool _global = false;
+        bool _recursive = false;
     };
 
     /// Which heading each name is listed under in the help text. Anything not named here goes
@@ -782,15 +785,15 @@ namespace stdc::cli {
         ///
         /// \param showIfNoArguments Answer a command line with nothing on it at all, so that a
         ///        bare program name prints its help.
-        /// \param global Keep it in scope for the subcommands as well.
+        /// \param recursive Keep it in scope for the subcommands as well.
         /// \param tokens The spellings, or the usual ones when empty.
         /// \param desc The description, or the usual one when empty.
-        inline Command &addHelpOption(bool showIfNoArguments = false, bool global = false,
+        inline Command &addHelpOption(bool showIfNoArguments = false, bool recursive = false,
                                       std::vector<std::string> tokens = {}, std::string desc = {}) {
             return addOption(Option(Option::Help, std::move(tokens), std::move(desc))
                                  .prior(showIfNoArguments ? Option::AutoSetWhenNoSymbols
                                                           : Option::IgnoreMissingSymbols)
-                                 .global(global));
+                                 .recursive(recursive));
         }
         inline Command &setDescription(std::string desc) {
             _desc = std::move(desc);

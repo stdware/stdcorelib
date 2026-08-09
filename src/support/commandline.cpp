@@ -411,7 +411,7 @@ namespace stdc::cli {
         const Command *at = _impl->root.get();
         for (size_t i = 1; i < _impl->path.size() && at; ++i) {
             for (const auto &option : at->options()) {
-                if (option.isGlobal()) {
+                if (option.isRecursive()) {
                     res.push_back(&option);
                 }
             }
@@ -1200,22 +1200,26 @@ namespace stdc::cli {
             return nullptr;
         }
 
-        /// Moves into \a next, keeping whatever the command being left declared global.
+        /// Moves into \a next, keeping whatever the command being left declared recursive.
+        ///
+        /// The options are not collected here. Nothing may be written until the path is over, so
+        /// there is one scope to collect and it is the target's, and collecting at every level
+        /// would leave each ancestor's own options in the table for the rest of the parse.
         void ParserCore::enter(const Command *next) {
             for (const auto &option : r->target->options()) {
-                if (option.isGlobal()) {
+                if (option.isRecursive()) {
                     inherited.push_back(&option);
                 }
             }
             r->target = next;
             r->path.push_back(next->name());
-            collectOptions();
         }
 
-        /// What can be written from here: this command's own options, plus the globals of every
-        /// command above it. An option of a command already left behind is not matched again,
-        /// though whatever it collected on the way stays readable.
+        /// What can be written here: the target's own options, plus the recursive ones of every
+        /// command above it. Called once, after the path is settled, so this is the only scope
+        /// there ever is and what a result can be asked for is exactly what could be written.
         void ParserCore::collectOptions() {
+            r->options.clear();
             r->by_token.clear();
             auto add = [this](const Option *option) {
                 size_t index = r->options.size();
@@ -1440,6 +1444,27 @@ namespace stdc::cli {
         }
 
         void ParserCore::readTokens() {
+            // The path first, and nothing but. A command line names its command by naming each
+            // one down to it and nothing in between, so the run of subcommand names at the front
+            // is the whole of it and the first token that is not one ends it.
+            //
+            // This is what makes a scope out of the target rather than out of wherever the
+            // reader happened to be. An option belongs to one command, it is written after that
+            // command, and the only way it reaches a command below is recursive().
+            while (pos < tokens.size()) {
+                const auto &token = tokens[pos];
+                if (token == "--" || looksLikeOption(token)) {
+                    break;
+                }
+                auto next = subcommandFor(token);
+                if (!next) {
+                    break;
+                }
+                ++pos;
+                enter(next);
+            }
+            collectOptions();
+
             while (pos < tokens.size() && !failed()) {
                 const auto &token = tokens[pos];
                 if (!saw_terminator && token == "--") {
@@ -1452,13 +1477,20 @@ namespace stdc::cli {
                     readOption(token);
                     continue;
                 }
-                // A subcommand is looked for here rather than in a pass of its own, so that the
-                // global options a command line puts in front of one are read against the
-                // command that declared them.
-                if (auto next = subcommandFor(token)) {
-                    ++pos;
-                    enter(next);
-                    continue;
+                // The path is over, so a name that would have gone into it was written too late.
+                // Said as that rather than as a stray value, since "unknown argument" for a word
+                // the reader can see is a subcommand is the least useful thing to answer with.
+                //
+                // Only where the target takes no arguments of its own. Where it takes some, this
+                // token is one of them: a program that has a subcommand called \c copy can still
+                // be handed a file called copy, and guessing otherwise would make the name
+                // unusable as a value.
+                if (!saw_terminator && r->target->arguments().empty() && subcommandFor(token)) {
+                    failFor(ParseResult::UnknownCommand,
+                            "command \"" + token + "\" has to come before the options of \"" +
+                                r->target->name() + "\"",
+                            token, {});
+                    return;
                 }
                 positional.push_back(token);
                 ++pos;
@@ -1605,7 +1637,6 @@ namespace stdc::cli {
             }
 
             r->path.push_back(r->target->name());
-            collectOptions();
             readTokens();
             if (failed()) {
                 return;
