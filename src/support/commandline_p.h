@@ -14,7 +14,7 @@ namespace stdc::cli::detail {
     /// Whether two declared names are the same name, which under a case-insensitive parse they
     /// are without being the same text.
     inline bool same_name(std::string_view a, std::string_view b, bool ignore_case) {
-        return ignore_case ? str::strcasecmp(a, b) == 0 : a == b;
+        return ignore_case ? str::ascii_casecmp(a, b) == 0 : a == b;
     }
 
     /// The spellings of \a option that a value may be stuck to, which is what the parser tries

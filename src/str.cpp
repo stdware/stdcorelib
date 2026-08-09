@@ -349,7 +349,12 @@ namespace stdc {
             return heap_buffer;
         }
 
-        int strcasecmp(const std::string_view &s, const std::string_view &other) {
+        // Named for what it does rather than after the C function. MinGW's string.h says
+        // "#define strcasecmp _stricmp", so a header declaring one of its own is rewritten or
+        // not depending on which include the translation unit saw first: the call does not
+        // compile where the declaration was read without the macro, and where both were read
+        // with it the symbol is one the library never exported.
+        int ascii_casecmp(const std::string_view &s, const std::string_view &other) {
             const auto &lowered = [](char c) {
                 return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c;
             };
