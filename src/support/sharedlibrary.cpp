@@ -330,7 +330,14 @@ namespace stdc {
         if (const char *env = std::getenv(PRIOR_LIBRARY_PATH_KEY); env) {
             org = env;
         }
-        if (setenv(PRIOR_LIBRARY_PATH_KEY, path.string().c_str(), 1) != 0) {
+        // An empty path takes the variable away rather than setting it to nothing. A process
+        // that started without one hands back an empty path here, and handing that back was
+        // the one thing a caller does with what this returns, so the two have to agree.
+        if (path.empty()) {
+            if (unsetenv(PRIOR_LIBRARY_PATH_KEY) != 0) {
+                return {};
+            }
+        } else if (setenv(PRIOR_LIBRARY_PATH_KEY, path.string().c_str(), 1) != 0) {
             return {};
         }
 #endif

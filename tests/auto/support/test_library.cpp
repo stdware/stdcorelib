@@ -50,6 +50,15 @@ namespace {
     const char UnloadablePath[] = TEST_UNLOADABLE_PATH;
     const char PinnedPath[] = TEST_PINNED_PATH;
 
+#ifndef _WIN32
+    // The variable setLibraryPath() writes, named the same way the implementation names it.
+#  ifdef __APPLE__
+    const char PriorLibraryPathKey[] = "DYLD_LIBRARY_PATH";
+#  else
+    const char PriorLibraryPathKey[] = "LD_LIBRARY_PATH";
+#  endif
+#endif
+
     fs::path unloadable() {
         return fs::path(UnloadablePath);
     }
@@ -377,6 +386,47 @@ BOOST_AUTO_TEST_CASE(test_setting_the_library_path_gives_back_the_old_one) {
     // And putting the empty path back reports the one that was in force.
     auto wasSecond = SharedLibrary::setLibraryPath(std::filesystem::path());
     BOOST_CHECK(wasSecond == second);
+
+#ifndef _WIN32
+    // What the empty path leaves behind, which is the whole of what a caller does with the
+    // value this hands out. Set to nothing and never set both come back empty, so unless the
+    // empty path takes the variable away, a process that started without one can never be put
+    // back the way it was.
+    BOOST_CHECK(std::getenv(PriorLibraryPathKey) == nullptr);
+
+    SharedLibrary::setLibraryPath(first);
+    BOOST_REQUIRE(std::getenv(PriorLibraryPathKey) != nullptr);
+    SharedLibrary::setLibraryPath(std::filesystem::path());
+    BOOST_CHECK(std::getenv(PriorLibraryPathKey) == nullptr);
+#endif
+}
+
+// What it is worth differs by platform, and the header says so rather than promising one thing
+// three times. This is the half that can be asked from here: on Windows the setting is the
+// loader's own and takes effect for what this process loads next, and on Linux it is an
+// environment variable the loader read before main and will not read again.
+BOOST_AUTO_TEST_CASE(test_what_the_library_path_reaches) {
+    auto original = SharedLibrary::setLibraryPath(std::filesystem::path());
+    auto guard = stdc::make_scope_guard([&] {
+        SharedLibrary::setLibraryPath(original);
+    });
+
+    auto dir = std::filesystem::temp_directory_path();
+    SharedLibrary::setLibraryPath(dir);
+
+#ifdef _WIN32
+    // The loader was told, and it is the loader that answers.
+    wchar_t buf[4096] = {};
+    DWORD n = ::GetDllDirectoryW(DWORD(std::size(buf)), buf);
+    BOOST_REQUIRE(n > 0);
+    BOOST_CHECK(std::filesystem::path(std::wstring(buf, n)) == dir);
+#else
+    // The variable was set, and that is all that happened. Nothing here can show the loader
+    // ignoring it, since a dependency search that already succeeded would succeed either way.
+    const char *env = std::getenv(PriorLibraryPathKey);
+    BOOST_REQUIRE(env != nullptr);
+    BOOST_CHECK(std::filesystem::path(env) == dir);
+#endif
 }
 
 BOOST_AUTO_TEST_SUITE_END()

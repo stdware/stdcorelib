@@ -103,12 +103,29 @@ namespace stdc {
         ///       loadable.
         static bool isLibrary(const std::filesystem::path &path);
 
-        /// Adds \a path to the search used for a library's own dependencies.
+        /// Where the system should look for a library's own dependencies, as far as each
+        /// system lets that be said at run time. This is not one behavior with three spellings,
+        /// so what it is worth is written out per platform.
         ///
-        /// This is what lets a plugin sitting outside the usual directories find the libraries
-        /// next to it.
+        /// \li <b>Windows</b>: \c SetDllDirectoryW. Every \c LoadLibrary this process makes
+        ///     afterwards looks here, which is what lets a plugin outside the usual directories
+        ///     find the libraries next to it. This is the case the function was written for.
+        /// \li <b>Linux</b>: \c LD_LIBRARY_PATH is set, and the loader read it once when the
+        ///     process started. So this <b>does not change where this process looks</b>. What
+        ///     it changes is the environment a child inherits, which is worth something and is
+        ///     not what the name suggests. Measured, not assumed: a library whose dependency
+        ///     sits only in the new directory still fails to load after this returns, and the
+        ///     same binary loads it when the variable was set before it started.
+        /// \li <b>macOS</b>: \c DYLD_LIBRARY_PATH is set. dyld is not glibc and this has not
+        ///     been measured here, so treat it as Linux until somebody does.
         ///
-        /// \return what was set before, so it can be put back
+        /// A plugin that has to find its own neighbors on every platform wants an rpath of
+        /// \c $ORIGIN or \c @loader_path, which is a property of the plugin rather than
+        /// anything a caller can set from here.
+        ///
+        /// \return what was set before, so it can be put back. An empty path unsets the
+        ///         variable rather than setting it to nothing, so putting back what a process
+        ///         that never had one hands out leaves it without one.
         static std::filesystem::path setLibraryPath(const std::filesystem::path &path);
 
         /// The path of the library that \a addr falls inside, which answers where a given
