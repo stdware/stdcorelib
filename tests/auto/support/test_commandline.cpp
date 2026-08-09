@@ -313,8 +313,7 @@ BOOST_AUTO_TEST_CASE(test_option_roles_bring_their_own_spelling) {
     BOOST_CHECK(help.tokens() == std::vector<std::string>({"-h", "--help"}));
 
     BOOST_CHECK(Option(Option::Version).tokens() == std::vector<std::string>({"-v", "--version"}));
-    BOOST_CHECK(Option(Option::Verbose).tokens() == std::vector<std::string>({"-V", "--verbose"}));
-    BOOST_CHECK(Option(Option::Debug).tokens() == std::vector<std::string>({"-d", "--debug"}));
+    BOOST_CHECK_EQUAL(Option(Option::Version).description(), "Show the version and exit");
 
     // Naming the tokens keeps the role and drops the usual spelling.
     Option renamed(Option::Help, {"--usage"}, "Print usage");
@@ -376,7 +375,7 @@ BOOST_AUTO_TEST_CASE(test_command_collects_what_it_is_given) {
                            Option({"-e", "--exclude"}, "Exclude a pattern").arg("regex").multi(),
                            Option({"-f", "--force"}, "Force overwrite"),
                        })
-                       .addOption({Option::Verbose})
+                       .addOption({Option::Version})
                        .setHandler([](const ParseResult &) { return 7; });
 
     BOOST_CHECK_EQUAL(command.name(), "copy");
@@ -385,7 +384,7 @@ BOOST_AUTO_TEST_CASE(test_command_collects_what_it_is_given) {
     BOOST_CHECK_EQUAL(command.arguments()[0].name(), "src");
     BOOST_CHECK(command.arguments()[0].arity() == Argument::Multiple);
     BOOST_REQUIRE_EQUAL(command.options().size(), 3u);
-    BOOST_CHECK(command.options()[2].role() == Option::Verbose);
+    BOOST_CHECK(command.options()[2].role() == Option::Version);
     BOOST_REQUIRE(command.handler());
 }
 
@@ -1882,7 +1881,8 @@ namespace {
             .addCommands("Buildsystem Commands", {"configure"});
 
         Parser parser(Command("prog", "What the program is for")
-                          .addOptions({Option(Option::Help), Option(Option::Verbose).recursive()})
+                          .addOptions(
+                              {Option(Option::Help), Option({"-V"}, "Say more").recursive()})
                           .addCommands({
                               Command("copy", "Copy things")
                                   .addArguments({Argument("src", "Where from").multi(),
@@ -2054,16 +2054,14 @@ BOOST_AUTO_TEST_CASE(test_an_options_own_argument_carries_its_extras_too) {
 }
 
 BOOST_AUTO_TEST_CASE(test_roles_describe_themselves) {
-    // The three options every program has are otherwise the three with nothing written beside
-    // them, which is where a generated help text starts looking unfinished.
-    Parser parser(Command("prog").addOptions({Option(Option::Help), Option(Option::Version),
-                                              Option(Option::Verbose), Option(Option::Debug)}));
+    // The two options every program has are otherwise the two with nothing written beside them,
+    // which is where a generated help text starts looking unfinished.
+    Parser parser(
+        Command("prog").addOptions({Option(Option::Help), Option(Option::Version)}));
     auto text = parser.parse(argv({})).helpText();
 
     BOOST_CHECK(has(text, "Show this help and exit"));
     BOOST_CHECK(has(text, "Show the version and exit"));
-    BOOST_CHECK(has(text, "Print more information"));
-    BOOST_CHECK(has(text, "Print debugging information"));
 
     // A description of one's own wins.
     Parser named(Command("prog").addOption(Option(Option::Help, {}, "Read this")));

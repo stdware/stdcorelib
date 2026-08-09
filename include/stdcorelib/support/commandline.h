@@ -586,19 +586,18 @@ namespace stdc::cli {
     /// A named switch, with any number of arguments of its own.
     class Option {
     public:
-        /// What the option means, for the few every program has. A role brings the usual
-        /// spellings and description, and lets a caller ask by role rather than by spelling.
+        /// What the option means, for the two the library answers by itself. A role brings the
+        /// usual spellings and description, and lets a caller ask by role rather than by
+        /// spelling.
         ///
-        /// The set is closed. \c Help and \c Version are the two the library answers by itself.
-        /// \c Verbose and \c Debug are spellings only, and mean whatever the program reading
-        /// isRoleSet() takes them to mean.
+        /// The set is closed, and it is these two because these two are what the library does
+        /// something with. A role for a switch it only carries the spelling of would be a
+        /// second way of writing Option({"-V", "--verbose"}, "Print more information").
         ///
         /// \note A role says nothing about scope, which is recursive(), nor about where an option
         ///       sits in the help text, which is where it was declared.
         enum Role {
             NoRole,
-            Debug,
-            Verbose,
             Version,
             Help,
         };
@@ -645,7 +644,7 @@ namespace stdc::cli {
         inline Option(std::string token, std::string desc = {})
             : Option(std::vector<std::string>{std::move(token)}, std::move(desc)) {
         }
-        /// Deliberately not explicit, so that \c addOptions({Option::Verbose}) reads the way it
+        /// Deliberately not explicit, so that \c addOptions({Option::Help}) reads the way it
         /// does. Empty tokens take the usual spelling for the role.
         inline Option(Role role, std::vector<std::string> tokens = {}, std::string desc = {})
             : _tokens(tokens.empty() ? defaultTokens(role) : std::move(tokens)),
@@ -768,10 +767,6 @@ namespace stdc::cli {
                     return "Show this help and exit";
                 case Version:
                     return "Show the version and exit";
-                case Verbose:
-                    return "Print more information";
-                case Debug:
-                    return "Print debugging information";
                 default:
                     return {};
             }
@@ -784,10 +779,6 @@ namespace stdc::cli {
                     return {"-h", "--help"};
                 case Version:
                     return {"-v", "--version"};
-                case Verbose:
-                    return {"-V", "--verbose"};
-                case Debug:
-                    return {"-d", "--debug"};
                 default:
                     return {};
             }
