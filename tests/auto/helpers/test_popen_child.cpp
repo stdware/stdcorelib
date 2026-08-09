@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 
 // A child process for the Popen tests to start.
 //
@@ -32,7 +32,7 @@ namespace {
     }
 
     int usage() {
-        std::fputs("usage: test_child arg0|argv|exit|fill|cat ...\n", stderr);
+        std::fputs("usage: test_popen_child arg0|argv|exit|fill|cat ...\n", stderr);
         return 2;
     }
 

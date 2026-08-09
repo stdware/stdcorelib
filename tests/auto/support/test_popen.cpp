@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 
 #include <algorithm>
 #include <atomic>
@@ -128,7 +128,7 @@ namespace {
 
     // The helper program, with its mode and whatever the mode takes.
     std::vector<std::string> child_args(std::vector<std::string> rest) {
-        std::vector<std::string> args = {TEST_CHILD_PATH};
+        std::vector<std::string> args = {TEST_POPEN_CHILD_PATH};
         args.insert(args.end(), rest.begin(), rest.end());
         return args;
     }
@@ -313,14 +313,14 @@ BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
         p.args(child_args({"arg0"})).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, _] = p.communicate({}, Timeout);
-        BOOST_CHECK_EQUAL(first_line(out), TEST_CHILD_PATH);
+        BOOST_CHECK_EQUAL(first_line(out), TEST_POPEN_CHILD_PATH);
     }
 
     // With it they part: the loaded file is the helper, and what it reads back is the name.
     {
         Popen p;
         std::string err;
-        p.executable(TEST_CHILD_PATH)
+        p.executable(TEST_POPEN_CHILD_PATH)
             .args({"a-name-of-its-own", "arg0"})
             .stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
@@ -1104,7 +1104,7 @@ BOOST_AUTO_TEST_CASE(test_a_command_line_can_be_too_long) {
 
     // One argument past what either platform takes. Windows counts the whole line against
     // 32767 characters and Linux refuses any single argument of 128 KiB whatever the total is.
-    BOOST_CHECK(!Popen::commandLineFits({TEST_CHILD_PATH, std::string(1 << 20, 'a')}));
+    BOOST_CHECK(!Popen::commandLineFits({TEST_POPEN_CHILD_PATH, std::string(1 << 20, 'a')}));
 
     // Or many that add up to it.
     {
@@ -1115,7 +1115,7 @@ BOOST_AUTO_TEST_CASE(test_a_command_line_can_be_too_long) {
 
     // Quoting is what makes an argument long, so what is measured is the line that would be
     // built rather than the arguments as they came in. A quote doubles on Windows.
-    BOOST_CHECK(Popen::commandLineFits({TEST_CHILD_PATH, std::string(4000, 'a')}));
+    BOOST_CHECK(Popen::commandLineFits({TEST_POPEN_CHILD_PATH, std::string(4000, 'a')}));
 
     // The answer is not merely conservative: the longest line it accepts really does start, and
     // the child really does receive the last argument whole.
