@@ -39,10 +39,56 @@ namespace stdc::cli::detail {
         return res;
     }
 
+    /// Whether \a command can be given both what its own arguments want and what its options
+    /// want.
+    ///
+    /// A Remainder argument takes the rest of the line from where it starts, so every option has
+    /// to be written before it. An option whose own argument is greedy reads on until the next
+    /// declared option or the end, so it has to be written where something stops it. Put the two
+    /// in one command and there is no order that works: the option first eats the arguments, the
+    /// arguments first turn the option into one of their values, and only a third option written
+    /// between them saves it.
+    inline bool arguments_can_be_reached(const Command &command,
+                                         const std::vector<const Option *> &inherited) {
+        bool has_remainder = false;
+        for (const auto &argument : command.arguments()) {
+            if (argument.arity() == Argument::Remainder) {
+                has_remainder = true;
+                break;
+            }
+        }
+        if (!has_remainder) {
+            return true;
+        }
+        const auto &greedy = [](const Option &option) {
+            for (const auto &argument : option.arguments()) {
+                if (argument.arity() != Argument::Single) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        for (const auto &option : command.options()) {
+            if (greedy(option)) {
+                return false;
+            }
+        }
+        for (const auto *option : inherited) {
+            if (greedy(*option)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// \a command's own names against \a inherited, then the same for what is under it, carrying
     /// whatever it declares recursive down with it.
     inline bool unambiguous_under(const Command &command, std::vector<const Option *> inherited,
                                   bool ignoreOptionCase, bool ignoreCommandCase) {
+        if (!arguments_can_be_reached(command, inherited)) {
+            return false;
+        }
+
         std::vector<std::string_view> spellings;
         const auto &take = [&spellings, ignoreOptionCase](const Option &option) {
             for (const auto &spelling : option.tokens()) {
@@ -118,7 +164,7 @@ namespace stdc::cli::detail {
         return true;
     }
 
-    /// Whether every command in \a command's tree can tell its own names apart.
+    /// Whether every command in \a command's tree can be parsed at all.
     ///
     /// What is in scope at a command is its own options plus the recursive ones above it, and
     /// they are looked up by spelling, so two of them answering to one spelling has no right
@@ -131,8 +177,8 @@ namespace stdc::cli::detail {
     ///
     /// Here rather than beside canFollow() and canJoin() because nothing public calls it. Those
     /// are asserted by the setters in the header itself and have to be where the setters are.
-    inline bool names_are_unambiguous(const Command &command, bool ignoreOptionCase = false,
-                                      bool ignoreCommandCase = false) {
+    inline bool tree_can_be_parsed(const Command &command, bool ignoreOptionCase = false,
+                                   bool ignoreCommandCase = false) {
         std::vector<const Option *> inherited;
         return unambiguous_under(command, inherited, ignoreOptionCase, ignoreCommandCase);
     }

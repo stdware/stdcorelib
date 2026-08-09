@@ -733,14 +733,34 @@ BOOST_AUTO_TEST_CASE(test_grouped_short_flags) {
     bad(parser, {"-abc"}, ParseResult::UnknownOption, Parser::AllowUnixGroupFlags);
 }
 
-BOOST_AUTO_TEST_CASE(test_double_dash_ends_the_options) {
-    Parser parser(
-        Command("prog").addArgument(Argument("files").multi()).addOption(Option({"-f"}, "Force")));
+// Where option reading stops is a program's own to declare, and the word it stops at is its
+// own to choose. The parser reserves none, so the familiar -- is a declaration like any other.
+BOOST_AUTO_TEST_CASE(test_a_program_says_where_options_stop) {
+    const auto &tree = [](const char *word) {
+        return Parser(Command("prog")
+                          .addOption(Option({"-f"}, "Force"))
+                          .addOption(Option({word}, "The rest, whatever it looks like")
+                                         .arg(Argument("rest").nargs(Argument::Remainder))));
+    };
 
-    auto result = ok(parser, {"-f", "--", "-f", "--not-an-option"});
+    auto usual = tree("--");
+    auto result = ok(usual, {"-f", "--", "-f", "--not-an-option"});
     BOOST_CHECK(result.option("-f").has_value());
     BOOST_CHECK_EQUAL(result.option("-f")->count(), 1);
-    BOOST_CHECK(result.values(0) == std::vector<std::string>({"-f", "--not-an-option"}));
+    BOOST_REQUIRE(result.option("--"));
+    BOOST_CHECK(must(result.option("--")->values<std::string>(0)) ==
+                std::vector<std::string>({"-f", "--not-an-option"}));
+
+    // Any other word does the same, since nothing about -- is built in.
+    auto chosen = tree("--exec");
+    auto other = ok(chosen, {"-f", "--exec", "-f", "--not-an-option"});
+    BOOST_CHECK_EQUAL(other.option("-f")->count(), 1);
+    BOOST_CHECK(must(other.option("--exec")->values<std::string>(0)) ==
+                std::vector<std::string>({"-f", "--not-an-option"}));
+
+    // Undeclared, it is an option nobody has heard of rather than a rule of the language.
+    Parser bare(Command("prog").addOption(Option({"-f"}, "Force")));
+    bad(bare, {"--", "x"}, ParseResult::UnknownOption);
 }
 
 // The terminator against an option whose own argument is greedy. Each of those was covered and
@@ -758,25 +778,26 @@ BOOST_AUTO_TEST_CASE(test_the_terminator_ends_a_greedy_option_too) {
                 std::vector<std::string>({"a", "b"}));
     BOOST_CHECK_EQUAL(must(stopped.value(0)), "dest");
 
-    // And now for the terminator, which had been taken as a value along with everything after.
-    auto ended = ok(parser, {"-f", "a", "b", "--", "dest"});
+    // A declared word does the same, and what follows it is a value even where it is spelled
+    // like an option, which is the whole of what a Remainder is for.
+    Parser withRest(Command("prog")
+                        .addArgument(Argument("dest"))
+                        .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()))
+                        .addOption(Option({"--"}, "The rest")
+                                       .arg(Argument("rest").nargs(Argument::Remainder))));
+    auto ended = ok(withRest, {"dest", "-f", "a", "b", "--", "-f", "x"});
     BOOST_CHECK(must(ended.option("-f")->values<std::string>(0)) ==
                 std::vector<std::string>({"a", "b"}));
     BOOST_CHECK_EQUAL(must(ended.value(0)), "dest");
+    BOOST_CHECK(must(ended.option("--")->values<std::string>(0)) ==
+                std::vector<std::string>({"-f", "x"}));
 
-    // What follows it is a value even where it is spelled like an option.
-    auto forced = ok(parser, {"-f", "a", "--", "-v"});
-    BOOST_CHECK(must(forced.option("-f")->values<std::string>(0)) ==
-                std::vector<std::string>({"a"}));
-    BOOST_CHECK_EQUAL(must(forced.value(0)), "-v");
-    BOOST_CHECK(!forced.option("-v").has_value());
-
-    // One rule, so an argument that has to have a value does not take it either. getopt would
-    // hand it the terminator, and this library already parts from that for a declared option,
-    // where saying the value is missing beats eating --force and leaving nobody the wiser.
-    Parser single(Command("prog").addOption(Option({"-o"}, "Out").arg("dir")));
-    bad(single, {"-o", "--"}, ParseResult::MissingOptionArgument);
-    // A negative number is still a value, since it is nobody's option.
+    // An argument that has to have a value does not take a declared option as one. A negative
+    // number is still a value, since it is nobody's option.
+    Parser single(Command("prog")
+                      .addOption(Option({"-o"}, "Out").arg("dir"))
+                      .addOption(Option({"-v"}, "Say more")));
+    bad(single, {"-o", "-v"}, ParseResult::MissingOptionArgument);
     BOOST_CHECK_EQUAL(must(ok(single, {"-o", "-5"}).valueForOption("-o")), "-5");
 }
 
@@ -1200,19 +1221,23 @@ BOOST_AUTO_TEST_CASE(test_a_value_that_looks_like_an_option) {
 }
 
 // CLI11's ForcedPositional, pushed further than the first case in this file does.
-BOOST_AUTO_TEST_CASE(test_what_survives_the_terminator) {
+BOOST_AUTO_TEST_CASE(test_what_survives_a_remainder) {
     Parser parser(Command("prog")
-                      .addArgument(Argument("rest").multi().optional())
-                      .addOption(Option({"-f"}, "Force")));
+                      .addOption(Option({"-f"}, "Force"))
+                      .addOption(Option({"--"}, "The rest")
+                                     .arg(Argument("rest").nargs(Argument::Remainder).optional())));
 
-    // A second one is no longer special.
+    // A second one is a value like everything else after the first.
     auto twice = ok(parser, {"--", "--", "-f"});
-    BOOST_CHECK(twice.values(0) == std::vector<std::string>({"--", "-f"}));
+    BOOST_REQUIRE(twice.option("--"));
+    BOOST_CHECK(must(twice.option("--")->values<std::string>(0)) ==
+                std::vector<std::string>({"--", "-f"}));
     BOOST_CHECK(!twice.option("-f").has_value());
 
-    // On its own it leaves nothing behind.
+    // On its own it leaves nothing behind, a Remainder being content with none.
     auto alone = ok(parser, {"--"});
-    BOOST_CHECK(must(alone.values(0)).empty());
+    BOOST_REQUIRE(alone.option("--"));
+    BOOST_CHECK(must(alone.option("--")->values<std::string>(0)).empty());
 }
 
 // argparse asks this one about equals signs inside values.
@@ -1349,10 +1374,16 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_name_used_as_a_value) {
     BOOST_CHECK_EQUAL(late.command()->name(), "prog");
     BOOST_CHECK_EQUAL(must(late.value(1)), "copy");
 
-    // Nor after a terminator, where nothing is a command.
-    auto forced = ok(positional, {"--", "copy", "x"});
+    // Nor once a Remainder has started, where nothing is a command and nothing is an option.
+    Parser rest(Command("prog")
+                    .addArgument(Argument("head"))
+                    .addArgument(Argument("tail").nargs(Argument::Remainder).optional())
+                    .addOption(Option({"-f"}, "Force"))
+                    .addCommand(Command("copy")));
+    auto forced = ok(rest, {"x", "copy", "-f"});
     BOOST_CHECK_EQUAL(forced.command()->name(), "prog");
-    BOOST_CHECK_EQUAL(must(forced.value(0)), "copy");
+    BOOST_CHECK(forced.values(1) == std::vector<std::string>({"copy", "-f"}));
+    BOOST_CHECK(!forced.option("-f").has_value());
 }
 
 // Short matching carries exactly one value, so it is offered only to an option that wants
@@ -3388,11 +3419,10 @@ BOOST_AUTO_TEST_CASE(test_what_an_option_may_join) {
     BOOST_CHECK(!Option::canJoin(none, Option({"-"}, "Just a dash")));
     BOOST_CHECK(Option::canJoin(none, Option({"/f"}, "The DOS spelling")));
 
-    // The terminator is read before anything is looked up, so an option spelled that way could
-    // never be reached. Longer spellings that start with it are ordinary.
-    BOOST_CHECK(!Option::canJoin(none, Option({"--"}, "The terminator")));
-    BOOST_CHECK(!Option::canJoin(none, Option({"-f", "--"}, "By its second spelling")));
-    BOOST_CHECK(Option::canJoin(none, Option({"--force"}, "Starts with it")));
+    // -- is a spelling like any other, since the parser keeps no word of its own. A program
+    // that wants the usual one declares it, and one that wants another declares that.
+    BOOST_CHECK(Option::canJoin(none, Option({"--"}, "The rest")));
+    BOOST_CHECK(Option::canJoin(none, Option({"--force"}, "An ordinary long one")));
 
     // No spelling that one already there answers to, whichever of its spellings it is.
     const std::vector<Option> taken = {Option({"-f", "--force"}, "Force")};
@@ -3419,23 +3449,23 @@ BOOST_AUTO_TEST_CASE(test_a_recursive_option_and_a_local_one_may_not_share_a_spe
     };
 
     // Both in scope at sub, both answering to -o, and a result is asked for one by spelling.
-    BOOST_CHECK(!detail::names_are_unambiguous(tree(true, "-o")));
+    BOOST_CHECK(!detail::tree_can_be_parsed(tree(true, "-o")));
 
     // The same two where the root keeps its own, since then only one of them is ever in scope.
-    BOOST_CHECK(detail::names_are_unambiguous(tree(false, "-o")));
+    BOOST_CHECK(detail::tree_can_be_parsed(tree(false, "-o")));
 
     // And where the spellings differ, which is the ordinary case.
-    BOOST_CHECK(detail::names_are_unambiguous(tree(true, "-p")));
+    BOOST_CHECK(detail::tree_can_be_parsed(tree(true, "-p")));
 
     // Two levels up counts the same as one.
-    BOOST_CHECK(!detail::names_are_unambiguous(
+    BOOST_CHECK(!detail::tree_can_be_parsed(
         Command("prog")
             .addOption(Option({"-v"}, "The root's").recursive())
             .addCommand(Command("mid").addCommand(
                 Command("leaf").addOption(Option({"-v"}, "The leaf's"))))));
 
     // Two recursive ones from different levels reach the same command together.
-    BOOST_CHECK(!detail::names_are_unambiguous(
+    BOOST_CHECK(!detail::tree_can_be_parsed(
         Command("prog")
             .addOption(Option({"-v"}, "The root's").recursive())
             .addCommand(Command("mid")
@@ -3449,24 +3479,53 @@ BOOST_AUTO_TEST_CASE(test_a_recursive_option_and_a_local_one_may_not_share_a_spe
 BOOST_AUTO_TEST_CASE(test_names_that_are_one_name_only_under_a_matching_rule) {
     auto options = Command("prog").addOptions(
         {Option({"--output"}, "One"), Option({"--OUTPUT"}, "The other")});
-    BOOST_CHECK(detail::names_are_unambiguous(options));
-    BOOST_CHECK(!detail::names_are_unambiguous(options, true, false));
+    BOOST_CHECK(detail::tree_can_be_parsed(options));
+    BOOST_CHECK(!detail::tree_can_be_parsed(options, true, false));
     // The rule for commands does not decide the one for options.
-    BOOST_CHECK(detail::names_are_unambiguous(options, false, true));
+    BOOST_CHECK(detail::tree_can_be_parsed(options, false, true));
 
     auto commands =
         Command("prog").addCommands({Command("build"), Command("BUILD", "The other one")});
-    BOOST_CHECK(detail::names_are_unambiguous(commands));
-    BOOST_CHECK(!detail::names_are_unambiguous(commands, false, true));
-    BOOST_CHECK(detail::names_are_unambiguous(commands, true, false));
+    BOOST_CHECK(detail::tree_can_be_parsed(commands));
+    BOOST_CHECK(!detail::tree_can_be_parsed(commands, false, true));
+    BOOST_CHECK(detail::tree_can_be_parsed(commands, true, false));
 
     // A recursive option and a local one that differ only in case, which needs both the rule
     // and the whole tree to see.
     auto mixed = Command("prog")
                      .addOption(Option({"--force"}, "The root's").recursive())
                      .addCommand(Command("sub").addOption(Option({"--FORCE"}, "The sub's")));
-    BOOST_CHECK(detail::names_are_unambiguous(mixed));
-    BOOST_CHECK(!detail::names_are_unambiguous(mixed, true, false));
+    BOOST_CHECK(detail::tree_can_be_parsed(mixed));
+    BOOST_CHECK(!detail::tree_can_be_parsed(mixed, true, false));
+}
+
+// A Remainder takes the rest of the line, so every option has to be written before it. An
+// option whose own argument is greedy reads on until something stops it. One command cannot
+// have both: the option written first eats the arguments, the arguments written first turn the
+// option into one of their values, and only a third option between them saves it.
+BOOST_AUTO_TEST_CASE(test_a_remainder_and_a_greedy_option_cannot_share_a_command) {
+    const auto &tree = [](Argument::Arity arity) {
+        return Command("prog")
+            .addArgument(Argument("script"))
+            .addArgument(Argument("args").nargs(arity).optional())
+            .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()));
+    };
+    BOOST_CHECK(!detail::tree_can_be_parsed(tree(Argument::Remainder)));
+    // A greedy argument is not the same thing: it leaves room, so an order that works exists.
+    BOOST_CHECK(detail::tree_can_be_parsed(tree(Argument::Multiple)));
+
+    // A plain option beside a Remainder is fine, having an end of its own.
+    BOOST_CHECK(detail::tree_can_be_parsed(
+        Command("prog")
+            .addArgument(Argument("args").nargs(Argument::Remainder).optional())
+            .addOption(Option({"-o"}, "Out").arg("dir"))));
+
+    // The greedy one may come from above, where the command it reaches cannot see it.
+    BOOST_CHECK(!detail::tree_can_be_parsed(
+        Command("prog")
+            .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()).recursive())
+            .addCommand(Command("sub").addArgument(
+                Argument("args").nargs(Argument::Remainder).optional()))));
 }
 
 BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {

@@ -1036,7 +1036,10 @@ namespace stdc::cli {
             const Option *prior_option = nullptr;
             /// The globals of every command walked through, which stay in scope below.
             std::vector<const Option *> inherited;
-            bool saw_terminator = false;
+            /// Where the target's Remainder argument sits among its arguments, if it has one.
+            /// Once that many positional tokens are in hand the rest of the line is its, options
+            /// and all, which is how a program says where option reading stops.
+            size_t remainder_at = size_t(-1);
 
             bool on(Parser::ParseOption flag) const {
                 return flags.test_flag(flag);
@@ -1103,7 +1106,7 @@ namespace stdc::cli {
         };
 
         bool ParserCore::looksLikeOption(std::string_view token) const {
-            if (saw_terminator || token.size() < 2) {
+            if (token.size() < 2) {
                 return false;
             }
             if (token[0] == '-') {
@@ -1195,7 +1198,7 @@ namespace stdc::cli {
         /// The subcommand \a token names, or null. Only worth asking before the first positional
         /// token, since after that a name is a value.
         const Command *ParserCore::subcommandFor(const std::string &token) const {
-            if (!positional.empty() || saw_terminator) {
+            if (!positional.empty()) {
                 return nullptr;
             }
             for (const auto &candidate : r->target->commands()) {
@@ -1324,34 +1327,34 @@ namespace stdc::cli {
 
                 // How many are here to be had, which is up to the next token that is somebody's
                 // option, and then how many of those are this argument's to take.
-                // What this argument's run stops at, and it is one question. A token that is
-                // somebody's option is never quietly eaten as a value, not even by an argument
-                // that has to have one: saying "-o needs a value" is worth more than taking
-                // --force and leaving the reader to work out where it went. The terminator is
-                // the same thing said more strongly, so it stops the run too, and it used to
-                // walk straight into a greedy one along with everything after it.
-                //
+                // A token that is somebody's option is never quietly eaten as a value, not
+                // even by an argument that has to have one: saying "-o needs a value" is worth
+                // more than taking --force and leaving the reader to work out where it went.
                 // Only a declared option counts, so a negative number is a value like any other
-                // rather than an option nobody has heard of. Writing -o=--force, or putting --
-                // first, is how a value spelled like an option is forced.
+                // rather than an option nobody has heard of.
+                //
+                // A Remainder is the exception and the whole of its meaning: it takes the rest
+                // of the line as it stands. That is how a program says where option reading
+                // stops, and what token it stops at is the program's own to choose.
+                bool remainder = argument.arity() == Argument::Remainder;
                 const auto &ends_the_run = [this](const std::string &token) {
-                    if (!saw_terminator && token == "--") {
-                        return true;
-                    }
                     return looksLikeOption(token) && lookup(token) != nullptr;
                 };
 
-                size_t available = 0;
-                while (pos + available < tokens.size() &&
-                       !ends_the_run(tokens[pos + available])) {
-                    ++available;
+                size_t available = tokens.size() - pos;
+                if (!remainder) {
+                    available = 0;
+                    while (pos + available < tokens.size() &&
+                           !ends_the_run(tokens[pos + available])) {
+                        ++available;
+                    }
                 }
                 size_t take = take_for(option->arguments(), i, available);
 
                 bool took_any = false;
                 for (size_t count = 0; count < take && pos < tokens.size(); ++count) {
                     const auto &token = tokens[pos];
-                    if (ends_the_run(token)) {
+                    if (!remainder && ends_the_run(token)) {
                         break;
                     }
                     if (!accepts(argument, token, where)) {
@@ -1474,7 +1477,7 @@ namespace stdc::cli {
             // command, and the only way it reaches a command below is recursive().
             while (pos < tokens.size()) {
                 const auto &token = tokens[pos];
-                if (token == "--" || looksLikeOption(token)) {
+                if (looksLikeOption(token)) {
                     break;
                 }
                 auto next = subcommandFor(token);
@@ -1486,10 +1489,24 @@ namespace stdc::cli {
             }
             collectOptions();
 
+            // Where the target's own Remainder argument begins, if it declares one. Everything
+            // before it takes a token each, since nothing greedy may come before a Remainder, so
+            // the count of positional tokens in hand says when it has started.
+            const auto &declared = r->target->arguments();
+            for (size_t i = 0; i < declared.size(); ++i) {
+                if (declared[i].arity() == Argument::Remainder) {
+                    remainder_at = i;
+                    break;
+                }
+            }
+
             while (pos < tokens.size() && !failed()) {
                 const auto &token = tokens[pos];
-                if (!saw_terminator && token == "--") {
-                    saw_terminator = true;
+                // Once the Remainder has started, nothing is an option any more. This is what
+                // the arity means and what lets a program choose the word it stops at, rather
+                // than every program stopping at the one word a parser picked.
+                if (remainder_at != size_t(-1) && positional.size() >= remainder_at) {
+                    positional.push_back(token);
                     ++pos;
                     continue;
                 }
@@ -1506,7 +1523,7 @@ namespace stdc::cli {
                 // token is one of them: a program that has a subcommand called \c copy can still
                 // be handed a file called copy, and guessing otherwise would make the name
                 // unusable as a value.
-                if (!saw_terminator && r->target->arguments().empty() && subcommandFor(token)) {
+                if (r->target->arguments().empty() && subcommandFor(token)) {
                     failFor(ParseResult::UnknownCommand,
                             "command \"" + token + "\" has to come before the options of \"" +
                                 r->target->name() + "\"",
@@ -1721,9 +1738,9 @@ namespace stdc::cli {
         /// is the assert and nothing else, so no tree is walked.
         static void assertNames(const Command &command, bool ignoreOptionCase = false,
                                 bool ignoreCommandCase = false) {
-            assert(detail::names_are_unambiguous(command, ignoreOptionCase, ignoreCommandCase) &&
-                   "two options in scope at one command answer to the same spelling, or two "
-                   "subcommands share a name");
+            assert(detail::tree_can_be_parsed(command, ignoreOptionCase, ignoreCommandCase) &&
+                   "this command tree cannot be parsed: two names in one scope cannot be "
+                   "told apart, or a Remainder argument shares a command with a greedy option");
             (void) command;
             (void) ignoreOptionCase;
             (void) ignoreCommandCase;

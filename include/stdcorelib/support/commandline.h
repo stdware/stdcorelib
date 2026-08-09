@@ -557,13 +557,6 @@ namespace stdc::cli {
                 if (token.size() < 2 || (token.front() != '-' && token.front() != '/')) {
                     return false;
                 }
-                // The terminator is the command line's own word for where options stop, read
-                // before anything is looked up, so an option spelled that way is one nobody can
-                // ever reach. Longer spellings starting with it are ordinary, --force among
-                // them.
-                if (token == "--") {
-                    return false;
-                }
                 for (const auto &item : options) {
                     const auto &taken = item.tokens();
                     if (std::find(taken.begin(), taken.end(), token) != taken.end()) {
