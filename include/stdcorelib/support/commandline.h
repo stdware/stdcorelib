@@ -158,16 +158,39 @@
 /// build. Argument::canFollow(), Option::canJoin() and Command::canAddCommand() are public so a
 /// program can ask instead of finding out.
 ///
-/// \li an option with no spelling, or two options in one scope answering to the same spelling,
-///     an ancestor's recursive one included
-/// \li two subcommands of one command sharing a name, or two names that differ only in case
-///     where the parse ignores case
-/// \li anything at all after an Argument::Remainder, or anything but a required single argument
-///     after an Argument::Multiple
-/// \li an Argument::Remainder in the same command as an option whose argument is greedy, since
-///     both want the rest of the line and neither can be written second
-/// \li a default value that the argument's own type, expect() or validate() turns down, or one
-///     on an argument that is required
+/// An argument may not
+/// \li have no name, or the name of another argument beside it
+/// \li be required where one before it may be left out, since one token could be meant for
+///     either
+/// \li follow an Argument::Remainder, which leaves nothing to follow it with
+/// \li follow an Argument::Multiple unless it is a required Argument::Single, that being the one
+///     thing the reservation rule leaves room for
+/// \li expect() a value its own type() cannot read
+/// \li carry a defaultValue() that its type(), its expect() or its validate() turns down, or
+///     carry one at all while being required, a default being what stands in where nothing was
+///     given
+///
+/// An option may not
+/// \li have no spelling, or one shorter than two characters, or one starting with neither \c -
+///     nor \c /
+/// \li share a spelling with another option of the same command
+/// \li be required or take arguments where its prior() is Option::AutoSetWhenNoSymbols, since
+///     nobody writes one of those and there is nothing to give it
+/// \li be told by multi() that it may be given a negative number of times
+///
+/// A command may not
+/// \li hold a subcommand with no name, or two subcommands sharing one
+/// \li hold an Argument::Remainder and an option whose argument is greedy, both wanting the rest
+///     of the line where only one of them can be written first
+///
+/// A CommandCatalogue may not name one thing twice, in one group or across two of the same kind.
+///
+/// And a tree may not, which is only visible once it is one
+/// \li have two options in scope at one command answering to one spelling, the recursive ones of
+///     every command above it included
+/// \li have two names in one scope that differ only in case, where the parse ignores case
+/// \li have two spellings a value may be stuck to where one is the start of the other, \c -D and
+///     \c -Da against \c -Dabc, which no rule can settle
 ///
 /// Changing the help text is a ladder, and a program climbs only as far as it needs to. See
 /// \ref cli_help.
