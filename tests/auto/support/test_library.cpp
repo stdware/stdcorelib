@@ -45,11 +45,16 @@ namespace {
 #endif
     }
 
+    // Named once rather than expanded at every use, since a macro standing where a value belongs
+    // reads as a value the reader has to go and look up.
+    const char UnloadablePath[] = TEST_UNLOADABLE_PATH;
+    const char PinnedPath[] = TEST_PINNED_PATH;
+
     fs::path unloadable() {
-        return fs::path(TEST_UNLOADABLE_PATH);
+        return fs::path(UnloadablePath);
     }
     fs::path pinned() {
-        return fs::path(TEST_PINNED_PATH);
+        return fs::path(PinnedPath);
     }
 
     // A library that is guaranteed to be present, plus a symbol it is guaranteed to export.

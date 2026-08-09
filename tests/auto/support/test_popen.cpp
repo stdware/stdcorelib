@@ -59,6 +59,10 @@ namespace {
     // Every wait here is bounded, so a regression hangs the one case rather than the whole run.
     constexpr int Timeout = 15000;
 
+    // The helper program, named once rather than expanded at every use, since a macro standing
+    // where a value belongs reads as a value the reader has to go and look up.
+    const char ChildPath[] = TEST_POPEN_CHILD_PATH;
+
     // The same child behavior spelled in each platform's shell.
 #ifdef _WIN32
     const char *ShellExe = "cmd";
@@ -128,7 +132,7 @@ namespace {
 
     // The helper program, with its mode and whatever the mode takes.
     std::vector<std::string> child_args(std::vector<std::string> rest) {
-        std::vector<std::string> args = {TEST_POPEN_CHILD_PATH};
+        std::vector<std::string> args = {ChildPath};
         args.insert(args.end(), rest.begin(), rest.end());
         return args;
     }
@@ -262,36 +266,36 @@ BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused
 
     {
         Popen p;
-        p.args({TEST_POPEN_CHILD_PATH, "argv", embedded});
+        p.args({ChildPath, "argv", embedded});
         refused(p);
     }
     {
         Popen p;
-        p.args({std::string(TEST_POPEN_CHILD_PATH) + embedded, "argv"});
+        p.args({std::string(ChildPath) + embedded, "argv"});
         refused(p);
     }
     {
         Popen p;
-        p.args({TEST_POPEN_CHILD_PATH, "argv"}).env({{"NAME", embedded}});
+        p.args({ChildPath, "argv"}).env({{"NAME", embedded}});
         refused(p);
     }
     {
         Popen p;
-        p.args({TEST_POPEN_CHILD_PATH, "argv"}).env({{embedded, "value"}});
+        p.args({ChildPath, "argv"}).env({{embedded, "value"}});
         refused(p);
     }
     {
         Popen p;
-        p.args({TEST_POPEN_CHILD_PATH, "argv"}).env({{"", "value"}});
+        p.args({ChildPath, "argv"}).env({{"", "value"}});
         refused(p);
     }
 
     // Corrected, the same object starts, so the refusal changed nothing.
     Popen p;
-    p.args({TEST_POPEN_CHILD_PATH, "argv", embedded}).stdout_(Popen::PIPE);
+    p.args({ChildPath, "argv", embedded}).stdout_(Popen::PIPE);
     std::string err;
     BOOST_CHECK(!p.start(&err));
-    p.args({TEST_POPEN_CHILD_PATH, "argv", "ab"});
+    p.args({ChildPath, "argv", "ab"});
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
     auto [out, ignored] = p.communicate({}, Timeout);
     BOOST_CHECK(out.find("ab") != std::string::npos);
@@ -364,14 +368,14 @@ BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
         p.args(child_args({"arg0"})).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, _] = p.communicate({}, Timeout);
-        BOOST_CHECK_EQUAL(first_line(out), TEST_POPEN_CHILD_PATH);
+        BOOST_CHECK_EQUAL(first_line(out), ChildPath);
     }
 
     // With it they part: the loaded file is the helper, and what it reads back is the name.
     {
         Popen p;
         std::string err;
-        p.executable(TEST_POPEN_CHILD_PATH)
+        p.executable(ChildPath)
             .args({"a-name-of-its-own", "arg0"})
             .stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
@@ -1202,7 +1206,7 @@ BOOST_AUTO_TEST_CASE(test_a_command_line_can_be_too_long) {
 
     // One argument past what either platform takes. Windows counts the whole line against
     // 32767 characters and Linux refuses any single argument of 128 KiB whatever the total is.
-    BOOST_CHECK(!Popen::commandLineFits({TEST_POPEN_CHILD_PATH, std::string(1 << 20, 'a')}));
+    BOOST_CHECK(!Popen::commandLineFits({ChildPath, std::string(1 << 20, 'a')}));
 
     // Or many that add up to it.
     {
@@ -1213,7 +1217,7 @@ BOOST_AUTO_TEST_CASE(test_a_command_line_can_be_too_long) {
 
     // Quoting is what makes an argument long, so what is measured is the line that would be
     // built rather than the arguments as they came in. A quote doubles on Windows.
-    BOOST_CHECK(Popen::commandLineFits({TEST_POPEN_CHILD_PATH, std::string(4000, 'a')}));
+    BOOST_CHECK(Popen::commandLineFits({ChildPath, std::string(4000, 'a')}));
 
     // The answer is not merely conservative: the longest line it accepts really does start, and
     // the child really does receive the last argument whole.
