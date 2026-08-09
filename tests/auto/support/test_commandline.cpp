@@ -3388,6 +3388,12 @@ BOOST_AUTO_TEST_CASE(test_what_an_option_may_join) {
     BOOST_CHECK(!Option::canJoin(none, Option({"-"}, "Just a dash")));
     BOOST_CHECK(Option::canJoin(none, Option({"/f"}, "The DOS spelling")));
 
+    // The terminator is read before anything is looked up, so an option spelled that way could
+    // never be reached. Longer spellings that start with it are ordinary.
+    BOOST_CHECK(!Option::canJoin(none, Option({"--"}, "The terminator")));
+    BOOST_CHECK(!Option::canJoin(none, Option({"-f", "--"}, "By its second spelling")));
+    BOOST_CHECK(Option::canJoin(none, Option({"--force"}, "Starts with it")));
+
     // No spelling that one already there answers to, whichever of its spellings it is.
     const std::vector<Option> taken = {Option({"-f", "--force"}, "Force")};
     BOOST_CHECK(!Option::canJoin(taken, Option({"-f"}, "Again")));

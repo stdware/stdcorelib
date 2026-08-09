@@ -260,7 +260,11 @@ namespace stdc::cli {
             /// One or more, also called greedy. Leaves enough tokens for the required arguments
             /// after it, so \c copy \c \<src\>... \c \<dest\> works.
             Multiple,
-            /// Everything left, including anything that looks like an option.
+            /// Everything left, reserving nothing, which is why nothing may follow one.
+            ///
+            /// \note A token that is a declared option is still read as one, the same as it
+            ///       would be for Multiple. What ends option reading is the \c -- on the
+            ///       command line, and after that everything is a value whatever the arity.
             Remainder,
         };
 
@@ -551,6 +555,13 @@ namespace stdc::cli {
             }
             for (const auto &token : option.tokens()) {
                 if (token.size() < 2 || (token.front() != '-' && token.front() != '/')) {
+                    return false;
+                }
+                // The terminator is the command line's own word for where options stop, read
+                // before anything is looked up, so an option spelled that way is one nobody can
+                // ever reach. Longer spellings starting with it are ordinary, --force among
+                // them.
+                if (token == "--") {
                     return false;
                 }
                 for (const auto &item : options) {
@@ -1467,6 +1478,14 @@ namespace stdc::cli {
         void setHelpFormatter(std::shared_ptr<HelpFormatter> formatter);
         const std::shared_ptr<HelpFormatter> &helpFormatter() const;
 
+        /// What \a args means against the command tree.
+        ///
+        /// \note A tree that could not be parsed sensibly is a mistake in the program rather
+        ///       than in what a user typed, and every such mistake is asserted by the time this
+        ///       returns in a debug build. Most are caught by the setter that makes them, and
+        ///       the ones no piece can see on its own are caught here, since only here are the
+        ///       whole tree and the matching rules both known. A release build checks none of
+        ///       it and is not meant to: a tree is written once and does not come from a user.
         ParseResult parse(const std::vector<std::string> &args,
                           ParseOptions parseOptions = Standard) const;
         /// Parses and does everything a \c main does with the answer, reporting a failure and
