@@ -5,38 +5,7 @@
 /// Declaring what a program takes on its command line, and reading back what it was given.
 ///
 /// The shape of the API comes from SysCmdLine, https://github.com/SineStriker/syscmdline, which
-/// this replaces.
-///
-/// \section cli_help Changing the help text
-///
-/// Five rungs, and a program climbs only as far as it needs to. Each one is written in terms of
-/// the one below it, so nothing is reimplemented to change one thing.
-///
-/// \verbatim
-///   1  how much room it has          parser.setIndent(2)
-///                                    parser.setSpacing(1)
-///                                    parser.setTextWidth(100)
-///
-///   2  how it is printed             layout.setTitleStyle({console::bold})
-///                                    layout.setBodyStyle(HelpBlock::Epilogue, {...})
-///
-///   3  which blocks, in what order   HelpLayout().add(HelpBlock::Usage)
-///                                                .add(HelpBlock::Options)
-///                                                .add(myOwnBlock)
-///
-///   4  how a block is made or laid   struct Mine : HelpFormatter {
-///      out, one rung at a time           std::vector<HelpBlock> blocks(...) const override {
-///                                            auto res = HelpFormatter::blocks(...);
-///                                            ...
-///                                        }
-///                                    };
-///
-///   5  none of the above             for (auto &block : result.helpBlocks()) { ... }
-/// \endverbatim
-///
-/// Rungs 1 to 3 are settings on the Parser and need no type of your own. Rung 4 is
-/// HelpFormatter, which is a ladder of its own and carries the diagram of it. Rung 5 hands the
-/// blocks over and gets out of the way.
+/// this replaces. Everything it declares is in the \ref cli module, which carries the prose.
 
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
@@ -201,8 +170,36 @@
 /// \li have two spellings a value may be stuck to where one is the start of the other, \c -D and
 ///     \c -Da against \c -Dabc, which no rule can settle
 ///
-/// Changing the help text is a ladder, and a program climbs only as far as it needs to. See
-/// \ref cli_help.
+/// \section cli_help Changing the help text
+///
+/// Five rungs, and a program climbs only as far as it needs to. Each one is written in terms of
+/// the one below it, so nothing is reimplemented to change one thing.
+///
+/// \verbatim
+///   1  how much room it has          parser.setIndent(2)
+///                                    parser.setSpacing(1)
+///                                    parser.setTextWidth(100)
+///
+///   2  how it is printed             layout.setTitleStyle({console::bold})
+///                                    layout.setBodyStyle(HelpBlock::Epilogue, {...})
+///
+///   3  which blocks, in what order   HelpLayout().add(HelpBlock::Usage)
+///                                                .add(HelpBlock::Options)
+///                                                .add(myOwnBlock)
+///
+///   4  how a block is made or laid   struct Mine : HelpFormatter {
+///      out, one rung at a time           std::vector<HelpBlock> blocks(...) const override {
+///                                            auto res = HelpFormatter::blocks(...);
+///                                            ...
+///                                        }
+///                                    };
+///
+///   5  none of the above             for (auto &block : result.helpBlocks()) { ... }
+/// \endverbatim
+///
+/// Rungs 1 to 3 are settings on the Parser and need no type of your own. Rung 4 is
+/// HelpFormatter, which is a ladder of its own and carries the diagram of it. Rung 5 hands the
+/// blocks over and gets out of the way.
 
 namespace stdc::cli {
 
@@ -698,7 +695,6 @@ namespace stdc::cli {
             _maxOccurrence = maxOccurrence;
             return *this;
         }
-
 
         inline const std::vector<std::string> &tokens() const {
             return _tokens;
