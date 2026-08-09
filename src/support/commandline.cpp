@@ -1746,8 +1746,8 @@ namespace stdc::cli {
         static void assertNames(const Command &command, bool ignoreOptionCase = false,
                                 bool ignoreCommandCase = false) {
             assert(detail::tree_can_be_parsed(command, ignoreOptionCase, ignoreCommandCase) &&
-                   "this command tree cannot be parsed: two names in one scope cannot be "
-                   "told apart, or a Remainder argument shares a command with a greedy option");
+                   "this command tree cannot be parsed: two names in one scope cannot be told "
+                   "apart, or a Remainder argument leaves an option nowhere to be written");
             (void) command;
             (void) ignoreOptionCase;
             (void) ignoreCommandCase;

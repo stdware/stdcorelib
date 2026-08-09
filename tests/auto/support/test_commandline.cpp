@@ -3559,9 +3559,11 @@ BOOST_AUTO_TEST_CASE(test_a_remainder_and_a_greedy_option_cannot_share_a_command
     // A greedy argument is not the same thing: it leaves room, so an order that works exists.
     BOOST_CHECK(detail::tree_can_be_parsed(tree(Argument::Multiple)));
 
-    // A plain option beside a Remainder is fine, having an end of its own.
+    // A plain option beside a Remainder is fine, having an end of its own, so long as the
+    // Remainder is not what the first token runs into.
     BOOST_CHECK(detail::tree_can_be_parsed(
         Command("prog")
+            .addArgument(Argument("script"))
             .addArgument(Argument("args").nargs(Argument::Remainder).optional())
             .addOption(Option({"-o"}, "Out").arg("dir"))));
 
@@ -3569,8 +3571,48 @@ BOOST_AUTO_TEST_CASE(test_a_remainder_and_a_greedy_option_cannot_share_a_command
     BOOST_CHECK(!detail::tree_can_be_parsed(
         Command("prog")
             .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()).recursive())
-            .addCommand(Command("sub").addArgument(
-                Argument("args").nargs(Argument::Remainder).optional()))));
+            .addCommand(Command("sub")
+                            .addArgument(Argument("script"))
+                            .addArgument(Argument("args").nargs(Argument::Remainder).optional()))));
+}
+
+// A Remainder that is the first argument starts at the first token, so there is no token left
+// for an option to be written on. A command shaped that way can have no option at all: one
+// declared there could never be given, and the parser would read it as the Remainder's first
+// value rather than reporting anything.
+BOOST_AUTO_TEST_CASE(test_a_leading_remainder_leaves_nowhere_to_write_an_option) {
+    BOOST_CHECK(detail::tree_can_be_parsed(
+        Command("prog").addArgument(Argument("rest").nargs(Argument::Remainder))));
+
+    // Its own, whether the option takes a value or not.
+    BOOST_CHECK(!detail::tree_can_be_parsed(
+        Command("prog")
+            .addArgument(Argument("rest").nargs(Argument::Remainder))
+            .addOption(Option({"-v"}, "Verbose"))));
+    BOOST_CHECK(!detail::tree_can_be_parsed(
+        Command("prog")
+            .addArgument(Argument("rest").nargs(Argument::Remainder))
+            .addOption(Option({"-o"}, "Out").arg("dir"))));
+
+    // And one it inherited, which the command declaring it cannot see either.
+    BOOST_CHECK(!detail::tree_can_be_parsed(
+        Command("prog")
+            .addOption(Option({"-v"}, "Verbose").recursive())
+            .addCommand(
+                Command("run").addArgument(Argument("rest").nargs(Argument::Remainder)))));
+    // Not recursive, so it never reaches run and run is reachable.
+    BOOST_CHECK(detail::tree_can_be_parsed(
+        Command("prog")
+            .addOption(Option({"-v"}, "Verbose"))
+            .addCommand(
+                Command("run").addArgument(Argument("rest").nargs(Argument::Remainder)))));
+
+    // One argument in front of it is enough, that token being where an option can go.
+    BOOST_CHECK(detail::tree_can_be_parsed(
+        Command("prog")
+            .addArgument(Argument("script"))
+            .addArgument(Argument("rest").nargs(Argument::Remainder))
+            .addOption(Option({"-v"}, "Verbose"))));
 }
 
 BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {

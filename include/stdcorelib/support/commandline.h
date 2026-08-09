@@ -159,6 +159,8 @@
 /// \li hold a subcommand with no name, or two subcommands sharing one
 /// \li hold an Argument::Remainder and an option whose argument is greedy, both wanting the rest
 ///     of the line where only one of them can be written first
+/// \li hold an option of any kind, or inherit one, where its first argument is an
+///     Argument::Remainder, which starts at the first token and leaves nowhere to write one
 ///
 /// A CommandCatalogue should not name one thing twice, in one group or across two of the same
 /// kind.

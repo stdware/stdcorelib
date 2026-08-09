@@ -48,17 +48,24 @@ namespace stdc::cli::detail {
     /// in one command and there is no order that works: the option first eats the arguments, the
     /// arguments first turn the option into one of their values, and only a third option written
     /// between them saves it.
+    ///
+    /// A Remainder that is the first argument is the same rule taken to its end. It starts at
+    /// the first token, so there is nowhere earlier for any option to be written, greedy or not,
+    /// and a command shaped that way can have none.
     inline bool arguments_can_be_reached(const Command &command,
                                          const std::vector<const Option *> &inherited) {
-        bool has_remainder = false;
-        for (const auto &argument : command.arguments()) {
-            if (argument.arity() == Argument::Remainder) {
-                has_remainder = true;
+        size_t remainder_at = size_t(-1);
+        for (size_t i = 0; i < command.arguments().size(); ++i) {
+            if (command.arguments()[i].arity() == Argument::Remainder) {
+                remainder_at = i;
                 break;
             }
         }
-        if (!has_remainder) {
+        if (remainder_at == size_t(-1)) {
             return true;
+        }
+        if (remainder_at == 0) {
+            return command.options().empty() && inherited.empty();
         }
         const auto &greedy = [](const Option &option) {
             for (const auto &argument : option.arguments()) {
