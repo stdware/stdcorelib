@@ -655,13 +655,49 @@ BOOST_AUTO_TEST_CASE(test_a_run_stops_at_every_spelling_of_an_option) {
     BOOST_CHECK(ok(parser, {"-c", "x", "-ab"}).option("-c")->values() ==
                 std::vector<std::string>({"x", "-ab"}));
 
-    // The same option written twice, each occurrence reading its own run. values() gathers
-    // every occurrence, as it says it does, so what count() answers is the difference.
+    // The same option written twice, each occurrence reading its own run.
     Parser twice(Command("prog").addOption(
         Option({"-c"}, "Copy").arg(Argument("src").multi()).multi()));
     auto both = ok(twice, {"-c=a", "b", "-c=x", "y"});
     BOOST_CHECK_EQUAL(both.option("-c")->count(), 2);
-    BOOST_CHECK(both.option("-c")->values() == std::vector<std::string>({"a", "b", "x", "y"}));
+    BOOST_CHECK(both.option("-c")->at(0).values() == std::vector<std::string>({"a", "b"}));
+    BOOST_CHECK(both.option("-c")->at(1).values() == std::vector<std::string>({"x", "y"}));
+}
+
+// An option is to a command what an occurrence is to an option: the same four questions asked
+// in the same four words. What OptionResult adds is that there may be more than one of them,
+// and at() is the whole of the addition. A greedy argument given twice had no reading at all
+// before it, the singular answering with one value and the plural gathering every occurrence.
+BOOST_AUTO_TEST_CASE(test_each_occurrence_reads_the_way_a_command_does) {
+    Parser parser(Command("prog").addOption(
+        Option({"-c"}, "Copy").arg(Argument("src").multi()).arg("dest").multi()));
+    // Held rather than taken off the temporary, which OptionResult warns about and means.
+    auto result = ok(parser, {"-c", "a", "b", "d1", "-c", "x", "y", "d2"});
+    auto given = result.option("-c");
+    BOOST_REQUIRE(given.has_value());
+    BOOST_CHECK_EQUAL(given->count(), 2);
+
+    // Each occurrence, which is the reading that was missing.
+    BOOST_CHECK(given->at(0).values(0) == std::vector<std::string>({"a", "b"}));
+    BOOST_CHECK(given->at(1).values(0) == std::vector<std::string>({"x", "y"}));
+    BOOST_CHECK_EQUAL(given->at(0).value(1).value_or(""), "d1");
+    BOOST_CHECK_EQUAL(given->at(1).value(1).value_or(""), "d2");
+
+    // The option itself: singular is the first, plural is every one, as on a ParseResult.
+    BOOST_CHECK_EQUAL(given->value(0).value_or(""), "a");
+    BOOST_CHECK(given->values(0) == std::vector<std::string>({"a", "b", "x", "y"}));
+    BOOST_CHECK(given->values(1) == std::vector<std::string>({"d1", "d2"}));
+
+    // So the option's own singular is the first occurrence's, said twice.
+    BOOST_CHECK(given->rawValue(0) == given->at(0).rawValue(0));
+    BOOST_CHECK(given->value(1) == given->at(0).value(1));
+
+    // Past the last one answers with nothing rather than being a mistake, the way an index
+    // nobody declared does.
+    BOOST_CHECK(!given->at(2).value(0).has_value());
+    BOOST_CHECK(given->at(2).values(0) == std::vector<std::string>());
+    BOOST_CHECK(!given->at(-1).value(0).has_value());
+    BOOST_CHECK(!given->at(0).value(9).has_value());
 }
 
 BOOST_AUTO_TEST_CASE(test_remainder_takes_everything_left) {
@@ -711,7 +747,7 @@ BOOST_AUTO_TEST_CASE(test_repeated_options) {
     BOOST_CHECK_EQUAL(result.option("-e")->count(), 3);
     BOOST_CHECK(result.option("-e")->rawValues() == std::vector<std::string_view>({"a", "b", "c"}));
     // Each occurrence is still reachable on its own.
-    BOOST_CHECK_EQUAL(must(result.option("-e")->rawValue(0, 1)), "b");
+    BOOST_CHECK_EQUAL(must(result.option("-e")->at(1).rawValue(0)), "b");
 
     // One that did not say it repeats does not.
     bad(parser, {"-f", "-f"}, ParseResult::OptionOccurTooMuch);
@@ -2147,10 +2183,10 @@ BOOST_AUTO_TEST_CASE(test_an_option_carrying_two_arguments) {
     const auto &include = *given;
     BOOST_REQUIRE_EQUAL(include.count(), 2);
     // Slot by slot within one occurrence, which is the only way a pair means anything.
-    BOOST_CHECK_EQUAL(must(include.rawValue(0, 0)), "a");
-    BOOST_CHECK_EQUAL(must(include.rawValue(1, 0)), "x");
-    BOOST_CHECK_EQUAL(must(include.rawValue(0, 1)), "b");
-    BOOST_CHECK_EQUAL(must(include.rawValue(1, 1)), "y");
+    BOOST_CHECK_EQUAL(must(include.at(0).rawValue(0)), "a");
+    BOOST_CHECK_EQUAL(must(include.at(0).rawValue(1)), "x");
+    BOOST_CHECK_EQUAL(must(include.at(1).rawValue(0)), "b");
+    BOOST_CHECK_EQUAL(must(include.at(1).rawValue(1)), "y");
     // Or everything one slot ever took, across every occurrence.
     BOOST_CHECK(include.rawValues(0) == std::vector<std::string_view>({"a", "b"}));
     BOOST_CHECK(include.rawValues(1) == std::vector<std::string_view>({"x", "y"}));

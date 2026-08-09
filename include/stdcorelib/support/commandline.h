@@ -718,9 +718,9 @@ namespace stdc::cli {
         /// How many times the option may be given, zero meaning without limit.
         ///
         /// What repeats is the whole occurrence: every time the option is written it reads its
-        /// arguments again, into a set of its own that ParseResult::option() answers for by
-        /// occurrence. How many values one argument takes within one occurrence is a different
-        /// question, and Argument::multi() is where it is asked.
+        /// arguments again, into a set of its own that OptionResult::at() hands back. How many
+        /// values one argument takes within one occurrence is a different question, and
+        /// Argument::multi() is where it is asked.
         /// \pre \a maxOccurrence is not negative. A negative is not a smaller limit, it is one
         ///      the count can never reach, which reads back as no limit at all.
         inline Option &multi(int maxOccurrence = 0) {
@@ -1060,26 +1060,95 @@ namespace stdc::cli {
     /// \sa ParseResult::option()
     class STDC_EXPORT OptionResult {
     public:
+        /// One appearance of the option, read the way a ParseResult is read.
+        ///
+        /// A command is given once and an option may be given many times, which is the whole
+        /// of the difference between them. So this is what a ParseResult is for a command,
+        /// with the same four questions asked of it in the same four words, and OptionResult
+        /// is these in a row.
+        ///
+        /// \warning A view onto a view. Outliving the ParseResult is what to avoid, and asking
+        ///          OptionResult::at() for one past the last is not: everything it is asked
+        ///          answers with nothing, the way an index nobody declared does.
+        class STDC_EXPORT Occurrence {
+        public:
+            /// The \a index'th argument's first value, as text, or the default value where
+            /// there is one, or nothing when there is neither.
+            ///
+            /// An option given an empty value, \c --prefix= , has one, and it is the empty
+            /// string. That is why this answers with an optional rather than with empty text:
+            /// whether a token is there and whether the token is empty are different questions.
+            ///
+            /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
+            ///          value<T>() for something that owns what it holds.
+            std::optional<std::string_view> rawValue(int index = 0) const;
+
+            /// Every value the \a index'th argument took here, which is more than one only
+            /// where the argument said it accepts more than one.
+            ///
+            /// \warning The same. These point into the ParseResult.
+            std::vector<std::string_view> rawValues(int index = 0) const;
+
+            /// Converted, or nothing when there is nothing to convert.
+            template <class T = std::string>
+            std::optional<T> value(int index = 0) const {
+                auto raw = rawValue(index);
+                if (!raw) {
+                    return std::nullopt;
+                }
+                T out{};
+                if (!value_traits<T>::parse(*raw, &out)) {
+                    return std::nullopt;
+                }
+                return out;
+            }
+
+            /// Every value the \a index'th argument took here, converted, or nothing when one
+            /// of them is not a \c T.
+            template <class T = std::string>
+            std::optional<std::vector<T>> values(int index = 0) const {
+                std::vector<T> out;
+                for (auto raw : rawValues(index)) {
+                    T item{};
+                    if (!value_traits<T>::parse(raw, &item)) {
+                        return std::nullopt;
+                    }
+                    out.push_back(std::move(item));
+                }
+                return out;
+            }
+
+        private:
+            friend class OptionResult;
+            inline Occurrence(const void *data, int n) : _data(data), _n(n) {
+            }
+            const void *_data;
+            int _n;
+        };
+
         /// How many times the option was given, which is at least once.
         int count() const;
 
         /// The option itself.
         const Option *option() const;
 
-        /// The \a index'th argument of the \a occurrence'th appearance, as text, or the
-        /// default value where there is one, or nothing when there is neither.
+        /// The \a n'th time it was given, counting from zero.
         ///
-        /// An option given an empty value, \c --prefix= , has one, and it is the empty string.
-        /// That is why this answers with an optional rather than with empty text: whether a
-        /// token is there and whether the token is empty are different questions.
+        /// \code
+        ///   for (int n = 0; n < given.count(); ++n) {
+        ///       take(given.at(n).values());
+        ///   }
+        /// \endcode
+        Occurrence at(int n) const;
+
+        /// The first time it was given, which is what the four below read.
         ///
-        /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
-        ///          value<T>() for something that owns what it holds.
-        std::optional<std::string_view> rawValue(int index = 0, int occurrence = 0) const;
+        /// Singular answers with the first, plural with every one, the same rule ParseResult
+        /// follows. Where the option was given more than once the plural gathers them in the
+        /// order they were written, and at() is how one of them is named on its own.
+        std::optional<std::string_view> rawValue(int index = 0) const;
 
         /// Every value the \a index'th argument took, across every occurrence.
-        ///
-        /// \warning The same. These point into the ParseResult.
         std::vector<std::string_view> rawValues(int index = 0) const;
 
         /// Converted, or nothing when there is nothing to convert.
@@ -1093,16 +1162,8 @@ namespace stdc::cli {
         ///   int jobs = result.option("-j").value<int>().value_or(default_jobs());
         /// \endcode
         template <class T = std::string>
-        std::optional<T> value(int index = 0, int occurrence = 0) const {
-            auto raw = rawValue(index, occurrence);
-            if (!raw) {
-                return std::nullopt;
-            }
-            T out{};
-            if (!value_traits<T>::parse(*raw, &out)) {
-                return std::nullopt;
-            }
-            return out;
+        std::optional<T> value(int index = 0) const {
+            return at(0).value<T>(index);
         }
 
         /// Every value the \a index'th argument took, converted, or nothing when one of them
@@ -1413,11 +1474,11 @@ namespace stdc::cli {
         ///
         /// \warning Points into this result and lasts exactly as long as it does. Ask value<T>()
         ///          for something that owns what it holds.
-        std::optional<std::string_view> rawValue(int index) const;
+        std::optional<std::string_view> rawValue(int index = 0) const;
         /// Every token the \a index'th positional argument took.
         ///
         /// \warning The same. These point into this result.
-        std::vector<std::string_view> rawValues(int index) const;
+        std::vector<std::string_view> rawValues(int index = 0) const;
 
         /// Converted, or nothing when there is nothing to convert.
         ///
@@ -1430,7 +1491,7 @@ namespace stdc::cli {
         ///   int jobs = result.value<int>(0).value_or(default_jobs());
         /// \endcode
         template <class T = std::string>
-        std::optional<T> value(int index) const {
+        std::optional<T> value(int index = 0) const {
             auto raw = rawValue(index);
             if (!raw) {
                 return std::nullopt;
@@ -1444,7 +1505,7 @@ namespace stdc::cli {
         /// Every token the \a index'th argument took, converted, or nothing when one of them
         /// is not a \c T. An empty vector means there were none to convert.
         template <class T = std::string>
-        std::optional<std::vector<T>> values(int index) const {
+        std::optional<std::vector<T>> values(int index = 0) const {
             std::vector<T> out;
             for (auto raw : rawValues(index)) {
                 T item{};

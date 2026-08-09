@@ -127,11 +127,13 @@ namespace stdc::cli {
         using ArgumentValues = std::vector<std::string>;
 
         /// One appearance of an option, holding a slot per argument it declares.
-        using Occurrence = std::vector<ArgumentValues>;
+        /// Named for what it holds rather than for what it is one of, OptionResult::Occurrence
+        /// being the public thing that reads it.
+        using ArgumentSlots = std::vector<ArgumentValues>;
 
         struct OptionData {
             const Option *option = nullptr;
-            std::vector<Occurrence> occurrences;
+            std::vector<ArgumentSlots> occurrences;
         };
 
         /// Which option a token names, and what the token itself said.
@@ -256,19 +258,50 @@ namespace stdc::cli {
         return static_cast<const OptionData *>(_data)->option;
     }
 
+    OptionResult::Occurrence OptionResult::at(int n) const {
+        return {_data, n};
+    }
+
+    namespace {
+
+        /// The slots of one occurrence, or null where there is no such occurrence. Out of range
+        /// reads as nothing rather than as a mistake, the way an index nobody declared does.
+        const ArgumentSlots *slots_at(const void *data, int n) {
+            auto option = static_cast<const OptionData *>(data);
+            if (n < 0 || size_t(n) >= option->occurrences.size()) {
+                return nullptr;
+            }
+            return &option->occurrences[size_t(n)];
+        }
+
+    }
+
     // The slot is a vector of the tokens that argument took. Whether that vector is empty and
     // whether the token in it is empty are different questions, which is why nothing here is
     // reported as empty text.
-    std::optional<std::string_view> OptionResult::rawValue(int index, int occurrence) const {
-        auto data = static_cast<const OptionData *>(_data);
-        if (occurrence < 0 || size_t(occurrence) >= data->occurrences.size()) {
+    std::optional<std::string_view> OptionResult::Occurrence::rawValue(int index) const {
+        auto slots = slots_at(_data, _n);
+        if (!slots || index < 0 || size_t(index) >= slots->size() ||
+            (*slots)[size_t(index)].empty()) {
             return std::nullopt;
         }
-        const auto &slots = data->occurrences[size_t(occurrence)];
-        if (index < 0 || size_t(index) >= slots.size() || slots[size_t(index)].empty()) {
-            return std::nullopt;
+        return std::string_view((*slots)[size_t(index)].front());
+    }
+
+    std::vector<std::string_view> OptionResult::Occurrence::rawValues(int index) const {
+        std::vector<std::string_view> res;
+        auto slots = slots_at(_data, _n);
+        if (!slots || index < 0 || size_t(index) >= slots->size()) {
+            return res;
         }
-        return std::string_view(slots[size_t(index)].front());
+        for (const auto &item : (*slots)[size_t(index)]) {
+            res.emplace_back(item);
+        }
+        return res;
+    }
+
+    std::optional<std::string_view> OptionResult::rawValue(int index) const {
+        return at(0).rawValue(index);
     }
 
     std::vector<std::string_view> OptionResult::rawValues(int index) const {
@@ -1353,7 +1386,7 @@ namespace stdc::cli {
                 return false;
             }
 
-            Occurrence slots(option->arguments().size());
+            ArgumentSlots slots(option->arguments().size());
             bool have_inline = inline_value.data() != nullptr;
 
             for (size_t i = 0; i < option->arguments().size(); ++i) {
