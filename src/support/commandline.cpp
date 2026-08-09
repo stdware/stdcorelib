@@ -769,7 +769,13 @@ namespace stdc::cli {
             // An option that has to be given is not optional information, so it is spelled out
             // where a reader looks first rather than left inside "[options]". The hint stays for
             // whatever is left, and goes away when nothing is.
+            // A subcommand's name comes first or not at all, so it is written first here. An
+            // option before it ends the command path, which is why the other order was the one
+            // arrangement the parser refuses.
             std::vector<std::string> parts;
+            if (!command.commands().empty()) {
+                parts.push_back("[commands]");
+            }
             size_t optional_count = 0;
             const auto &take = [&](const Option &option) {
                 if (!spelled(option)) {
@@ -795,37 +801,18 @@ namespace stdc::cli {
             }
 
             int room = std::max(text_width - indent, min_description);
-            const auto &laid_out = [&](const std::vector<std::string> &pieces) {
-                std::string res = head;
-                int line_width = console::display_width(head);
-                for (const auto &part : pieces) {
-                    int part_width = console::display_width(part);
-                    if (line_width > 0 && line_width + 1 + part_width > room) {
-                        res += "\n";
-                        line_width = 0;
-                    }
-                    // At the margin the piece goes straight down under the one above. Anywhere
-                    // else it needs the space that separates it from what came before.
-                    res += line_width == 0 ? part : " " + part;
-                    line_width += line_width == 0 ? part_width : 1 + part_width;
-                }
-                return res;
-            };
-
-            // A subcommand's name comes first or not at all, so a command that has subcommands
-            // can be written two ways and only one of them is this command's own. One line
-            // each: putting them together would read as an order the parser refuses, since an
-            // option written before a name ends the path and a name written after one is too
-            // late.
-            std::string res;
-            if (!parts.empty() || command.commands().empty()) {
-                res = laid_out(parts);
-            }
-            if (!command.commands().empty()) {
-                if (!res.empty()) {
+            std::string res = head;
+            int line_width = console::display_width(head);
+            for (const auto &part : parts) {
+                int part_width = console::display_width(part);
+                if (line_width > 0 && line_width + 1 + part_width > room) {
                     res += "\n";
+                    line_width = 0;
                 }
-                res += laid_out({"[commands]"});
+                // At the margin the piece goes straight down under the one above. Anywhere else
+                // it needs the space that separates it from what came before.
+                res += line_width == 0 ? part : " " + part;
+                line_width += line_width == 0 ? part_width : 1 + part_width;
             }
             return res;
         }
