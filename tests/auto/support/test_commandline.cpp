@@ -1454,6 +1454,68 @@ BOOST_AUTO_TEST_CASE(test_a_joined_value_starts_an_argument_rather_than_finishin
     BOOST_CHECK_EQUAL(pair.option("-c")->value(1).value_or(""), "c");
 }
 
+// A greedy argument takes one token whatever it leaves behind, since one or more is what it
+// promised. A value written against the option has already kept that promise, so there is
+// nothing left to force and what follows keeps what was reserved for it. Without this the
+// smallest line that should work, -c=a b, is the one that does not.
+BOOST_AUTO_TEST_CASE(test_a_joined_value_keeps_the_promise_the_reservation_would_have_kept) {
+    Parser copy(Command("prog").addOption(
+        Option({"-c"}, "Copy").arg(Argument("src").multi()).arg("dest")));
+
+    // Every line here and its spaced twin, which is the property that was broken.
+    const auto &same_as_spaced = [&copy](std::initializer_list<std::string> joined,
+                                         std::initializer_list<std::string> spaced) {
+        auto a = ok(copy, joined);
+        auto b = ok(copy, spaced);
+        BOOST_CHECK(a.option("-c")->values(0) == b.option("-c")->values(0));
+        BOOST_CHECK(a.option("-c")->value(1) == b.option("-c")->value(1));
+        return a;
+    };
+    auto minimum = same_as_spaced({"-c=a", "b"}, {"-c", "a", "b"});
+    BOOST_CHECK(minimum.option("-c")->values(0) == std::vector<std::string>({"a"}));
+    BOOST_CHECK_EQUAL(minimum.option("-c")->value(1).value_or(""), "b");
+
+    auto spare = same_as_spaced({"-c=a", "b", "c"}, {"-c", "a", "b", "c"});
+    BOOST_CHECK(spare.option("-c")->values(0) == std::vector<std::string>({"a", "b"}));
+
+    // Nothing to reserve from, so what follows says so rather than the run giving way.
+    bad(copy, {"-c=a"}, ParseResult::MissingOptionArgument);
+    bad(copy, {"-c", "a"}, ParseResult::MissingOptionArgument);
+
+    // Two to reserve rather than one, which the smallest line has exactly enough for.
+    Parser three(Command("prog").addOption(
+        Option({"-c"}, "Copy").arg(Argument("src").multi()).arg("mid").arg("dest")));
+    auto tight = ok(three, {"-c=a", "b", "c"});
+    BOOST_CHECK(tight.option("-c")->values(0) == std::vector<std::string>({"a"}));
+    BOOST_CHECK_EQUAL(tight.option("-c")->value(1).value_or(""), "b");
+    BOOST_CHECK_EQUAL(tight.option("-c")->value(2).value_or(""), "c");
+
+    // Nothing follows it, so nothing is reserved and the run takes the lot. An argument that
+    // may be left out cannot follow a greedy one, so last is the only way to reserve nothing.
+    Parser last(Command("prog").addOption(Option({"-I"}, "Includes").arg(Argument("dir").multi())));
+    BOOST_CHECK(ok(last, {"-I=a", "b"}).option("-I")->values() ==
+                ok(last, {"-I", "a", "b"}).option("-I")->values());
+
+    // An empty joined value is a value, as --prefix= is elsewhere, so it keeps the promise too.
+    auto empty = ok(copy, {"-c=", "b"});
+    BOOST_CHECK(empty.option("-c")->values(0) == std::vector<std::string>({""}));
+    BOOST_CHECK_EQUAL(empty.option("-c")->value(1).value_or("-"), "b");
+
+    // Crossed with the rule that a run ends at a declared option: there is nothing to take
+    // after the joined value, so the argument after it reports what it did not get.
+    Parser stopped(Command("prog")
+                       .addOption(Option({"-c"}, "Copy").arg(Argument("src").multi()).arg("dest"))
+                       .addOption(Option({"-f"}, "Force")));
+    bad(stopped, {"-c=a", "-f"}, ParseResult::MissingOptionArgument);
+
+    // The other caller of the same reservation never has a value in hand, so it is unchanged.
+    Parser positional(
+        Command("prog").addArgument(Argument("src").multi()).addArgument(Argument("dest")));
+    BOOST_CHECK(ok(positional, {"a", "b"}).values(0) == std::vector<std::string>({"a"}));
+    BOOST_CHECK(ok(positional, {"a", "b", "c"}).values(0) ==
+                std::vector<std::string>({"a", "b"}));
+}
+
 // IgnoreOptionCase is about the spellings a program declared, so it holds wherever one is
 // matched. Matching the whole token without regard to case and the stuck-on prefix with regard
 // to it would make -d foo work and -dfoo not.

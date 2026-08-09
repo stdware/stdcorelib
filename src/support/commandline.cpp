@@ -134,13 +134,20 @@ namespace stdc::cli {
             std::vector<Occurrence> occurrences;
         };
 
-        /// How many of \a available tokens the \a index'th of \a declared may take.
+        /// How many of \a available tokens the \a index'th of \a declared may take, given
+        /// whether it \a has_one already.
         ///
         /// One each for the required arguments still to come, since a greedy one that took the
         /// lot would leave \c copy \c \<src\>... \c \<dest\> with nothing for the destination.
         /// The rule is the same whether the arguments belong to a command or to an option, so it
         /// is written once and both ask.
-        size_t take_for(const std::vector<Argument> &declared, size_t index, size_t available) {
+        ///
+        /// Where there are not enough to go round, a greedy argument still takes one, since one
+        /// or more is what it promised and the argument that goes without says so itself. That
+        /// is the one thing \a has_one changes: a value written against the option has already
+        /// kept the promise, so there is nothing left to force and the reservation stands.
+        size_t take_for(const std::vector<Argument> &declared, size_t index, size_t available,
+                        bool has_one = false) {
             const auto &argument = declared[index];
             if (argument.arity() == Argument::Single) {
                 return 1;
@@ -154,7 +161,10 @@ namespace stdc::cli {
                     ++reserved;
                 }
             }
-            return available > reserved ? available - reserved : 1;
+            if (available > reserved) {
+                return available - reserved;
+            }
+            return has_one ? 0 : 1;
         }
 
         bool same_token(std::string_view a, std::string_view b, bool ignore_case) {
@@ -1363,7 +1373,7 @@ namespace stdc::cli {
                         ++available;
                     }
                 }
-                size_t take = take_for(option->arguments(), i, available);
+                size_t take = take_for(option->arguments(), i, available, !slots[i].empty());
 
                 bool took_any = !slots[i].empty();
                 for (size_t count = 0; count < take && pos < tokens.size(); ++count) {
