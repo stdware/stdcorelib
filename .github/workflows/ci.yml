@@ -162,13 +162,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Not the distribution's, which is 1.9.8 and three years behind. Measured on it: the
+      # second \verbatim in one comment block is not recognised, and a \ref cannot reach a
+      # \section declared inside a \defgroup comment. Both are ordinary usage that a current
+      # doxygen handles, so the job was failing the comments rather than checking them.
+      #
+      # Only the binary is taken out of the archive, the rest of it being the manual.
       - name: Install Ninja and Doxygen
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build doxygen
+          sudo apt-get install -y ninja-build
+          curl -fsSL -o doxygen.tar.gz \
+            "https://github.com/doxygen/doxygen/releases/download/Release_${DOXYGEN//./_}/doxygen-$DOXYGEN.linux.bin.tar.gz"
+          tar xzf doxygen.tar.gz "doxygen-$DOXYGEN/bin/doxygen"
+          echo "$PWD/doxygen-$DOXYGEN/bin" >> "$GITHUB_PATH"
+        env:
+          DOXYGEN: 1.17.0
 
       - name: Build
         run: |
+          doxygen --version
           cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_DOCS=ON
           cmake --build build --target stdcorelib_docs
 
