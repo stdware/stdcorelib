@@ -620,6 +620,50 @@ BOOST_AUTO_TEST_CASE(test_an_options_multi_argument_leaves_room_for_what_follows
     BOOST_CHECK(stopped.option("-v").has_value());
 }
 
+// A run stops at an option however the option was written. Asking whether a token is somebody's
+// option went through a plain lookup while reading one accepted three spellings besides, so a
+// run walked over --out=x and -Dfoo and took them for values of what it was reading.
+BOOST_AUTO_TEST_CASE(test_a_run_stops_at_every_spelling_of_an_option) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"-c"}, "Copy").arg(Argument("src").multi()))
+                      .addOption(Option({"--out"}, "Where").arg("dir"))
+                      .addOption(Option({"-D"}, "Define")
+                                     .arg("macro")
+                                     .shortMatch(Option::ShortMatchAll))
+                      .addOption(Option({"-a"}, "A"))
+                      .addOption(Option({"-b"}, "B")));
+
+    const std::vector<std::string> one{"x"};
+
+    // Written out, which always worked, and then the three that did not.
+    BOOST_CHECK(ok(parser, {"-c", "x", "--out", "d"}).option("-c")->values() == one);
+
+    auto joined = ok(parser, {"-c", "x", "--out=d"});
+    BOOST_CHECK(joined.option("-c")->values() == one);
+    BOOST_CHECK_EQUAL(joined.valueForOption("--out").value_or(""), "d");
+
+    auto stuck = ok(parser, {"-c", "x", "-Dfoo"});
+    BOOST_CHECK(stuck.option("-c")->values() == one);
+    BOOST_CHECK_EQUAL(stuck.valueForOption("-D").value_or(""), "foo");
+
+    auto grouped = ok(parser, {"-c", "x", "-ab"}, Parser::AllowUnixGroupFlags);
+    BOOST_CHECK(grouped.option("-c")->values() == one);
+    BOOST_CHECK(grouped.option("-a").has_value());
+    BOOST_CHECK(grouped.option("-b").has_value());
+
+    // Grouping off, so -ab is nobody's option and is a value like any other word.
+    BOOST_CHECK(ok(parser, {"-c", "x", "-ab"}).option("-c")->values() ==
+                std::vector<std::string>({"x", "-ab"}));
+
+    // The same option written twice, each occurrence reading its own run. values() gathers
+    // every occurrence, as it says it does, so what count() answers is the difference.
+    Parser twice(Command("prog").addOption(
+        Option({"-c"}, "Copy").arg(Argument("src").multi()).multi()));
+    auto both = ok(twice, {"-c=a", "b", "-c=x", "y"});
+    BOOST_CHECK_EQUAL(both.option("-c")->count(), 2);
+    BOOST_CHECK(both.option("-c")->values() == std::vector<std::string>({"a", "b", "x", "y"}));
+}
+
 BOOST_AUTO_TEST_CASE(test_remainder_takes_everything_left) {
     Parser parser(Command("prog").addArguments(
         {Argument("script"), Argument("args").nargs(Argument::Remainder).optional()}));

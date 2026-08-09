@@ -134,6 +134,22 @@ namespace stdc::cli {
             std::vector<Occurrence> occurrences;
         };
 
+        /// Which option a token names, and what the token itself said.
+        struct OptionMatch {
+            OptionData *data = nullptr;
+            /// What was written against the spelling, by an equals sign or by being stuck to
+            /// it. Absent where the token was the spelling and nothing else, which is not the
+            /// same as present and empty: \c --prefix= sets an empty string.
+            std::string_view value;
+            /// The spelling as it was written, so that a complaint about the option names it
+            /// the way the reader typed it rather than the way it was declared.
+            std::string_view spelling;
+
+            explicit operator bool() const {
+                return data != nullptr;
+            }
+        };
+
         /// How many of \a available tokens the \a index'th of \a declared may take, given
         /// whether it \a has_one already.
         ///
@@ -1112,6 +1128,16 @@ namespace stdc::cli {
             bool readOption(const std::string &token);
             bool readOneOption(OptionData *data, std::string_view inline_value);
             OptionData *lookup(std::string_view token) const;
+            /// Which option a token names and what was written against it, in every spelling
+            /// readOption() accepts. Grouped flags are not here, naming a list rather than one
+            /// option, and are groupedFlagsFor() instead.
+            OptionMatch optionFor(const std::string &token) const;
+            bool groupedFlagsFor(const std::string &token, std::vector<OptionData *> *found) const;
+            /// Whether the token names an option at all, which is where a run of values stops.
+            /// Asking this and reading the token have to give one answer, so both go through
+            /// the two above: a run that stops at --out and not at --out=x would take the
+            /// second for a value of whatever it was reading.
+            bool namesAnOption(const std::string &token) const;
             bool readGroupedFlags(const std::string &token);
             void assignPositional();
             void applyDefaults();
@@ -1362,7 +1388,7 @@ namespace stdc::cli {
                 // stops, and what token it stops at is the program's own to choose.
                 bool remainder = argument.arity() == Argument::Remainder;
                 const auto &ends_the_run = [this](const std::string &token) {
-                    return looksLikeOption(token) && lookup(token) != nullptr;
+                    return namesAnOption(token);
                 };
 
                 size_t available = tokens.size() - pos;
@@ -1403,45 +1429,22 @@ namespace stdc::cli {
             return true;
         }
 
-        bool ParserCore::readGroupedFlags(const std::string &token) {
-            if (!on(Parser::AllowUnixGroupFlags) || token.size() < 3 || token[0] != '-' ||
-                token[1] == '-') {
-                return false;
+        OptionMatch ParserCore::optionFor(const std::string &token) const {
+            if (token.empty()) {
+                return {};
             }
-            // Every letter has to be an option of its own that wants no value, or the whole
-            // token is something else and is left alone.
-            std::vector<OptionData *> found;
-            for (size_t i = 1; i < token.size(); ++i) {
-                auto data = lookup(std::string("-") + token[i]);
-                if (!data || !data->option->arguments().empty()) {
-                    return false;
-                }
-                found.push_back(data);
-            }
-            for (auto data : found) {
-                if (!readOneOption(data, {})) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        bool ParserCore::readOption(const std::string &token) {
             // The whole token, which is the ordinary case.
             if (auto data = lookup(token)) {
-                return readOneOption(data, {});
+                return {data, {}, token};
             }
 
-            // A value joined by an equals sign.
+            // A value joined by an equals sign. The value is empty rather than absent where
+            // nothing follows the sign, since --prefix= sets an empty string.
             auto equals = token.find('=');
             if (equals != std::string::npos) {
                 if (auto data = lookup(token.substr(0, equals))) {
-                    if (data->option->arguments().empty()) {
-                        fail(ParseResult::UnknownOption,
-                             "option \"" + token.substr(0, equals) + "\" takes no value");
-                        return false;
-                    }
-                    return readOneOption(data, std::string_view(token).substr(equals + 1));
+                    return {data, std::string_view(token).substr(equals + 1),
+                            std::string_view(token).substr(0, equals)};
                 }
             }
 
@@ -1459,19 +1462,73 @@ namespace stdc::cli {
                     if (!detail::same_name(spelling, head, on(Parser::IgnoreOptionCase))) {
                         continue;
                     }
-                    return readOneOption(&item, std::string_view(token).substr(spelling.size()));
+                    return {&item, std::string_view(token).substr(spelling.size()), head};
                 }
-            }
-
-            if (readGroupedFlags(token)) {
-                return true;
             }
 
             // A DOS token spelled the other way round.
             if (token[0] == '/' && on(Parser::AllowDosShortOptions)) {
                 if (auto data = lookup("-" + token.substr(1))) {
-                    return readOneOption(data, {});
+                    return {data, {}, token};
                 }
+            }
+            return {};
+        }
+
+        bool ParserCore::groupedFlagsFor(const std::string &token,
+                                         std::vector<OptionData *> *found) const {
+            if (!on(Parser::AllowUnixGroupFlags) || token.size() < 3 || token[0] != '-' ||
+                token[1] == '-') {
+                return false;
+            }
+            // Every letter has to be an option of its own that wants no value, or the whole
+            // token is something else and is left alone.
+            for (size_t i = 1; i < token.size(); ++i) {
+                auto data = lookup(std::string("-") + token[i]);
+                if (!data || !data->option->arguments().empty()) {
+                    return false;
+                }
+                found->push_back(data);
+            }
+            return true;
+        }
+
+        bool ParserCore::namesAnOption(const std::string &token) const {
+            if (!looksLikeOption(token)) {
+                return false;
+            }
+            if (optionFor(token)) {
+                return true;
+            }
+            std::vector<OptionData *> flags;
+            return groupedFlagsFor(token, &flags);
+        }
+
+        bool ParserCore::readGroupedFlags(const std::string &token) {
+            std::vector<OptionData *> found;
+            if (!groupedFlagsFor(token, &found)) {
+                return false;
+            }
+            for (auto data : found) {
+                if (!readOneOption(data, {})) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool ParserCore::readOption(const std::string &token) {
+            if (auto match = optionFor(token)) {
+                if (match.value.data() && match.data->option->arguments().empty()) {
+                    fail(ParseResult::UnknownOption,
+                         "option \"" + std::string(match.spelling) + "\" takes no value");
+                    return false;
+                }
+                return readOneOption(match.data, match.value);
+            }
+
+            if (readGroupedFlags(token)) {
+                return true;
             }
 
             std::vector<std::string> declared;
