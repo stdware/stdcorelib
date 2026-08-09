@@ -127,6 +127,29 @@
 /// A greedy run ends at the next declared option, so a command that has arguments of its own and
 /// an option that is greedy wants the arguments written first, or the option takes them.
 ///
+/// A Remainder starts where the argument before it was filled. Where it is a command's first
+/// argument there is none, so it starts at the first token not written as an option, which is
+/// what lets a wrapper take options of its own and hand the rest on:
+///
+/// \code
+///   cli::Command("run")
+///       .addArgument(cli::Argument("rest").nargs(cli::Argument::Remainder).optional())
+///       .addOption(cli::Option({"-u"}, "As user").arg("who"));
+/// \endcode
+///
+/// \verbatim
+///   run -u root ls -u x          -u root is run's, ls -u x is the tail's, one spelling twice
+///   run ls -u x                  nothing of run's was written, so all of it is the tail
+///
+///   run -w ls                    no: written as an option and not declared, so not passed on
+/// \endverbatim
+///
+/// A value may be written against its option, \c --opt=v or \c -Ov, and it is the first value
+/// of the option's first argument rather than the whole of it, so \c --opt=a \c b reads as
+/// \c --opt \c a \c b wherever that argument takes more than one. The joined spelling
+/// Option::shortMatch() allows is the exception: one token carries one value, so it is offered
+/// only where the option's one argument takes exactly one.
+///
 /// \subsection cli_shape_trees What a tree should not be
 ///
 /// These are mistakes in the program rather than in what a user typed, so they are asserted
