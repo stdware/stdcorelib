@@ -137,15 +137,22 @@
 /// declares it.
 ///
 /// \code
-///   cli::Command("prog")
-///       .addOption(cli::Option({"-f"}, "Files").arg(cli::Argument("file").multi()))
+///   cli::Command("copy")
+///       .addArgument(cli::Argument("src").multi())
+///       .addArgument(cli::Argument("dest"))
+///       .addOption(cli::Option({"-f"}, "Read the names from")
+///                      .arg(cli::Argument("list").multi()))
 ///       .addOption(cli::Option({"--"}, "The rest")
 ///                      .arg(cli::Argument("rest").nargs(cli::Argument::Remainder).optional()));
 /// \endcode
 ///
 /// \verbatim
-///   prog -f a b -- -f c          -f took a and b, then -- took -f and c as values
-///   prog -f a b                  -f took both, a greedy run ending at the end of the line
+///   copy a b c                   src took a and b, dest the one reserved for it
+///   copy a b c -f x y            the arguments first, then -f to the end of the line
+///   copy a b c -f x -- y         -f's run ended at --, that being a declared option
+///   copy a b c -- -f x           -- reads no options, so -f is one of its values
+///
+///   copy -f x y a b c            no: -f took all five and left <src> and <dest> nothing
 /// \endverbatim
 ///
 /// A greedy run ends at the next declared option, so a command that has arguments of its own and
