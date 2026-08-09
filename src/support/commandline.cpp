@@ -940,6 +940,16 @@ namespace stdc::cli {
                         [](const Argument &item) { return item.name(); }, argument_line));
                     break;
                 }
+                // ###QUESTION: a recursive option is listed here on the page of the command
+                // that declared it and under "Global options" on the pages below, so the same
+                // spelling sits under two headings depending on which page is being read. That
+                // is what Cobra does with a persistent flag. The other two answers are to list
+                // it under "Global options" everywhere, which splits the declaring command's
+                // list by something a reader there cannot act on, and to drop the second block
+                // altogether, which is System.CommandLine's and loses the one thing worth
+                // saying on a subcommand's page: this is not mine, read the program's help.
+                // Should it be the same heading on both? Four lines here if so, filtering the
+                // recursive ones out of own and adding them to the block below.
                 case HelpBlock::Options: {
                     pushAll(grouped(
                         own, catalogue.optionGroups(), slot, "Options",
