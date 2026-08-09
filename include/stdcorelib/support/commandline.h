@@ -559,7 +559,7 @@ namespace stdc::cli {
         /// \c Verbose and \c Debug are spellings only, and mean whatever the program reading
         /// isRoleSet() takes them to mean.
         ///
-        /// \note A role says nothing about scope, which is global(), nor about where an option
+        /// \note A role says nothing about scope, which is recursive(), nor about where an option
         ///       sits in the help text, which is where it was declared.
         enum Role {
             NoRole,
@@ -1135,8 +1135,11 @@ namespace stdc::cli {
             Usage,
             Arguments,
             Options,
-            /// The global options of the commands above this one.
-            GlobalOptions,
+            /// What the commands above this one declared recursive and it therefore has.
+            ///
+            /// Titled "Global options" in the text, that being the word a reader of a
+            /// help page knows for an option that is not this command's own.
+            InheritedOptions,
             Commands,
             /// The text below everything, printed without a heading.
             Epilogue,
@@ -1181,7 +1184,7 @@ namespace stdc::cli {
         static inline HelpLayout defaultLayout() {
             HelpLayout res;
             for (auto role : {HelpBlock::Prologue, HelpBlock::Description, HelpBlock::Usage,
-                              HelpBlock::Arguments, HelpBlock::Options, HelpBlock::GlobalOptions,
+                              HelpBlock::Arguments, HelpBlock::Options, HelpBlock::InheritedOptions,
                               HelpBlock::Commands, HelpBlock::Epilogue}) {
                 res.add(role);
             }
@@ -1427,8 +1430,8 @@ namespace stdc::cli {
         const std::string &epilogue() const;
         /// Which blocks the help text is made of, in what order, and how each is printed.
         const HelpLayout &helpLayout() const;
-        /// What the commands above the one that was reached declared global, which is in scope
-        /// here and is demanded here, gathered by the walk the parser made.
+        /// What the commands above the one that was reached declared recursive, which is in
+        /// scope here and is demanded here, gathered by the walk the parser made.
         ///
         /// \warning These point into the command tree and last as long as it does.
         std::vector<const Option *> inheritedOptions() const;
@@ -1714,13 +1717,13 @@ namespace stdc::cli {
         ///
         /// \param command the one that was reached, which is where its own options come from
         /// \param path how it was reached, \c args[0] first
-        /// \param globals the options in scope from the commands above it, which is the one
-        ///        thing here that \a command cannot answer for
+        /// \param inherited the options in scope from the commands above it, which is the
+        ///        one thing here that \a command cannot answer for
         /// \param sizes the indent and the width to break the line against
         /// \note Each piece stays whole, since an option and the value it takes read as two
         ///       separate things once a line break comes between them.
         virtual std::string usageText(const Command &command, const std::vector<std::string> &path,
-                                      const std::vector<Option> &globals,
+                                      const std::vector<Option> &inherited,
                                       const HelpSizes &sizes) const;
 
         /// What the help text is made of, in the order ParseResult::helpLayout() asks for and

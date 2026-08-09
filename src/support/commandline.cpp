@@ -706,7 +706,8 @@ namespace stdc::cli {
         // the text.
         std::string usage_text(const HelpFormatter &formatter, const Command &command,
                                const std::vector<std::string> &path,
-                               const std::vector<Option> &globals, int indent, int text_width) {
+                               const std::vector<Option> &inherited, int indent,
+                               int text_width) {
             std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
                 head += (i ? " " : "") + path[i];
@@ -730,7 +731,7 @@ namespace stdc::cli {
             for (const auto &option : command.options()) {
                 take(option);
             }
-            for (const auto &option : globals) {
+            for (const auto &option : inherited) {
                 take(option);
             }
             if (optional_count > 0) {
@@ -807,9 +808,9 @@ namespace stdc::cli {
 
     std::string HelpFormatter::usageText(const Command &command,
                                          const std::vector<std::string> &path,
-                                         const std::vector<Option> &globals,
+                                         const std::vector<Option> &inherited,
                                          const HelpSizes &sizes) const {
-        return usage_text(*this, command, path, globals, sizes.indent, sizes.textWidth);
+        return usage_text(*this, command, path, inherited, sizes.indent, sizes.textWidth);
     }
 
     std::vector<HelpBlock> HelpFormatter::blocks(const ParseResult &result,
@@ -835,14 +836,14 @@ namespace stdc::cli {
                 own.push_back(item);
             }
         }
-        // What the commands above declared global is in scope here and is demanded here, so it is
-        // listed here. Under a heading of its own, since it belongs to the program rather than to
-        // this command, and since the catalogue's groups were written for this command's own
-        // options and have nothing to say about these.
-        std::vector<Option> globals;
+        // What the commands above declared recursive is in scope here and is demanded here, so
+        // it is listed here. Under a heading of its own, since it belongs to the program rather
+        // than to this command, and since the catalogue's groups were written for this
+        // command's own options and have nothing to say about these.
+        std::vector<Option> inherited_options;
         for (const auto *option : result.inheritedOptions()) {
             if (spelled(*option)) {
-                globals.push_back(*option);
+                inherited_options.push_back(*option);
             }
         }
 
@@ -876,7 +877,7 @@ namespace stdc::cli {
                 }
                 case HelpBlock::Usage: {
                     auto block = blockLike(slot, "Usage");
-                    block.text = usageText(command, result.commandPath(), globals, sizes);
+                    block.text = usageText(command, result.commandPath(), inherited_options, sizes);
                     push(std::move(block));
                     break;
                 }
@@ -892,9 +893,9 @@ namespace stdc::cli {
                         [](const Option &item) { return item.token(); }, option_line));
                     break;
                 }
-                case HelpBlock::GlobalOptions: {
+                case HelpBlock::InheritedOptions: {
                     auto block = blockLike(slot, "Global options");
-                    for (const auto &option : globals) {
+                    for (const auto &option : inherited_options) {
                         block.entries.push_back(option_line(option));
                     }
                     push(std::move(block));
@@ -994,7 +995,7 @@ namespace stdc::cli {
     // accepts and this refuses. All three were measured against it.
     //
     // A subcommand is looked for after the options the root declared. SysCmdLine stops looking
-    // at the first option, so a global option cannot be written where every program with one
+    // at the first option, so a recursive option cannot be written where every program with one
     // puts it, and the tokens after it are dropped. An option belonging to the subcommand rather
     // than to the root is still unknown in front of it, which is the case that should be
     // refused.
@@ -1034,7 +1035,7 @@ namespace stdc::cli {
             /// The highest priority option given, which is what decides whether the checks at
             /// the end are worth making.
             const Option *prior_option = nullptr;
-            /// The globals of every command walked through, which stay in scope below.
+            /// What every command walked through declared recursive, in scope below it.
             std::vector<const Option *> inherited;
             /// Where the target's Remainder argument sits among its arguments, if it has one.
             /// Once that many positional tokens are in hand the rest of the line is its, options
