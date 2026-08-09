@@ -147,11 +147,9 @@ namespace stdc {
                 }
             }
             auto finished = make_scope_guard([this, notify = !listeners.empty()] {
-                if (!notify) {
-                    return;
+                if (notify) {
+                    notificationFinished();
                 }
-                --_activeNotifications;
-                _notificationsFinished.notify_all();
             });
             for (Listener *listener : listeners) {
                 listener->entry_added(entry);
@@ -195,11 +193,9 @@ namespace stdc {
                 }
             }
             auto finished = make_scope_guard([this, notify = !listeners.empty()] {
-                if (!notify) {
-                    return;
+                if (notify) {
+                    notificationFinished();
                 }
-                --_activeNotifications;
-                _notificationsFinished.notify_all();
             });
             for (Listener *listener : listeners) {
                 listener->entry_removed(entry);
@@ -272,6 +268,23 @@ namespace stdc {
 
     private:
         DynamicRegistry() = default;
+
+        /// Called once a batch of callbacks is over, from the guard that owns the batch.
+        ///
+        /// The count goes down under \c _notificationMutex rather than atomically alone, and
+        /// that is the whole of why this is a function. remove_listener() waits on this count
+        /// through a condition variable, and a condition variable's predicate has to be changed
+        /// while holding the mutex the waiter holds. Decremented outside it, the change can land
+        /// between the waiter reading the count and blocking on it, and then notify_all() has
+        /// nobody to wake and nothing will send another. Being \c std::atomic does not help: the
+        /// atomicity is of the write, not of the window.
+        void notificationFinished() {
+            {
+                std::lock_guard<std::mutex> lock(_notificationMutex);
+                --_activeNotifications;
+            }
+            _notificationsFinished.notify_all();
+        }
 
         mutable std::shared_mutex _mutex;
 
