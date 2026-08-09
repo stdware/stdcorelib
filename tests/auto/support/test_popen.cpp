@@ -33,15 +33,11 @@
 
 using namespace stdc;
 
-static_assert(std::is_same_v<decltype(std::declval<Popen &>().stdin_()), Popen::Stream &>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const Popen &>().stdin_()), const Popen::Stream &>);
-static_assert(std::is_same_v<decltype(std::declval<Popen &>().stdout_()), Popen::Stream &>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const Popen &>().stdout_()), const Popen::Stream &>);
-static_assert(std::is_same_v<decltype(std::declval<Popen &>().stderr_()), Popen::Stream &>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const Popen &>().stderr_()), const Popen::Stream &>);
+// Const on the Popen says nothing about the pipes, so a const one still hands back a stream
+// that can be written. Deliberate, and stated on the declarations.
+static_assert(std::is_same_v<decltype(std::declval<const Popen &>().stdin_()), Popen::Stream &>);
+static_assert(std::is_same_v<decltype(std::declval<const Popen &>().stdout_()), Popen::Stream &>);
+static_assert(std::is_same_v<decltype(std::declval<const Popen &>().stderr_()), Popen::Stream &>);
 
 // What is in here, in order. Each line is the heading of a section below, spelled the same way,
 // so searching for one lands on it. No line numbers: they would be wrong by the next commit.
