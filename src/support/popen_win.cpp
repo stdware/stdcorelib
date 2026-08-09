@@ -704,7 +704,21 @@ namespace stdc {
         assert(!args.empty());
         fs::path child_executable = executable;
 
-        std::string args_str = qt_create_commandline({}, args);
+        // Quoted piece by piece for a program, which is how a program's argument vector is
+        // rebuilt from a command line. Not for a shell: the shell parses the line itself, so
+        // quoting here is quoting the shell will see, and cmd answered
+        // '"echo hello"' is not recognized to every command that had a space in it.
+        std::string args_str;
+        if (shell) {
+            for (const auto &arg : args) {
+                if (!args_str.empty()) {
+                    args_str += ' ';
+                }
+                args_str += arg;
+            }
+        } else {
+            args_str = qt_create_commandline({}, args);
+        }
 
         STARTUPINFOEXW siex;
         ZeroMemory(&siex, sizeof(siex));

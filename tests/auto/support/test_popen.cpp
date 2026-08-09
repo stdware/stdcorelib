@@ -250,6 +250,42 @@ BOOST_AUTO_TEST_CASE(test_start_retry) {
     }
 }
 
+// The whole of a shell command is one string, on both platforms. This case lived inside a
+// #ifndef _WIN32, so nothing ever ran the Windows shell path, and it did not work: the command
+// went through the quoting that rebuilds a program's argument vector, so cmd was handed
+// ""echo shelled"" and answered that '"echo shelled"' is not a command.
+BOOST_AUTO_TEST_CASE(test_shell) {
+    {
+        Popen p;
+        std::string err;
+        p.args({"echo shelled"}).shell(true).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(first_line(out), "shelled");
+    }
+
+    // What the shell is for: something the parser of a command line cannot do for itself.
+    {
+        Popen p;
+        std::string err;
+        p.args({EchoOutErr}).shell(true).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(first_line(out), "out");
+        BOOST_CHECK_EQUAL(first_line(errout), "err");
+    }
+
+    // Quotes inside the command belong to the shell and have to reach it.
+    {
+        Popen p;
+        std::string err;
+        p.args({"echo \"two words\""}).shell(true).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK(first_line(out).find("two words") != std::string::npos);
+    }
+}
+
 // A std::string can hold a NUL and no platform can pass one on, so a child would have been
 // started with an argument that is not the one it was given. Refused before anything is created.
 BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused) {
@@ -648,14 +684,6 @@ BOOST_AUTO_TEST_CASE(test_user_name_is_owned) {
     BOOST_CHECK_EQUAL(*p.returncode(), 0);
 }
 
-BOOST_AUTO_TEST_CASE(test_shell) {
-    Popen p;
-    std::string err;
-    p.args({"echo shelled"}).shell(true).stdout_(Popen::PIPE);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
-    auto [out, errout] = p.communicate({}, Timeout);
-    BOOST_CHECK_EQUAL(first_line(out), "shelled");
-}
 
 // A start that failed can be corrected and tried again, which means it has to leave the
 // configuration where it found it. The shell path put /bin/sh -c into args itself, before
