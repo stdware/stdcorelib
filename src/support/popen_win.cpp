@@ -894,6 +894,10 @@ namespace stdc {
         if (returncode) {
             return true;
         }
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return false;
+        }
         DWORD result = WaitForSingleObject(_handle, 0);
         switch (result) {
             case WAIT_OBJECT_0: {
@@ -928,6 +932,10 @@ namespace stdc {
 
         if (returncode) {
             return true;
+        }
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return false;
         }
         if (timeout < 0) {
             timeout = INFINITE;
@@ -966,6 +974,14 @@ namespace stdc {
 
         if (returncode) {
             return true;
+        }
+        // Before the handle is used for anything. Where nothing was started it is
+        // InvalidHandle, which is (HANDLE) -1, which is the pseudo handle standing for the
+        // calling process: TerminateProcess on it killed the program that asked, with the exit
+        // code meant for the child.
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return false;
         }
         if (TerminateProcess(_handle, KillProcessExitCode)) {
             return true;
@@ -1030,6 +1046,10 @@ namespace stdc {
 
         if (returncode) {
             return true;
+        }
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return false;
         }
 
         if (sig == CTRL_C_EVENT || sig == CTRL_BREAK_EVENT) {

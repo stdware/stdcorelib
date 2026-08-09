@@ -6,6 +6,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <string>
 #include <thread>
@@ -335,6 +336,57 @@ BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
     auto [out, ignored] = p.communicate({}, Timeout);
     BOOST_CHECK(out.find("ab") != std::string::npos);
+}
+
+// Everything that talks to a child says the same thing when there is no child, on both
+// platforms. On Windows four of the six reached the system with the handle a Popen carries
+// before it has started anything, which is InvalidHandle, which is (HANDLE) -1, which is the
+// pseudo handle for the calling process. kill() terminated the program that called it, with
+// the exit code meant for the child, and poll() and wait() waited on it and answered false
+// with no reason given. Only terminate() looked first.
+BOOST_AUTO_TEST_CASE(test_nothing_started_means_no_such_process) {
+    // The call runs first and the error is read after, in two statements: as one call the
+    // order the arguments are evaluated in is nobody's to say, and the answer would be the
+    // error left by whatever ran before.
+    const auto &asked = [](const char *what, const std::function<bool(Popen &)> &call) {
+        Popen p;
+        p.args({ChildPath, "exit", "0"});
+        bool answered = call(p);
+        auto ec = p.error_code();
+        BOOST_CHECK_MESSAGE(!answered, std::string(what) + " answered yes with nothing started");
+        BOOST_CHECK_MESSAGE(ec == std::errc::no_such_process,
+                            std::string(what) + " gave " + ec.message());
+    };
+
+    asked("poll", [](Popen &p) { return p.poll(); });
+    // Bounded, since waiting on the calling process with no timeout is a hang rather than a
+    // wrong answer.
+    asked("wait", [](Popen &p) { return p.wait(1000); });
+    asked("kill", [](Popen &p) { return p.kill(); });
+    asked("terminate", [](Popen &p) { return p.terminate(); });
+#ifdef _WIN32
+    asked("send_signal", [](Popen &p) { return p.send_signal(CTRL_BREAK_EVENT); });
+#else
+    asked("send_signal", [](Popen &p) { return p.send_signal(SIGTERM); });
+#endif
+    {
+        Popen p;
+        p.args({ChildPath, "exit", "0"});
+        auto [out, err] = p.communicate({}, 1000);
+        BOOST_CHECK(out.empty());
+        BOOST_CHECK(err.empty());
+        BOOST_CHECK(p.error_code() == std::errc::no_such_process);
+    }
+
+    // And none of it left anything behind, so the same object still starts.
+    Popen p;
+    p.args({ChildPath, "exit", "3"});
+    BOOST_CHECK(!p.poll());
+    BOOST_CHECK(!p.kill());
+    std::string err;
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK_EQUAL(*p.returncode(), 3);
 }
 
 // A bare name is looked up along PATH, the same way a shell would find it.
