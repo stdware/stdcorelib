@@ -104,6 +104,71 @@
 /// go before the subcommand name. Option::recursive() is how an option of one command is
 /// written on a line that reached another.
 ///
+/// \subsection cli_shape_lines What parses and what does not
+///
+/// \code
+///   cli::Command("prog")
+///       .addOption(cli::Option({"--plain"}, "The root's own"))
+///       .addOption(cli::Option({"--wide"}, "The root's, recursive").recursive())
+///       .addCommand(cli::Command("sub")
+///                       .addArgument(cli::Argument("path"))
+///                       .addOption(cli::Option({"-f"}, "The subcommand's")));
+/// \endcode
+///
+/// \verbatim
+///   prog --plain                 the root was reached, and --plain is the root's own
+///   prog sub -f a                sub was reached, -f is its own, a is its argument
+///   prog sub --wide -f a         --wide came down from the root, being recursive
+///   prog sub a -f --wide         no order among options and arguments once the path is over
+///
+///   prog --plain sub             no: an option ends the path, so sub is written too late
+///   prog --wide sub              no: the same. Recursive says where an option may be
+///                                written, not that the path stops coming first
+///   prog sub --plain             no: --plain is the root's and was not marked recursive
+///   prog -f sub                  no: -f is sub's, and the root is what --f was written after
+/// \endverbatim
+///
+/// \subsection cli_shape_greedy Arguments that take more than one
+///
+/// Argument::Multiple leaves a token for each required argument after it, so
+/// \c copy \c \<src\>... \c \<dest\> works wherever arguments are declared. Argument::Remainder
+/// leaves nothing and stops option reading where it starts, which is how a program says what its
+/// own terminator is spelled. Nothing is reserved for \c -- : a program that wants the usual word
+/// declares it.
+///
+/// \code
+///   cli::Command("prog")
+///       .addOption(cli::Option({"-f"}, "Files").arg(cli::Argument("file").multi()))
+///       .addOption(cli::Option({"--"}, "The rest")
+///                      .arg(cli::Argument("rest").nargs(cli::Argument::Remainder).optional()));
+/// \endcode
+///
+/// \verbatim
+///   prog -f a b -- -f c          -f took a and b, then -- took -f and c as values
+///   prog -f a b                  -f took both, a greedy run ending at the end of the line
+/// \endverbatim
+///
+/// A greedy run ends at the next declared option, so a command that has arguments of its own and
+/// an option that is greedy wants the arguments written first, or the option takes them.
+///
+/// \subsection cli_shape_trees What a tree may not be
+///
+/// These are mistakes in the program rather than in what a user typed, so they are asserted
+/// rather than reported, and every one of them is asserted by the time parse() returns in a debug
+/// build. Argument::canFollow(), Option::canJoin() and Command::canAddCommand() are public so a
+/// program can ask instead of finding out.
+///
+/// \li an option with no spelling, or two options in one scope answering to the same spelling,
+///     an ancestor's recursive one included
+/// \li two subcommands of one command sharing a name, or two names that differ only in case
+///     where the parse ignores case
+/// \li anything at all after an Argument::Remainder, or anything but a required single argument
+///     after an Argument::Multiple
+/// \li an Argument::Remainder in the same command as an option whose argument is greedy, since
+///     both want the rest of the line and neither can be written second
+/// \li a default value that the argument's own type, expect() or validate() turns down, or one
+///     on an argument that is required
+///
 /// Changing the help text is a ladder, and a program climbs only as far as it needs to. See
 /// \ref cli_help.
 
