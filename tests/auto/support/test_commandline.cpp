@@ -1925,7 +1925,8 @@ BOOST_AUTO_TEST_CASE(test_help_layout_is_in_a_fixed_order) {
 
 BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
     auto parser = helpTree();
-    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog [options] [commands]"));
+    BOOST_CHECK(
+        has(parser.parse(argv({})).helpText(), "Usage:\n    prog [options]\n    prog [commands]"));
     BOOST_CHECK(has(parser.parse(argv({"copy", "a", "b"})).helpText(),
                     "Usage:\n    prog copy [options] <src>... <dest>"));
     // An optional argument is bracketed, and one that repeats carries the ellipsis. The only
@@ -1933,6 +1934,35 @@ BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
     // for the root's global that it inherited.
     BOOST_CHECK(has(parser.parse(argv({"configure"})).helpText(),
                     "Usage:\n    prog configure -p <name> [options] [<mode>]"));
+}
+
+// A subcommand's name comes first or not at all, so a command that has subcommands can be
+// written two ways and the usage line has to be two lines. Written as one it read
+// "prog [options] [commands]", which is the order the parser refuses.
+BOOST_AUTO_TEST_CASE(test_usage_puts_a_subcommand_on_a_line_of_its_own) {
+    // Both, so both lines.
+    Parser both(Command("prog")
+                    .addOption(Option({"--plain"}, "Plain"))
+                    .addCommand(Command("build").addArgument(Argument("target"))));
+    BOOST_CHECK(
+        has(both.parse(argv({})).helpText(), "Usage:\n    prog [options]\n    prog [commands]\n"));
+
+    // What the usage line shows is what the parser takes, and the order it does not show is
+    // the order it refuses.
+    BOOST_CHECK(ok(both, {"build", "x"}).command()->name() == "build");
+    BOOST_CHECK(ok(both, {"--plain"}).option("--plain").has_value());
+    bad(both, {"--plain", "build", "x"}, ParseResult::UnknownCommand);
+
+    // Subcommands and nothing of its own, so there is nothing for a first line to say.
+    Parser bare(Command("prog").addCommand(Command("build")));
+    BOOST_CHECK(has(bare.parse(argv({})).helpText(), "Usage:\n    prog [commands]\n"));
+
+    // No subcommands, so one line as before.
+    Parser flat(Command("prog").addArgument(Argument("path")).addOption(Option({"-v"}, "Say more")));
+    BOOST_CHECK(has(flat.parse(argv({"x"})).helpText(), "Usage:\n    prog [options] <path>\n"));
+
+    // A subcommand's own page never has the second line unless it has subcommands of its own.
+    BOOST_CHECK(has(both.parse(argv({"build", "x"})).helpText(), "Usage:\n    prog build <target>\n"));
 }
 
 // An option that has to be given belongs on the usage line. Left inside "[options]" it is
@@ -3362,7 +3392,7 @@ BOOST_AUTO_TEST_CASE(test_help_blocks_are_what_the_text_is_made_of) {
     // The usage line, already broken to the width but with none of the indent on it.
     auto usage = find(HelpBlock::Usage, "Usage");
     BOOST_REQUIRE(usage != nullptr);
-    BOOST_CHECK_EQUAL(usage->text, "prog [options] [commands]");
+    BOOST_CHECK_EQUAL(usage->text, "prog [options]\nprog [commands]");
     BOOST_CHECK(usage->entries.empty());
 
     // A catalogue's groups are blocks of their own, each carrying the role it came from.
@@ -3590,14 +3620,14 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_the_usage_line) {
     struct Synopsis : HelpFormatter {
         mutable std::vector<std::string> inherited;
         std::string usageText(const Command &command, const std::vector<std::string> &path,
-                              const std::vector<Option> &globals,
+                              const std::vector<Option> &from_above,
                               const HelpSizes &sizes) const override {
             inherited.clear();
-            for (const auto &option : globals) {
+            for (const auto &option : from_above) {
                 inherited.push_back(option.token());
             }
             return "SYNOPSIS " + std::to_string(path.size()) + "\n" +
-                   HelpFormatter::usageText(command, path, globals, sizes);
+                   HelpFormatter::usageText(command, path, from_above, sizes);
         }
     };
 
@@ -3608,7 +3638,8 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_the_usage_line) {
     // At the root the path is the program alone and nothing is inherited.
     auto text = parser.parse(argv({})).helpText();
     BOOST_CHECK(has(text, "SYNOPSIS 1\n"));
-    BOOST_CHECK(has(text, "prog [options] [commands]"));
+    // Both lines went through the base and both carry the block's indent.
+    BOOST_CHECK(has(text, "prog [options]\n    prog [commands]"));
     BOOST_CHECK(formatter->inherited.empty());
 
     // A level down the path is two words, and the global the root declared is in scope. It is

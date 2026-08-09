@@ -793,23 +793,39 @@ namespace stdc::cli {
             for (const auto &argument : command.arguments()) {
                 parts.push_back(formatter.displayed(argument));
             }
-            if (!command.commands().empty()) {
-                parts.push_back("[commands]");
-            }
 
             int room = std::max(text_width - indent, min_description);
-            std::string res = head;
-            int line_width = console::display_width(head);
-            for (const auto &part : parts) {
-                int part_width = console::display_width(part);
-                if (line_width > 0 && line_width + 1 + part_width > room) {
-                    res += "\n";
-                    line_width = 0;
+            const auto &laid_out = [&](const std::vector<std::string> &pieces) {
+                std::string res = head;
+                int line_width = console::display_width(head);
+                for (const auto &part : pieces) {
+                    int part_width = console::display_width(part);
+                    if (line_width > 0 && line_width + 1 + part_width > room) {
+                        res += "\n";
+                        line_width = 0;
+                    }
+                    // At the margin the piece goes straight down under the one above. Anywhere
+                    // else it needs the space that separates it from what came before.
+                    res += line_width == 0 ? part : " " + part;
+                    line_width += line_width == 0 ? part_width : 1 + part_width;
                 }
-                // At the margin the piece goes straight down under the one above. Anywhere else
-                // it needs the space that separates it from what came before.
-                res += line_width == 0 ? part : " " + part;
-                line_width += line_width == 0 ? part_width : 1 + part_width;
+                return res;
+            };
+
+            // A subcommand's name comes first or not at all, so a command that has subcommands
+            // can be written two ways and only one of them is this command's own. One line
+            // each: putting them together would read as an order the parser refuses, since an
+            // option written before a name ends the path and a name written after one is too
+            // late.
+            std::string res;
+            if (!parts.empty() || command.commands().empty()) {
+                res = laid_out(parts);
+            }
+            if (!command.commands().empty()) {
+                if (!res.empty()) {
+                    res += "\n";
+                }
+                res += laid_out({"[commands]"});
             }
             return res;
         }
