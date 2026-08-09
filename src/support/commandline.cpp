@@ -1317,13 +1317,19 @@ namespace stdc::cli {
                 const auto &argument = option->arguments()[i];
                 const std::string where = "\"" + option->token() + "\"";
 
+                // What was written after the equals sign or stuck to the spelling is the first
+                // value of the first argument, not the whole of it. An argument that takes one
+                // is finished by it, and one that takes more goes on reading from where the
+                // token ended, so that --opt=a b and --opt a b are the same line said twice.
                 if (i == 0 && have_inline) {
                     std::string token(inline_value);
                     if (!accepts(argument, token, where)) {
                         return false;
                     }
                     slots[i].push_back(std::move(token));
-                    continue;
+                    if (argument.arity() == Argument::Single) {
+                        continue;
+                    }
                 }
 
                 // How many are here to be had, which is up to the next token that is somebody's
@@ -1352,7 +1358,7 @@ namespace stdc::cli {
                 }
                 size_t take = take_for(option->arguments(), i, available);
 
-                bool took_any = false;
+                bool took_any = !slots[i].empty();
                 for (size_t count = 0; count < take && pos < tokens.size(); ++count) {
                     const auto &token = tokens[pos];
                     if (!remainder && ends_the_run(token)) {

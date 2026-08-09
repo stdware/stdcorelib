@@ -670,6 +670,8 @@ namespace stdc::cli {
         /// \note A permission rather than a promise. The value goes into the option's one
         ///       argument, so an option that takes none, takes an optional one, or takes more
         ///       than one is never matched this way whatever is set here.
+        /// \note What is stuck on is that argument's first value rather than its only one, so a
+        ///       greedy argument reads on from the next token, \c -Ia \c b being \c -I \c a \c b.
         inline Option &shortMatch(ShortMatch rule) {
             _shortMatch = rule;
             return *this;
