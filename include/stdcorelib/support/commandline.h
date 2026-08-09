@@ -158,15 +158,16 @@
 /// A greedy run ends at the next declared option, so a command that has arguments of its own and
 /// an option that is greedy wants the arguments written first, or the option takes them.
 ///
-/// \subsection cli_shape_trees What a tree may not be
+/// \subsection cli_shape_trees What a tree should not be
 ///
 /// These are mistakes in the program rather than in what a user typed, so they are asserted
 /// rather than reported, and every one of them is asserted by the time parse() returns in a debug
 /// build. Argument::canFollow(), Option::canJoin() and Command::canAddCommand() are public so a
 /// program can ask instead of finding out.
 ///
-/// An argument may not
-/// \li have no name, or the name of another argument beside it
+/// An argument should not
+/// \li have no name, or share a name with another argument beside it, a command's own and an
+///     option's being two lists
 /// \li be required where one before it may be left out, since one token could be meant for
 ///     either
 /// \li follow an Argument::Remainder, which leaves nothing to follow it with
@@ -177,7 +178,7 @@
 ///     carry one at all while being required, a default being what stands in where nothing was
 ///     given
 ///
-/// An option may not
+/// An option should not
 /// \li have no spelling, or one shorter than two characters, or one starting with neither \c -
 ///     nor \c /
 /// \li share a spelling with another option of the same command
@@ -185,14 +186,15 @@
 ///     nobody writes one of those and there is nothing to give it
 /// \li be told by multi() that it may be given a negative number of times
 ///
-/// A command may not
+/// A command should not
 /// \li hold a subcommand with no name, or two subcommands sharing one
 /// \li hold an Argument::Remainder and an option whose argument is greedy, both wanting the rest
 ///     of the line where only one of them can be written first
 ///
-/// A CommandCatalogue may not name one thing twice, in one group or across two of the same kind.
+/// A CommandCatalogue should not name one thing twice, in one group or across two of the same
+/// kind.
 ///
-/// And a tree may not, which is only visible once it is one
+/// And a tree should not, which is only visible once it is one
 /// \li have two options in scope at one command answering to one spelling, the recursive ones of
 ///     every command above it included
 /// \li have two names in one scope that differ only in case, where the parse ignores case
