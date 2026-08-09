@@ -48,7 +48,8 @@ namespace stdc {
         static void clearSysError();
         static std::string sysErrorMessage();
 
-        bool open(LoadHints hints = {});
+        /// Loads \a file and, only where that worked, records what was loaded.
+        bool open(const fs::path &file, LoadHints hints);
         bool close();
         void *resolve(const char *name) const;
     };
@@ -121,8 +122,13 @@ namespace stdc {
 #endif
     }
 
-    bool SharedLibrary::Impl::open(LoadHints hints) {
-        auto absPath = fs::absolute(path);
+    bool SharedLibrary::Impl::open(const fs::path &file, LoadHints hints) {
+        std::error_code ec;
+        auto absPath = fs::absolute(file, ec);
+        if (ec) {
+            error = ec.message();
+            return false;
+        }
         clearSysError();
 
         auto handle =
@@ -148,6 +154,11 @@ namespace stdc {
 #endif
 
         hDll = handle;
+        if (auto resolved = fs::canonical(absPath, ec); !ec) {
+            path = resolved;
+        } else {
+            path = absPath;
+        }
         return true;
     }
 
@@ -207,13 +218,7 @@ namespace stdc {
             impl.error = "library already open";
             return false;
         }
-        impl.path = path;
-        if (impl.open(hints)) {
-            impl.path = fs::canonical(fs::absolute(path));
-            return true;
-        }
-        impl.path.clear();
-        return false;
+        return impl.open(path, hints);
     }
 
     bool SharedLibrary::close() {

@@ -315,6 +315,30 @@ BOOST_AUTO_TEST_CASE(test_release_then_close_forgets_without_unloading) {
     BOOST_CHECK(!still_loaded(unloadable()));
 }
 
+// The path a caller gave is not the path that comes back: it is made absolute so it does not
+// depend on where the process is standing, and tidied where the filesystem will tidy it. Both
+// used to go through the throwing overloads, inside a function that answers with a bool and a
+// reason, in a library three of whose builds have exceptions turned off.
+BOOST_AUTO_TEST_CASE(test_the_path_that_comes_back_is_absolute) {
+    auto here = fs::current_path();
+    auto guard = stdc::make_scope_guard([&] {
+        std::error_code ignored;
+        fs::current_path(here, ignored);
+    });
+
+    // Named the way somebody standing next to it would name it.
+    fs::current_path(unloadable().parent_path());
+    auto relative = unloadable().filename();
+    BOOST_REQUIRE(relative.is_relative());
+
+    SharedLibrary lib;
+    BOOST_REQUIRE_MESSAGE(lib.open(relative), lib.lastError());
+    BOOST_CHECK(lib.path().is_absolute());
+    BOOST_CHECK(fs::equivalent(lib.path(), unloadable()));
+    BOOST_CHECK(lib.resolve("test_unloadable_answer") != nullptr);
+    BOOST_CHECK(lib.close());
+}
+
 // isLibrary() is a name check: it never looks at the filesystem.
 BOOST_AUTO_TEST_CASE(test_is_library) {
 #if defined(_WIN32)
