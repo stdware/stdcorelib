@@ -42,7 +42,7 @@ namespace stdc {
         // clears itself as soon as it is read.
         mutable std::string error;
 
-        virtual ~Impl();
+        ~Impl();
 
         static inline int nativeLoadHints(LoadHints loadHints);
         static void clearSysError();
