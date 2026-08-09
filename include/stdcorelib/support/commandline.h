@@ -1141,23 +1141,18 @@ namespace stdc::cli {
         /// \endcode
         Occurrence at(int n) const;
 
-        /// The first time it was given, which is what the four below read.
+        /// The four below are the first occurrence's four, said shorter. An option given once
+        /// is what nearly every option is, and there is nothing else it could mean.
         ///
-        /// Singular answers with the first, plural with every one, the same rule ParseResult
-        /// follows. Where the option was given more than once the plural gathers them in the
-        /// order they were written, and at() is how one of them is named on its own.
-        std::optional<std::string_view> rawValue(int index = 0) const;
-
-        /// Every value the \a index'th argument took, across every occurrence.
-        std::vector<std::string_view> rawValues(int index = 0) const;
-
-        /// Converted, or nothing when there is nothing to convert.
-        ///
-        /// Nothing means one of two things: no token is there and no default value stands in
-        /// for it, or a token is there that is not a \c T. Declaring the type on the Argument
-        /// turns the second into a diagnostic while parsing, which leaves this meaning only the
-        /// first.
-        ///
+        /// What an option has that a command has not is that it may be given again, and that
+        /// is at() and the two all-prefixed below. Neither is folded into these: an option
+        /// read without saying which occurrence reads the first.
+        inline std::optional<std::string_view> rawValue(int index = 0) const {
+            return at(0).rawValue(index);
+        }
+        inline std::vector<std::string_view> rawValues(int index = 0) const {
+            return at(0).rawValues(index);
+        }
         /// \code
         ///   int jobs = result.option("-j").value<int>().value_or(default_jobs());
         /// \endcode
@@ -1165,13 +1160,29 @@ namespace stdc::cli {
         std::optional<T> value(int index = 0) const {
             return at(0).value<T>(index);
         }
-
-        /// Every value the \a index'th argument took, converted, or nothing when one of them
-        /// is not a \c T. An empty vector means there were none to convert.
         template <class T = std::string>
         std::optional<std::vector<T>> values(int index = 0) const {
+            return at(0).values<T>(index);
+        }
+
+        /// Every value the \a index'th argument took, in every occurrence, in the order they
+        /// were written.
+        ///
+        /// This is what a repeated option is usually asked, \c -I \c a \c -I \c b answering
+        /// with both, and the reason it is spelled apart from the four above is that they
+        /// would otherwise mean one thing for an option given once and another for the same
+        /// option given twice.
+        ///
+        /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
+        ///          allValues<T>() for something that owns what it holds.
+        std::vector<std::string_view> allRawValues(int index = 0) const;
+
+        /// The same, converted, or nothing when one of them is not a \c T. An empty vector
+        /// means there were none to convert.
+        template <class T = std::string>
+        std::optional<std::vector<T>> allValues(int index = 0) const {
             std::vector<T> out;
-            for (auto raw : rawValues(index)) {
+            for (auto raw : allRawValues(index)) {
                 T item{};
                 if (!value_traits<T>::parse(raw, &item)) {
                     return std::nullopt;

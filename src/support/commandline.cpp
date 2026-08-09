@@ -300,11 +300,7 @@ namespace stdc::cli {
         return res;
     }
 
-    std::optional<std::string_view> OptionResult::rawValue(int index) const {
-        return at(0).rawValue(index);
-    }
-
-    std::vector<std::string_view> OptionResult::rawValues(int index) const {
+    std::vector<std::string_view> OptionResult::allRawValues(int index) const {
         std::vector<std::string_view> res;
         if (index < 0) {
             return res;
