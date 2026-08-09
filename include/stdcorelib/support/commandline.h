@@ -159,8 +159,6 @@
 /// \li hold a subcommand with no name, or two subcommands sharing one
 /// \li hold an Argument::Remainder and an option whose argument is greedy, both wanting the rest
 ///     of the line where only one of them can be written first
-/// \li hold an option of any kind, or inherit one, where its first argument is an
-///     Argument::Remainder, which starts at the first token and leaves nowhere to write one
 ///
 /// A CommandCatalogue should not name one thing twice, in one group or across two of the same
 /// kind.
@@ -359,6 +357,11 @@ namespace stdc::cli {
             /// Everything left, options included, which is why nothing may follow one. Where it
             /// starts is where option reading stops, so this is how a program spells its own
             /// terminator.
+            ///
+            /// Where it starts is where the argument before it was filled. Where it is the
+            /// first argument there is none, so it starts at the first token not written as
+            /// an option, which is what lets a wrapper take options of its own:
+            /// \c run \c -u \c root \c ls \c -l gives \c -u to \c run and \c -l to \c ls.
             ///
             /// \note Required like any other argument, so an empty tail wants optional().
             Remainder,

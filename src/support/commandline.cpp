@@ -1044,6 +1044,9 @@ namespace stdc::cli {
             /// Once that many positional tokens are in hand the rest of the line is its, options
             /// and all, which is how a program says where option reading stops.
             size_t remainder_at = size_t(-1);
+            /// Whether the Remainder has taken its first token, which only matters where it is
+            /// the first argument and the options in front of it are still being read.
+            bool remainder_started = false;
 
             bool on(Parser::ParseOption flag) const {
                 return flags.test_flag(flag);
@@ -1511,6 +1514,18 @@ namespace stdc::cli {
                 // the arity means and what lets a program choose the word it stops at, rather
                 // than every program stopping at the one word a parser picked.
                 if (remainder_at != size_t(-1) && positional.size() >= remainder_at) {
+                    // Filling the argument before it is what says option reading is over.
+                    // Where the Remainder is the first argument there is no such argument, so
+                    // what says it is the first token that is not written as an option. This is
+                    // sudo: sudo -u root ls -l reads -u root and runs ls -l. A token that looks
+                    // like an option and is not one is still reported, since a wrapper is not
+                    // improved by silently passing on its own misspelt flags.
+                    if (remainder_at == 0 && !remainder_started && looksLikeOption(token)) {
+                        ++pos;
+                        readOption(token);
+                        continue;
+                    }
+                    remainder_started = true;
                     positional.push_back(token);
                     ++pos;
                     continue;
@@ -1744,8 +1759,8 @@ namespace stdc::cli {
         static void assertNames(const Command &command, bool ignoreOptionCase = false,
                                 bool ignoreCommandCase = false) {
             assert(detail::tree_can_be_parsed(command, ignoreOptionCase, ignoreCommandCase) &&
-                   "this command tree cannot be parsed: two names in one scope cannot be told "
-                   "apart, or a Remainder argument leaves an option nowhere to be written");
+                   "this command tree cannot be parsed: two names in one scope cannot be "
+                   "told apart, or a Remainder argument shares a command with a greedy option");
             (void) command;
             (void) ignoreOptionCase;
             (void) ignoreCommandCase;

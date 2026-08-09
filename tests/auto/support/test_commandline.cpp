@@ -3582,11 +3582,9 @@ BOOST_AUTO_TEST_CASE(test_a_remainder_and_a_greedy_option_cannot_share_a_command
     // A greedy argument is not the same thing: it leaves room, so an order that works exists.
     BOOST_CHECK(detail::tree_can_be_parsed(tree(Argument::Multiple)));
 
-    // A plain option beside a Remainder is fine, having an end of its own, so long as the
-    // Remainder is not what the first token runs into.
+    // A plain option beside a Remainder is fine, having an end of its own.
     BOOST_CHECK(detail::tree_can_be_parsed(
         Command("prog")
-            .addArgument(Argument("script"))
             .addArgument(Argument("args").nargs(Argument::Remainder).optional())
             .addOption(Option({"-o"}, "Out").arg("dir"))));
 
@@ -3594,48 +3592,47 @@ BOOST_AUTO_TEST_CASE(test_a_remainder_and_a_greedy_option_cannot_share_a_command
     BOOST_CHECK(!detail::tree_can_be_parsed(
         Command("prog")
             .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()).recursive())
-            .addCommand(Command("sub")
-                            .addArgument(Argument("script"))
-                            .addArgument(Argument("args").nargs(Argument::Remainder).optional()))));
+            .addCommand(Command("sub").addArgument(
+                Argument("args").nargs(Argument::Remainder).optional()))));
 }
 
-// A Remainder that is the first argument starts at the first token, so there is no token left
-// for an option to be written on. A command shaped that way can have no option at all: one
-// declared there could never be given, and the parser would read it as the Remainder's first
-// value rather than reporting anything.
-BOOST_AUTO_TEST_CASE(test_a_leading_remainder_leaves_nowhere_to_write_an_option) {
-    BOOST_CHECK(detail::tree_can_be_parsed(
-        Command("prog").addArgument(Argument("rest").nargs(Argument::Remainder))));
+// A Remainder starts where the argument before it was filled. Where it is the first argument
+// there is none, so it starts at the first token that is not written as an option, which is how
+// a wrapper takes options of its own and hands the rest on: sudo -u root ls -l.
+BOOST_AUTO_TEST_CASE(test_a_leading_remainder_starts_at_the_first_token_that_is_not_an_option) {
+    Parser parser(Command("run")
+                      .addArgument(Argument("rest").nargs(Argument::Remainder).optional())
+                      .addOption(Option({"-v"}, "Verbose"))
+                      .addOption(Option({"-u"}, "As user").arg("who")));
 
-    // Its own, whether the option takes a value or not.
-    BOOST_CHECK(!detail::tree_can_be_parsed(
-        Command("prog")
-            .addArgument(Argument("rest").nargs(Argument::Remainder))
-            .addOption(Option({"-v"}, "Verbose"))));
-    BOOST_CHECK(!detail::tree_can_be_parsed(
-        Command("prog")
-            .addArgument(Argument("rest").nargs(Argument::Remainder))
-            .addOption(Option({"-o"}, "Out").arg("dir"))));
+    auto wrapped = ok(parser, {"-u", "root", "ls", "-v", "-u", "x"});
+    BOOST_CHECK_EQUAL(wrapped.valueForOption("-u").value_or(""), "root");
+    BOOST_CHECK(!wrapped.option("-v").has_value());
+    BOOST_CHECK(wrapped.values(0) == std::vector<std::string>({"ls", "-v", "-u", "x"}));
 
-    // And one it inherited, which the command declaring it cannot see either.
-    BOOST_CHECK(!detail::tree_can_be_parsed(
-        Command("prog")
-            .addOption(Option({"-v"}, "Verbose").recursive())
-            .addCommand(
-                Command("run").addArgument(Argument("rest").nargs(Argument::Remainder)))));
-    // Not recursive, so it never reaches run and run is reachable.
-    BOOST_CHECK(detail::tree_can_be_parsed(
-        Command("prog")
-            .addOption(Option({"-v"}, "Verbose"))
-            .addCommand(
-                Command("run").addArgument(Argument("rest").nargs(Argument::Remainder)))));
+    // Nothing of its own, so the whole line is the tail.
+    BOOST_CHECK(ok(parser, {"ls", "-l"}).values(0) ==
+                std::vector<std::string>({"ls", "-l"}));
+    // Nothing but its own, and the tail is empty.
+    auto bare = ok(parser, {"-v"});
+    BOOST_CHECK(bare.option("-v").has_value());
+    BOOST_CHECK(bare.values(0) == std::vector<std::string>());
 
-    // One argument in front of it is enough, that token being where an option can go.
-    BOOST_CHECK(detail::tree_can_be_parsed(
-        Command("prog")
-            .addArgument(Argument("script"))
-            .addArgument(Argument("rest").nargs(Argument::Remainder))
-            .addOption(Option({"-v"}, "Verbose"))));
+    // A token written as an option and not declared is reported rather than passed on, since a
+    // wrapper is not improved by taking its own misspelt flags for payload.
+    bad(parser, {"-w", "ls"}, ParseResult::UnknownOption);
+
+    // Where an argument comes first it is that argument being filled that ends the options, so
+    // an option written after it is the tail's whether it is declared or not.
+    Parser named(Command("run")
+                     .addArgument(Argument("cmd"))
+                     .addArgument(Argument("rest").nargs(Argument::Remainder).optional())
+                     .addOption(Option({"-v"}, "Verbose")));
+    auto after = ok(named, {"-v", "ls", "-v"});
+    BOOST_CHECK(after.option("-v").has_value());
+    BOOST_CHECK_EQUAL(after.option("-v")->count(), 1);
+    BOOST_CHECK_EQUAL(after.value(0).value_or(""), "ls");
+    BOOST_CHECK(after.values(1) == std::vector<std::string>({"-v"}));
 }
 
 BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {
