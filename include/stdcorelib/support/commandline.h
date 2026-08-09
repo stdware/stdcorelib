@@ -325,11 +325,11 @@ namespace stdc::cli {
             /// One or more, also called greedy. Leaves enough tokens for the required arguments
             /// after it, so \c copy \c \<src\>... \c \<dest\> works.
             Multiple,
-            /// Everything left, reserving nothing, which is why nothing may follow one.
+            /// Everything left, options included, which is why nothing may follow one. Where it
+            /// starts is where option reading stops, so this is how a program spells its own
+            /// terminator.
             ///
-            /// \note A token that is a declared option is still read as one, the same as it
-            ///       would be for Multiple. What ends option reading is the \c -- on the
-            ///       command line, and after that everything is a value whatever the arity.
+            /// \note Required like any other argument, so an empty tail wants optional().
             Remainder,
         };
 
