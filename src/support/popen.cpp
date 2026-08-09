@@ -50,7 +50,11 @@ namespace stdc {
             if (!_file) {
                 return;
             }
-            std::fflush(_file);
+            // fclose flushes what is waiting to be written, so a flush in front of it buys
+            // nothing on a stream that was written to. On one that was read it is worse than
+            // nothing: fflush is defined for output, and for input only where the stream can
+            // seek, which a pipe cannot. Nothing here holds bytes of its own either, since the
+            // put area is never set and every write goes straight to the FILE.
             std::fclose(_file);
             _file = nullptr;
             setg(_buf, _buf, _buf);

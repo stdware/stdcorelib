@@ -1563,6 +1563,46 @@ BOOST_AUTO_TEST_CASE(test_writing_one_character_at_a_time) {
     BOOST_CHECK_EQUAL(*p.returncode(), 0);
 }
 
+// Closing delivers what was written, with nobody asking for it. Both cases above flush first,
+// so what close() does on its own was never pinned, and it used to flush by hand before
+// closing: pointless for a stream that was written, since fclose flushes, and not defined for
+// one that was read, since fflush is for output and for input only where the stream can seek.
+BOOST_AUTO_TEST_CASE(test_closing_delivers_what_was_written_without_a_flush) {
+    Popen p;
+    std::string err;
+    p.args(child_args({"cat"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+    p.stdin_() << "no flush here\n";
+    p.stdin_().close();
+
+    // Read with a timeout rather than to the end of the stream. A close that fails to deliver
+    // leaves the child waiting for input that never comes, and reading to EOF would then hang
+    // the whole run instead of failing this case.
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(out), "no flush here");
+    BOOST_REQUIRE(p.returncode().has_value());
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
+}
+
+// And closing one that was only read is closing, not flushing.
+BOOST_AUTO_TEST_CASE(test_closing_a_stream_that_was_read_takes_nothing_with_it) {
+    Popen p;
+    std::string err;
+    p.args(shell_args(EchoThree)).stdout_(Popen::PIPE).text(true);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+    std::string line;
+    BOOST_REQUIRE(std::getline(p.stdout_(), line));
+    BOOST_CHECK_EQUAL(first_line(line), "one");
+
+    // Closed with the child still writing and the rest of its output unread.
+    p.stdout_().close();
+    BOOST_CHECK(!p.stdout_().is_open());
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK(p.returncode().has_value());
+}
+
 // ---------------------------------------------------------------------------------------------
 // The lifetime of the Popen itself
 // ---------------------------------------------------------------------------------------------
