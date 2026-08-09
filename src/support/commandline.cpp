@@ -1428,24 +1428,18 @@ namespace stdc::cli {
                 }
             }
 
-            // A short option with its value stuck to it, which only an option with exactly one
-            // required argument can be.
+            // A short option with its value stuck to it. Which spellings can be one is
+            // detail::sticky_spellings(), the same answer the whole-tree check asks for, so a
+            // configuration refused as ambiguous is refused about the spellings that would
+            // really have been tried. The prefix is compared the way a whole token is, or
+            // IgnoreOptionCase would hold for -d foo and not for -dfoo.
             for (auto &item : r->options) {
-                const Option *option = item.option;
-                if (option->shortMatch() == Option::NoShortMatch ||
-                    option->arguments().size() != 1 || !option->arguments().front().isRequired()) {
-                    continue;
-                }
-                for (const auto &spelling : option->tokens()) {
-                    if (spelling.size() >= token.size() ||
-                        token.compare(0, spelling.size(), spelling) != 0) {
+                for (auto spelling : detail::sticky_spellings(*item.option)) {
+                    if (spelling.size() >= token.size()) {
                         continue;
                     }
-                    if (option->shortMatch() != Option::ShortMatchAll && spelling.size() != 2) {
-                        continue;
-                    }
-                    if (option->shortMatch() == Option::ShortMatchSingleLetter &&
-                        !std::isalpha(static_cast<unsigned char>(spelling[1]))) {
+                    auto head = std::string_view(token).substr(0, spelling.size());
+                    if (!detail::same_name(spelling, head, on(Parser::IgnoreOptionCase))) {
                         continue;
                     }
                     return readOneOption(&item, std::string_view(token).substr(spelling.size()));

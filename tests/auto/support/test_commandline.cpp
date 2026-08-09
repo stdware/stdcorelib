@@ -1450,6 +1450,25 @@ BOOST_AUTO_TEST_CASE(test_a_joined_value_starts_an_argument_rather_than_finishin
     BOOST_CHECK_EQUAL(pair.option("-c")->value(1).value_or(""), "c");
 }
 
+// IgnoreOptionCase is about the spellings a program declared, so it holds wherever one is
+// matched. Matching the whole token without regard to case and the stuck-on prefix with regard
+// to it would make -d foo work and -dfoo not.
+BOOST_AUTO_TEST_CASE(test_ignoring_case_reaches_a_value_stuck_to_the_spelling) {
+    Parser parser(Command("prog").addOption(
+        Option({"-D"}, "Define").arg("macro").shortMatch(Option::ShortMatchAll)));
+
+    BOOST_CHECK_EQUAL(ok(parser, {"-Dfoo"}).option("-D")->value().value_or(""), "foo");
+    BOOST_CHECK_EQUAL(
+        ok(parser, {"-dfoo"}, Parser::IgnoreOptionCase).option("-D")->value().value_or(""), "foo");
+    BOOST_CHECK_EQUAL(
+        ok(parser, {"-d", "foo"}, Parser::IgnoreOptionCase).option("-D")->value().value_or(""),
+        "foo");
+
+    // Without it the declared case is the only one, for both spellings of the same line.
+    bad(parser, {"-dfoo"}, ParseResult::UnknownOption);
+    bad(parser, {"-d", "foo"}, ParseResult::UnknownOption);
+}
+
 BOOST_AUTO_TEST_CASE(test_response_files) {
     auto path = std::filesystem::temp_directory_path() / "stdc_cli_response.txt";
     {
