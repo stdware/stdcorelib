@@ -602,6 +602,53 @@ BOOST_AUTO_TEST_CASE(test_shell) {
     BOOST_CHECK_EQUAL(first_line(out), "shelled");
 }
 
+// A start that failed can be corrected and tried again, which means it has to leave the
+// configuration where it found it. The shell path put /bin/sh -c into args itself, before
+// anything that can fail, so the second start inserted it again and ran something else. The
+// case that covered retrying used no shell, and the case above never fails.
+BOOST_AUTO_TEST_CASE(test_a_failed_shell_start_leaves_the_arguments_alone) {
+    const std::vector<std::string> wanted = {"echo retry-ok"};
+
+    Popen p;
+    p.args(wanted).shell(true).cwd("no_such_directory_9f3a").stdout_(Popen::PIPE);
+
+    std::string err;
+    BOOST_CHECK(!p.start(&err));
+    // Item by item, since the defect was an insert at the front rather than a change of one.
+    BOOST_CHECK(p.args() == wanted);
+
+    p.cwd({});
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, unused] = p.communicate({}, Timeout);
+    BOOST_CHECK(p.args() == wanted);
+    BOOST_CHECK_EQUAL(first_line(out), "retry-ok");
+
+    // And what the retry ran is what a new object with the same configuration runs.
+    Popen fresh;
+    fresh.args(wanted).shell(true).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(fresh.start(&err), err);
+    auto [fresh_out, ignored] = fresh.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(fresh_out), first_line(out));
+}
+
+// The other place a start can fail, since the insert happened before both and the one above
+// only covers the chdir.
+BOOST_AUTO_TEST_CASE(test_a_shell_start_that_fails_at_exec_leaves_them_alone_too) {
+    const std::vector<std::string> wanted = {"echo retry-ok"};
+
+    Popen p;
+    p.args(wanted).shell(true).executable("no_such_shell_9f3a").stdout_(Popen::PIPE);
+    std::string err;
+    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(p.args() == wanted);
+
+    p.executable({});
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, ignored] = p.communicate({}, Timeout);
+    BOOST_CHECK(p.args() == wanted);
+    BOOST_CHECK_EQUAL(first_line(out), "retry-ok");
+}
+
 // ---------------------------------------------------------------------------------------------
 // Ending it
 // ---------------------------------------------------------------------------------------------

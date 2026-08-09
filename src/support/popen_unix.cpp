@@ -911,16 +911,22 @@ namespace stdc {
         assert(!args.empty());
         std::filesystem::path child_executable = executable;
 
+        // The argv for this start rather than the configuration, the same way the executable
+        // above is taken by value. A start that failed can be corrected and tried again, which
+        // it cannot be once the first attempt has left /bin/sh -c standing in front of the
+        // caller's command: the second start would insert it again and run something else.
+        std::vector<std::string> child_args = args;
+
         if (shell) {
             // /bin/sh, not bash, is the one unix guarantees.
             const char *prefix_cmd[] = {"/bin/sh", "-c"};
-            args.insert(args.begin(), std::begin(prefix_cmd), std::end(prefix_cmd));
+            child_args.insert(child_args.begin(), std::begin(prefix_cmd), std::end(prefix_cmd));
             if (!child_executable.empty()) {
-                args[0] = child_executable.string();
+                child_args[0] = child_executable.string();
             }
         }
         if (child_executable.empty()) {
-            child_executable = args[0];
+            child_executable = child_args[0];
         }
 
         // Candidate paths to try in order. A name with no slash is looked up along PATH, which is
@@ -950,7 +956,7 @@ namespace stdc {
         exec_array.push_back(nullptr);
 
         std::vector<char *> argv;
-        for (auto &arg : args) {
+        for (auto &arg : child_args) {
             argv.push_back(arg.data());
         }
         argv.push_back(nullptr);
