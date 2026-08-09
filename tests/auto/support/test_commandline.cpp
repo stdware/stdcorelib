@@ -1403,6 +1403,16 @@ BOOST_AUTO_TEST_CASE(test_short_matching_needs_one_required_argument) {
     Parser none(Command("prog").addOption(
         Option({"-f"}, "No value at all").shortMatch(Option::ShortMatchAll)));
     bad(none, {"-fX"}, ParseResult::UnknownOption);
+
+    // One that has to have exactly one but reads on past it is the same case: a value written
+    // against the spelling says this is the value, and a greedy run would take the next token
+    // as well. Written out with a space it works.
+    Parser greedy(Command("prog").addOption(Option({"-I"}, "Includes")
+                                                .arg(Argument("dir").multi())
+                                                .shortMatch(Option::ShortMatchAll)));
+    bad(greedy, {"-IX"}, ParseResult::UnknownOption);
+    BOOST_CHECK(ok(greedy, {"-I", "X", "Y"}).option("-I")->values() ==
+                std::vector<std::string>({"X", "Y"}));
 }
 
 // A value written against the spelling is the first value of the option's first argument, not
@@ -1427,12 +1437,6 @@ BOOST_AUTO_TEST_CASE(test_a_joined_value_starts_an_argument_rather_than_finishin
     auto joined = ok(rest, {"--rest=a", "-f", "b"});
     BOOST_CHECK(joined.option("--rest")->values() == std::vector<std::string>({"a", "-f", "b"}));
     BOOST_CHECK(!joined.option("-f").has_value());
-
-    // And for a value stuck to a short spelling, which is the other way one arrives.
-    Parser stuck(Command("prog").addOption(Option({"-I"}, "Includes")
-                                               .arg(Argument("dir").multi())
-                                               .shortMatch(Option::ShortMatchAll)));
-    BOOST_CHECK(ok(stuck, {"-Ia", "b"}).option("-I")->values() == both);
 
     // A Single argument still takes only what was joined to it, the rest being positional.
     Parser one(Command("prog")

@@ -19,10 +19,15 @@ namespace stdc::cli::detail {
 
     /// The spellings of \a option that a value may be stuck to, which is what the parser tries
     /// once an exact lookup has failed. Mirrors what readOption() will accept.
+    ///
+    /// One token carries one value, so the option has to want exactly one and have to have it.
+    /// An argument that takes more is left out too: a value written against the spelling says
+    /// this is the value, and reading on from there would take the next token as well.
     inline std::vector<std::string_view> sticky_spellings(const Option &option) {
         std::vector<std::string_view> res;
         if (option.shortMatch() == Option::NoShortMatch || option.arguments().size() != 1 ||
-            !option.arguments().front().isRequired()) {
+            !option.arguments().front().isRequired() ||
+            option.arguments().front().arity() != Argument::Single) {
             return res;
         }
         for (const auto &spelling : option.tokens()) {

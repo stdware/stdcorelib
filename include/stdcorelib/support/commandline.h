@@ -669,11 +669,10 @@ namespace stdc::cli {
         }
         /// Whether a value may be stuck to the spelling, \c -Dfoo rather than \c -D \c foo.
         ///
-        /// \note A permission rather than a promise. The value goes into the option's one
-        ///       argument, so an option that takes none, takes an optional one, or takes more
-        ///       than one is never matched this way whatever is set here.
-        /// \note What is stuck on is that argument's first value rather than its only one, so a
-        ///       greedy argument reads on from the next token, \c -Ia \c b being \c -I \c a \c b.
+        /// \note A permission rather than a promise. One token carries one value, so an option
+        ///       that takes no argument, takes an optional one, takes more than one, or whose
+        ///       one argument is greedy is never matched this way whatever is set here. Written
+        ///       out with a space they all work.
         inline Option &shortMatch(ShortMatch rule) {
             _shortMatch = rule;
             return *this;
