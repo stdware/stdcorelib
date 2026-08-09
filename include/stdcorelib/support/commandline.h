@@ -690,8 +690,12 @@ namespace stdc::cli {
             _recursive = on;
             return *this;
         }
-        /// How many times it may be given, zero meaning without limit. The last argument added is
-        /// the one that repeats.
+        /// How many times the option may be given, zero meaning without limit.
+        ///
+        /// What repeats is the whole occurrence: every time the option is written it reads its
+        /// arguments again, into a set of its own that ParseResult::option() answers for by
+        /// occurrence. How many values one argument takes within one occurrence is a different
+        /// question, and Argument::multi() is where it is asked.
         /// \pre \a maxOccurrence is not negative. A negative is not a smaller limit, it is one
         ///      the count can never reach, which reads back as no limit at all.
         inline Option &multi(int maxOccurrence = 0) {

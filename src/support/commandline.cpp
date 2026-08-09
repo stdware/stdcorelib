@@ -991,14 +991,17 @@ namespace stdc::cli {
     // ---------------------------------------------------------------------------------------
     // Parsing
     //
-    // Three rules below differ from SysCmdLine, which this replaces. Each is a line SysCmdLine
-    // accepts and this refuses. All three were measured against it.
+    // The command path is a prefix. The run of subcommand names at the front of the line is the
+    // whole of it, and the first token that is not one settles what was reached. Everything
+    // after that belongs to the command reached: its own options, the ones its ancestors
+    // declared recursive, and its arguments. This is SysCmdLine's rule.
     //
-    // A subcommand is looked for after the options the root declared. SysCmdLine stops looking
-    // at the first option, so a recursive option cannot be written where every program with one
-    // puts it, and the tokens after it are dropped. An option belonging to the subcommand rather
-    // than to the root is still unknown in front of it, which is the case that should be
-    // refused.
+    // So there is one scope and it is known before a single option is read. An option written
+    // between two command names is not read against whichever command the walk had got to, and
+    // that is the point: what a ParseResult can be asked is exactly what a line can say.
+    //
+    // Two rules below differ from SysCmdLine, which this replaces. Each is a line SysCmdLine
+    // accepts and this refuses. Both were measured against it.
     //
     // Positional tokens a command cannot take are an error. SysCmdLine drops them, so a mistyped
     // subcommand succeeds silently. Measured: a root declaring no arguments accepted four
@@ -1049,8 +1052,9 @@ namespace stdc::cli {
                 return r->error != ParseResult::NoError;
             }
             /// What can be written at the command that was reached: its own options first, then
-            /// the ones it inherited. r->options also holds those of the commands left behind,
-            /// which are readable but can no longer be written.
+            /// the ones it inherited. That is all r->options holds, the path having been settled
+            /// before any of it was collected, so what is writable and what is readable are the
+            /// same list.
             std::vector<const Option *> inScope() const {
                 std::vector<const Option *> res;
                 for (const auto &option : r->target->options()) {
