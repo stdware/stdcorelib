@@ -919,8 +919,22 @@ namespace stdc {
 
         if (shell) {
             // /bin/sh, not bash, is the one unix guarantees.
-            const char *prefix_cmd[] = {"/bin/sh", "-c"};
-            child_args.insert(child_args.begin(), std::begin(prefix_cmd), std::end(prefix_cmd));
+            std::string command;
+            for (size_t i = 0; i < args.size(); ++i) {
+                if (i != 0) {
+                    command += ' ';
+                }
+                command += '\'';
+                for (char ch : args[i]) {
+                    if (ch == '\'') {
+                        command += "'\\''";
+                    } else {
+                        command += ch;
+                    }
+                }
+                command += '\'';
+            }
+            child_args = {"/bin/sh", "-c", std::move(command)};
             if (!child_executable.empty()) {
                 child_args[0] = child_executable.string();
             }

@@ -2,8 +2,9 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -251,39 +252,51 @@ BOOST_AUTO_TEST_CASE(test_start_retry) {
     }
 }
 
-// The whole of a shell command is one string, on both platforms. This case lived inside a
-// #ifndef _WIN32, so nothing ever ran the Windows shell path, and it did not work: the command
-// went through the quoting that rebuilds a program's argument vector, so cmd was handed
-// ""echo shelled"" and answered that '"echo shelled"' is not a command.
+// Shell mode changes how the process is reached, not what the argument vector means.
 BOOST_AUTO_TEST_CASE(test_shell) {
     {
         Popen p;
         std::string err;
-        p.args({"echo shelled"}).shell(true).stdout_(Popen::PIPE);
+        p.args({ChildPath, "argv", "two words", "quote\"here", "single'here", "a&b", "a|b",
+                "a<b", "a>b", "a(b)", "a^b", "$HOME", "%PATH%", "!PATH!", ""})
+            .shell(true)
+            .stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate({}, Timeout);
-        BOOST_CHECK_EQUAL(first_line(out), "shelled");
+        BOOST_CHECK_EQUAL(out,
+                          "two words\nquote\"here\nsingle'here\na&b\na|b\na<b\na>b\na(b)\na^b\n"
+                          "$HOME\n%PATH%\n!PATH!\n\n");
     }
 
-    // What the shell is for: something the parser of a command line cannot do for itself.
+    // Choosing the shell explicitly keeps the same command construction.
     {
         Popen p;
         std::string err;
-        p.args({EchoOutErr}).shell(true).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+        std::filesystem::path shell_executable = ShellExe;
+#ifdef _WIN32
+        const char *comspec = std::getenv("ComSpec");
+        BOOST_REQUIRE(comspec != nullptr);
+        shell_executable = comspec;
+#endif
+        p.args({ChildPath, "argv", "custom shell"})
+            .shell(true)
+            .executable(std::move(shell_executable))
+            .stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate({}, Timeout);
-        BOOST_CHECK_EQUAL(first_line(out), "out");
-        BOOST_CHECK_EQUAL(first_line(errout), "err");
+        BOOST_CHECK_EQUAL(out, "custom shell\n");
     }
 
-    // Quotes inside the command belong to the shell and have to reach it.
+    // Empty args still cannot name anything to run.
     {
         Popen p;
         std::string err;
-        p.args({"echo \"two words\""}).shell(true).stdout_(Popen::PIPE);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
-        auto [out, errout] = p.communicate({}, Timeout);
-        BOOST_CHECK(first_line(out).find("two words") != std::string::npos);
+        p.args({}).shell(true);
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(p.error_code() == std::errc::invalid_argument);
+        BOOST_CHECK(!err.empty());
+        BOOST_CHECK_EQUAL(p.pid(), -1);
+        BOOST_CHECK(!p.returncode());
     }
 }
 
@@ -742,7 +755,7 @@ BOOST_AUTO_TEST_CASE(test_user_name_is_owned) {
 // anything that can fail, so the second start inserted it again and ran something else. The
 // case that covered retrying used no shell, and the case above never fails.
 BOOST_AUTO_TEST_CASE(test_a_failed_shell_start_leaves_the_arguments_alone) {
-    const std::vector<std::string> wanted = {"echo retry-ok"};
+    const std::vector<std::string> wanted = {ChildPath, "argv", "retry-ok"};
 
     Popen p;
     p.args(wanted).shell(true).cwd("no_such_directory_9f3a").stdout_(Popen::PIPE);
@@ -769,7 +782,7 @@ BOOST_AUTO_TEST_CASE(test_a_failed_shell_start_leaves_the_arguments_alone) {
 // The other place a start can fail, since the insert happened before both and the one above
 // only covers the chdir.
 BOOST_AUTO_TEST_CASE(test_a_shell_start_that_fails_at_exec_leaves_them_alone_too) {
-    const std::vector<std::string> wanted = {"echo retry-ok"};
+    const std::vector<std::string> wanted = {ChildPath, "argv", "retry-ok"};
 
     Popen p;
     p.args(wanted).shell(true).executable("no_such_shell_9f3a").stdout_(Popen::PIPE);

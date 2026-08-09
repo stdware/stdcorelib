@@ -116,8 +116,8 @@ namespace stdc {
         ///     not what the name suggests. Measured, not assumed: a library whose dependency
         ///     sits only in the new directory still fails to load after this returns, and the
         ///     same binary loads it when the variable was set before it started.
-        /// \li <b>macOS</b>: \c DYLD_LIBRARY_PATH is set. dyld is not glibc and this has not
-        ///     been measured here, so treat it as Linux until somebody does.
+        /// \li <b>macOS</b>: \c DYLD_LIBRARY_PATH is set. Whether that changes where the current
+        ///     process looks has not been measured, so this function makes no such promise.
         ///
         /// A plugin that has to find its own neighbors on every platform wants an rpath of
         /// \c $ORIGIN or <tt>\@loader_path</tt>, which is a property of the plugin rather than

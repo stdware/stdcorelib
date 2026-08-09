@@ -537,7 +537,8 @@ namespace stdc {
 
     // https://github.com/qt/qtbase/blob/v6.8.0/src/corelib/io/qprocess_win.cpp#L371
     static std::string qt_create_commandline(const std::string &program,
-                                             const std::vector<std::string> &arguments) {
+                                             const std::vector<std::string> &arguments,
+                                             bool quote_all = false) {
         std::string args;
         if (!program.empty()) {
             std::string programName = program;
@@ -567,7 +568,7 @@ namespace stdc {
                 auto next = tmp.find('"', size_t(index) + 1);
                 index = next == std::string::npos ? -1 : ptrdiff_t(next);
             }
-            if (tmp.empty() || str::contains(tmp, ' ') || str::contains(tmp, '\t')) {
+            if (quote_all || tmp.empty() || str::contains(tmp, ' ') || str::contains(tmp, '\t')) {
                 // The argument must not end with a \ since this would be interpreted
                 // as escaping the quote -- rather put the \ behind the quote: e.g.
                 // rather use "foo"\ than "foo\"
@@ -704,21 +705,20 @@ namespace stdc {
         assert(!args.empty());
         fs::path child_executable = executable;
 
-        // Quoted piece by piece for a program, which is how a program's argument vector is
-        // rebuilt from a command line. Not for a shell: the shell parses the line itself, so
-        // quoting here is quoting the shell will see, and cmd answered
-        // '"echo hello"' is not recognized to every command that had a space in it.
-        std::string args_str;
+        // A shell still receives the same argument vector. Quote every element and protect cmd's
+        // metacharacters so it cannot reinterpret them before starting the requested command.
+        std::vector<std::string> shell_args;
         if (shell) {
-            for (const auto &arg : args) {
-                if (!args_str.empty()) {
-                    args_str += ' ';
+            shell_args = args;
+            for (auto &arg : shell_args) {
+                for (size_t i = 0; i < arg.size(); ++i) {
+                    if (str::contains("^&|<>()%", arg[i])) {
+                        arg.insert(i++, 1, '^');
+                    }
                 }
-                args_str += arg;
             }
-        } else {
-            args_str = qt_create_commandline({}, args);
         }
+        std::string args_str = qt_create_commandline({}, shell ? shell_args : args, shell);
 
         STARTUPINFOEXW siex;
         ZeroMemory(&siex, sizeof(siex));
@@ -787,7 +787,7 @@ namespace stdc {
                     return false;
                 }
             }
-            args_str = formatN(R"(%1 /c "%2")", child_executable, args_str);
+            args_str = formatN(R"(%1 /d /v:off /s /c "%2")", child_executable, args_str);
         }
 
         std::wstring application_name = child_executable;

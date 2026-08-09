@@ -44,8 +44,6 @@
 /// child is launched independently and this process keeps nothing but its pid.
 ///
 /// stdc::SharedLibrary loads one at run time and resolves symbols from it.
-/// \c SharedLibrary::setLibraryPath() is what lets a plugin outside the usual directories find the
-/// libraries next to it, and \c locateLibraryPath() answers where a given address came from.
 ///
 /// \code
 ///     SharedLibrary lib;
@@ -258,8 +256,9 @@ namespace stdc {
         /// Hands the command to the system shell rather than executing it directly, so its
         /// redirections and expansions apply.
         ///
-        /// \warning The shell's quoting rules apply too, so untrusted input reaching \a shell is
-        ///          a command injection.
+        /// args() keeps its usual argument-vector meaning when this is enabled. Each element is
+        /// quoted for the platform shell so spaces, quotes, and shell metacharacters stay inside
+        /// that argument.
         Popen &shell(bool shell);
 
         /// The child's working directory. Inherited if left unset.
