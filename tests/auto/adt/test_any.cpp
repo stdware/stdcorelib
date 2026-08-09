@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 
 #include <memory>
 #include <string>
@@ -8,7 +8,7 @@
 #include <stdcorelib/adt/any.h>
 #include <stdcorelib/support/sharedlibrary.h>
 
-#include "../plugins/test_plugin.h"
+#include "../plugins/test_any_plugin.h"
 
 #include <boost/test/unit_test.hpp>
 
@@ -300,14 +300,14 @@ BOOST_AUTO_TEST_CASE(test_swap_across_both_kinds_of_storage) {
     BOOST_CHECK_EQUAL(SmallTracked::alive, 0);
 }
 
-#ifdef TEST_PLUGIN_PATH
+#ifdef TEST_ANY_PLUGIN_PATH
 
 // Whether a value keeps its identity on the way into another module cannot be answered from
 // inside one binary. The plugin is a separate one, built with hidden visibility, so nothing here
 // can pass by accident of the loader having merged a symbol.
 BOOST_AUTO_TEST_CASE(test_identity_across_a_module_boundary) {
     SharedLibrary plugin;
-    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_PLUGIN_PATH), plugin.lastError());
+    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_ANY_PLUGIN_PATH), plugin.lastError());
 
     auto fill = reinterpret_cast<void (*)(any *, int)>(plugin.resolve("any_plugin_fill"));
     auto read = reinterpret_cast<bool (*)(const any *, int *)>(plugin.resolve("any_plugin_read"));
@@ -348,7 +348,7 @@ BOOST_AUTO_TEST_CASE(test_identity_across_a_module_boundary) {
 #  endif
 }
 
-#endif // TEST_PLUGIN_PATH
+#endif // TEST_ANY_PLUGIN_PATH
 
 BOOST_AUTO_TEST_CASE(test_size_is_a_buffer_plus_a_pointer) {
     BOOST_CHECK_EQUAL(sizeof(any), 2 * sizeof(void *) + sizeof(void *));

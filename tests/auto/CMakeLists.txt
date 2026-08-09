@@ -41,26 +41,30 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
-# A module loaded at run time by the any tests. Whether a value keeps its identity across a
-# module boundary cannot be answered from inside one binary, so this has to be a second one.
-# Its visibility is hidden on purpose: that is the configuration in which identity schemes built
-# on comparing addresses come apart.
-add_library(test_plugin MODULE plugins/test_plugin.cpp)
-target_link_libraries(test_plugin PRIVATE stdcorelib)
-set_target_properties(test_plugin PROPERTIES
-    CXX_EXTENSIONS OFF
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN ON
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-)
+# Two modules loaded at run time, one per suite that needs a second binary to ask its question.
+# Whether a value keeps its identity across a module boundary, and whether a registry reached
+# from two modules is one registry, cannot be answered from inside one binary.
+#
+# Their visibility is hidden on purpose: that is the configuration in which identity schemes
+# built on comparing addresses come apart.
+foreach(_plugin any dynamicregistry)
+    add_library(test_${_plugin}_plugin MODULE plugins/test_${_plugin}_plugin.cpp)
+    target_link_libraries(test_${_plugin}_plugin PRIVATE stdcorelib)
+    set_target_properties(test_${_plugin}_plugin PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    )
+endforeach()
 
 # A module for the SharedLibrary tests, which have to watch one being loaded and unloaded. It
-# cannot be test_plugin: the any tests load that one, and a module another suite left loaded
-# answers "still loaded" whatever ownership did. Nothing else in the binary touches this one, so
-# what it says is about the case that is asking.
+# cannot be either of the two above: a module another suite left loaded answers "still loaded"
+# whatever ownership did. Nothing else in the binary touches this one, so what it says is about
+# the case that is asking.
 add_library(test_unloadable MODULE plugins/test_unloadable.cpp)
 set_target_properties(test_unloadable PROPERTIES
     CXX_EXTENSIONS OFF
@@ -93,9 +97,11 @@ set_target_properties(test_popen_child PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
-add_dependencies(${PROJECT_NAME} test_plugin test_unloadable test_pinned test_popen_child)
+add_dependencies(${PROJECT_NAME}
+    test_any_plugin test_dynamicregistry_plugin test_unloadable test_pinned test_popen_child)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    TEST_PLUGIN_PATH="$<TARGET_FILE:test_plugin>"
+    TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
+    TEST_DYNAMICREGISTRY_PLUGIN_PATH="$<TARGET_FILE:test_dynamicregistry_plugin>"
     TEST_UNLOADABLE_PATH="$<TARGET_FILE:test_unloadable>"
     TEST_PINNED_PATH="$<TARGET_FILE:test_pinned>"
     TEST_POPEN_CHILD_PATH="$<TARGET_FILE:test_popen_child>"

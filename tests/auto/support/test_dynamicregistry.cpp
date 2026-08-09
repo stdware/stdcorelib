@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 
 #include <chrono>
 #include <future>
@@ -10,7 +10,7 @@
 #include <stdcorelib/support/dynamicregistry.h>
 #include <stdcorelib/support/sharedlibrary.h>
 
-#include "../plugins/test_plugin.h"
+#include "../plugins/test_dynamicregistry_plugin.h"
 
 #include <boost/test/unit_test.hpp>
 
@@ -200,14 +200,14 @@ BOOST_AUTO_TEST_CASE(test_is_thread_safe) {
     BOOST_CHECK_EQUAL(reg.size(), size_t(Threads * PerThread));
 }
 
-#ifdef TEST_PLUGIN_PATH
+#ifdef TEST_DYNAMICREGISTRY_PLUGIN_PATH
 
 // A registry declared in a header is only one registry if the singleton is. The instance used to
 // be a function-local static, which gives one copy per module, so a plugin registered somewhere
 // the host never looked and said nothing about it.
 BOOST_AUTO_TEST_CASE(test_a_plugin_registers_where_the_host_looks) {
     SharedLibrary plugin;
-    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_PLUGIN_PATH), plugin.lastError());
+    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_DYNAMICREGISTRY_PLUGIN_PATH), plugin.lastError());
 
     auto add = reinterpret_cast<bool (*)(const char *, int)>(plugin.resolve("registry_plugin_add"));
     auto count = reinterpret_cast<size_t (*)()>(plugin.resolve("registry_plugin_size"));
@@ -245,6 +245,6 @@ BOOST_AUTO_TEST_CASE(test_a_plugin_registers_where_the_host_looks) {
     here.clear();
 }
 
-#endif // TEST_PLUGIN_PATH
+#endif // TEST_DYNAMICREGISTRY_PLUGIN_PATH
 
 BOOST_AUTO_TEST_SUITE_END()
