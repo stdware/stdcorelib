@@ -163,6 +163,13 @@ namespace stdc {
                                   std::string *error = nullptr);
 
         std::vector<uint8_t> toCbor() const;
+
+        /// Returns the JsonValue the given CBOR encodes.
+        ///
+        /// \param cbor The bytes to decode.
+        /// \param error Set to why the bytes were rejected, or cleared on success. A rejected
+        ///        document and an encoded null both come back as a null value, so this tells
+        ///        them apart.
         static JsonValue fromCbor(array_view<uint8_t> cbor, std::string *error = nullptr);
 
     private:
