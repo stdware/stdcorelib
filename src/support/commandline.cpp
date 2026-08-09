@@ -1730,6 +1730,9 @@ namespace stdc::cli {
     }
 
     Parser::Parser(Command root) : _impl(std::make_unique<Impl>()) {
+        assert(Command::namesAreUnambiguous(root) &&
+               "two options in scope at one command answer to the same spelling, or two "
+               "subcommands share a name");
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1744,6 +1747,9 @@ namespace stdc::cli {
         // out shares this pointer and holds raw pointers into what it addresses, so assigning
         // through it leaves them all reading freed vectors. Checked: assigning through it dies
         // under ASAN in test_a_parser_is_reusable_and_its_tree_can_be_replaced.
+        assert(Command::namesAreUnambiguous(root) &&
+               "two options in scope at one command answer to the same spelling, or two "
+               "subcommands share a name");
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1819,6 +1825,15 @@ namespace stdc::cli {
 
     ParseResult Parser::parse(const std::vector<std::string> &args,
                               ParseOptions parseOptions) const {
+        // The rest of the tree was asked when it arrived. This asks again with the options the
+        // line is about to be read with, since two names differing only in case are one name
+        // under those and nothing before now knew which way it would be read.
+        assert((!parseOptions.test_flag(IgnoreOptionCase) &&
+                !parseOptions.test_flag(IgnoreCommandCase)) ||
+               Command::namesAreUnambiguous(*_impl->root,
+                                            parseOptions.test_flag(IgnoreOptionCase),
+                                            parseOptions.test_flag(IgnoreCommandCase)));
+
         ParseResult result;
         result._impl->root = _impl->root;
         result._impl->target = _impl->root.get();

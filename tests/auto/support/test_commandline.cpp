@@ -3362,6 +3362,66 @@ BOOST_AUTO_TEST_CASE(test_what_an_option_may_join) {
         none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols).arg("topic")));
 }
 
+// A collision the pieces cannot see as they are added, since a command knows nothing about the
+// ancestors it will end up under. Asked of the whole tree once it is one.
+BOOST_AUTO_TEST_CASE(test_a_recursive_option_and_a_local_one_may_not_share_a_spelling) {
+    const auto &tree = [](bool recursive, const char *below) {
+        return Command("prog")
+            .addOption(Option({"-o"}, "The root's").arg("root").recursive(recursive))
+            .addCommand(Command("sub").addOption(Option({below}, "The subcommand's").arg("sub")));
+    };
+
+    // Both in scope at sub, both answering to -o, and a result is asked for one by spelling.
+    BOOST_CHECK(!Command::namesAreUnambiguous(tree(true, "-o")));
+
+    // The same two where the root keeps its own, since then only one of them is ever in scope.
+    BOOST_CHECK(Command::namesAreUnambiguous(tree(false, "-o")));
+
+    // And where the spellings differ, which is the ordinary case.
+    BOOST_CHECK(Command::namesAreUnambiguous(tree(true, "-p")));
+
+    // Two levels up counts the same as one.
+    BOOST_CHECK(!Command::namesAreUnambiguous(
+        Command("prog")
+            .addOption(Option({"-v"}, "The root's").recursive())
+            .addCommand(Command("mid").addCommand(
+                Command("leaf").addOption(Option({"-v"}, "The leaf's"))))));
+
+    // Two recursive ones from different levels reach the same command together.
+    BOOST_CHECK(!Command::namesAreUnambiguous(
+        Command("prog")
+            .addOption(Option({"-v"}, "The root's").recursive())
+            .addCommand(Command("mid")
+                            .addOption(Option({"-v"}, "The middle's").recursive())
+                            .addCommand(Command("leaf")))));
+}
+
+// The same question, asked with the options the line will be read with. Two spellings that
+// differ only in case are one spelling under those, and nothing before the parse knows which
+// way it will be read.
+BOOST_AUTO_TEST_CASE(test_names_that_are_one_name_only_under_a_matching_rule) {
+    auto options = Command("prog").addOptions(
+        {Option({"--output"}, "One"), Option({"--OUTPUT"}, "The other")});
+    BOOST_CHECK(Command::namesAreUnambiguous(options));
+    BOOST_CHECK(!Command::namesAreUnambiguous(options, true, false));
+    // The rule for commands does not decide the one for options.
+    BOOST_CHECK(Command::namesAreUnambiguous(options, false, true));
+
+    auto commands =
+        Command("prog").addCommands({Command("build"), Command("BUILD", "The other one")});
+    BOOST_CHECK(Command::namesAreUnambiguous(commands));
+    BOOST_CHECK(!Command::namesAreUnambiguous(commands, false, true));
+    BOOST_CHECK(Command::namesAreUnambiguous(commands, true, false));
+
+    // A recursive option and a local one that differ only in case, which needs both the rule
+    // and the whole tree to see.
+    auto mixed = Command("prog")
+                     .addOption(Option({"--force"}, "The root's").recursive())
+                     .addCommand(Command("sub").addOption(Option({"--FORCE"}, "The sub's")));
+    BOOST_CHECK(Command::namesAreUnambiguous(mixed));
+    BOOST_CHECK(!Command::namesAreUnambiguous(mixed, true, false));
+}
+
 BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {
     const std::vector<Command> none;
     BOOST_CHECK(Command::canAddCommand(none, Command("copy")));
