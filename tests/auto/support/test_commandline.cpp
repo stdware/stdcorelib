@@ -14,6 +14,10 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/support/commandline.h>
 
+// Private header: the whole-tree check is asserted by Parser and has no public caller, so it
+// lives beside the implementation rather than in the API.
+#include "support/commandline_p.h"
+
 #include <boost/test/unit_test.hpp>
 
 // For the one case that reads back what showError() put on stderr.
@@ -3372,23 +3376,23 @@ BOOST_AUTO_TEST_CASE(test_a_recursive_option_and_a_local_one_may_not_share_a_spe
     };
 
     // Both in scope at sub, both answering to -o, and a result is asked for one by spelling.
-    BOOST_CHECK(!Command::namesAreUnambiguous(tree(true, "-o")));
+    BOOST_CHECK(!detail::names_are_unambiguous(tree(true, "-o")));
 
     // The same two where the root keeps its own, since then only one of them is ever in scope.
-    BOOST_CHECK(Command::namesAreUnambiguous(tree(false, "-o")));
+    BOOST_CHECK(detail::names_are_unambiguous(tree(false, "-o")));
 
     // And where the spellings differ, which is the ordinary case.
-    BOOST_CHECK(Command::namesAreUnambiguous(tree(true, "-p")));
+    BOOST_CHECK(detail::names_are_unambiguous(tree(true, "-p")));
 
     // Two levels up counts the same as one.
-    BOOST_CHECK(!Command::namesAreUnambiguous(
+    BOOST_CHECK(!detail::names_are_unambiguous(
         Command("prog")
             .addOption(Option({"-v"}, "The root's").recursive())
             .addCommand(Command("mid").addCommand(
                 Command("leaf").addOption(Option({"-v"}, "The leaf's"))))));
 
     // Two recursive ones from different levels reach the same command together.
-    BOOST_CHECK(!Command::namesAreUnambiguous(
+    BOOST_CHECK(!detail::names_are_unambiguous(
         Command("prog")
             .addOption(Option({"-v"}, "The root's").recursive())
             .addCommand(Command("mid")
@@ -3402,24 +3406,24 @@ BOOST_AUTO_TEST_CASE(test_a_recursive_option_and_a_local_one_may_not_share_a_spe
 BOOST_AUTO_TEST_CASE(test_names_that_are_one_name_only_under_a_matching_rule) {
     auto options = Command("prog").addOptions(
         {Option({"--output"}, "One"), Option({"--OUTPUT"}, "The other")});
-    BOOST_CHECK(Command::namesAreUnambiguous(options));
-    BOOST_CHECK(!Command::namesAreUnambiguous(options, true, false));
+    BOOST_CHECK(detail::names_are_unambiguous(options));
+    BOOST_CHECK(!detail::names_are_unambiguous(options, true, false));
     // The rule for commands does not decide the one for options.
-    BOOST_CHECK(Command::namesAreUnambiguous(options, false, true));
+    BOOST_CHECK(detail::names_are_unambiguous(options, false, true));
 
     auto commands =
         Command("prog").addCommands({Command("build"), Command("BUILD", "The other one")});
-    BOOST_CHECK(Command::namesAreUnambiguous(commands));
-    BOOST_CHECK(!Command::namesAreUnambiguous(commands, false, true));
-    BOOST_CHECK(Command::namesAreUnambiguous(commands, true, false));
+    BOOST_CHECK(detail::names_are_unambiguous(commands));
+    BOOST_CHECK(!detail::names_are_unambiguous(commands, false, true));
+    BOOST_CHECK(detail::names_are_unambiguous(commands, true, false));
 
     // A recursive option and a local one that differ only in case, which needs both the rule
     // and the whole tree to see.
     auto mixed = Command("prog")
                      .addOption(Option({"--force"}, "The root's").recursive())
                      .addCommand(Command("sub").addOption(Option({"--FORCE"}, "The sub's")));
-    BOOST_CHECK(Command::namesAreUnambiguous(mixed));
-    BOOST_CHECK(!Command::namesAreUnambiguous(mixed, true, false));
+    BOOST_CHECK(detail::names_are_unambiguous(mixed));
+    BOOST_CHECK(!detail::names_are_unambiguous(mixed, true, false));
 }
 
 BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {

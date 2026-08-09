@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "commandline.h"
+#include "commandline_p.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -1713,7 +1714,7 @@ namespace stdc::cli {
         /// is the assert and nothing else, so no tree is walked.
         static void assertNames(const Command &command, bool ignoreOptionCase = false,
                                 bool ignoreCommandCase = false) {
-            assert(Command::namesAreUnambiguous(command, ignoreOptionCase, ignoreCommandCase) &&
+            assert(detail::names_are_unambiguous(command, ignoreOptionCase, ignoreCommandCase) &&
                    "two options in scope at one command answer to the same spelling, or two "
                    "subcommands share a name");
             (void) command;
