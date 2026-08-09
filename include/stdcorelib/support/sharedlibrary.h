@@ -120,7 +120,7 @@ namespace stdc {
         ///     been measured here, so treat it as Linux until somebody does.
         ///
         /// A plugin that has to find its own neighbors on every platform wants an rpath of
-        /// \c $ORIGIN or \c @loader_path, which is a property of the plugin rather than
+        /// \c $ORIGIN or <tt>\@loader_path</tt>, which is a property of the plugin rather than
         /// anything a caller can set from here.
         ///
         /// \return what was set before, so it can be put back. An empty path unsets the
