@@ -303,7 +303,7 @@ namespace stdc::windows {
 
         class key_iterator {
         public:
-            /// FIXME: This does not implement the complete random access iterator interface.
+            // FIXME: This does not implement the complete random access iterator interface.
             using iterator_category = std::random_access_iterator_tag;
             using value_type = KeyData;
             using difference_type = int;
@@ -443,7 +443,7 @@ namespace stdc::windows {
 
         class value_iterator {
         public:
-            /// FIXME: This does not implement the complete random access iterator interface.
+            // FIXME: This does not implement the complete random access iterator interface.
             using iterator_category = std::random_access_iterator_tag;
             using value_type = ValueData;
             using difference_type = int;
