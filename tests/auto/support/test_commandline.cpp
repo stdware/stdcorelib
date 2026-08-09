@@ -1114,6 +1114,70 @@ BOOST_AUTO_TEST_CASE(test_exclusive_prior_levels) {
     BOOST_CHECK_EQUAL(int(with_option.error()), int(ParseResult::PriorOptionWithOptions));
 }
 
+// "No arguments may be given" is about what was given. A default value stands in where nothing
+// was, so reading the arguments after the defaults are applied has an option that forbids them
+// refuse a line that carried none.
+BOOST_AUTO_TEST_CASE(test_an_exclusive_option_reads_what_was_given_not_what_stood_in) {
+    auto build = [](Option::Prior level, bool with_default) {
+        auto path = Argument("path").optional();
+        if (with_default) {
+            path.defaultValue("a.out");
+        }
+        return Parser(Command("prog")
+                          .addArgument(path)
+                          .addOption(Option({"-f"}, "Force"))
+                          .addOption(Option({"--stat"}, "Just report").prior(level)));
+    };
+
+    // The line carries nothing either way, and the default is still there to be read.
+    BOOST_CHECK(ok(build(Option::ExclusiveToArguments, false), {"--stat"}).values(0) ==
+                std::vector<std::string>());
+    BOOST_CHECK_EQUAL(
+        ok(build(Option::ExclusiveToArguments, true), {"--stat"}).value(0).value_or(""), "a.out");
+
+    // Given one, it complains, which is the whole of what the level is for.
+    bad(build(Option::ExclusiveToArguments, true), {"--stat", "x"},
+        ParseResult::PriorOptionWithArguments);
+
+    // ExclusiveToAll forbids both, and the option it was given beside is what it should name.
+    // Reading the defaults made this the argument complaint, which is the wrong one.
+    bad(build(Option::ExclusiveToAll, true), {"--stat", "-f"},
+        ParseResult::PriorOptionWithOptions);
+    BOOST_CHECK_EQUAL(ok(build(Option::ExclusiveToAll, true), {"--stat"}).value(0).value_or(""),
+                      "a.out");
+
+    // More than one argument, so the token count and the argument count differ.
+    Parser several(Command("prog")
+                       .addArgument(Argument("a").optional().defaultValue("1"))
+                       .addArgument(Argument("b").optional().defaultValue("2"))
+                       .addOption(Option({"--stat"}, "Just report")
+                                      .prior(Option::ExclusiveToArguments)));
+    auto filled = ok(several, {"--stat"});
+    BOOST_CHECK_EQUAL(filled.value(0).value_or(""), "1");
+    BOOST_CHECK_EQUAL(filled.value(1).value_or(""), "2");
+    bad(several, {"--stat", "x"}, ParseResult::PriorOptionWithArguments);
+
+    // Crossed with a leading Remainder, whose default stands in the same way and whose tokens
+    // are read before any argument is filled.
+    Parser tail(Command("prog")
+                    .addArgument(
+                        Argument("rest").nargs(Argument::Remainder).optional().defaultValue("none"))
+                    .addOption(Option({"--stat"}, "Just report")
+                                   .prior(Option::ExclusiveToArguments)));
+    BOOST_CHECK_EQUAL(ok(tail, {"--stat"}).value(0).value_or(""), "none");
+    bad(tail, {"--stat", "x"}, ParseResult::PriorOptionWithArguments);
+
+    // Crossed with recursive, where the option forbidding arguments belongs to another command.
+    Parser below(Command("prog")
+                     .addOption(Option({"--stat"}, "Just report")
+                                    .prior(Option::ExclusiveToArguments)
+                                    .recursive())
+                     .addCommand(Command("build").addArgument(
+                         Argument("target").optional().defaultValue("all"))));
+    BOOST_CHECK_EQUAL(ok(below, {"build", "--stat"}).value(0).value_or(""), "all");
+    bad(below, {"build", "--stat", "x"}, ParseResult::PriorOptionWithArguments);
+}
+
 BOOST_AUTO_TEST_CASE(test_an_option_may_ignore_its_own_missing_arguments) {
     Parser parser(Command("prog").addOption(
         Option({"-l"}, "List").arg("what").prior(Option::IgnoreMissingArguments)));

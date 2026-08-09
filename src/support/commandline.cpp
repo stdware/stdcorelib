@@ -1639,16 +1639,14 @@ namespace stdc::cli {
             bool forbids_options =
                 level == Option::ExclusiveToOptions || level == Option::ExclusiveToAll;
 
-            if (forbids_arguments) {
-                bool any_argument = false;
-                for (const auto &values : r->arguments) {
-                    any_argument = any_argument || !values.empty();
-                }
-                if (any_argument) {
-                    fail(ParseResult::PriorOptionWithArguments,
-                         "option \"" + prior_option->token() + "\" takes no arguments beside it");
-                    return;
-                }
+            // What was given rather than what is in hand. r->arguments has had the defaults
+            // applied by now, and a default is what stands in where nothing was given, so
+            // reading them here would have an option that forbids arguments refuse a line that
+            // carried none.
+            if (forbids_arguments && !positional.empty()) {
+                fail(ParseResult::PriorOptionWithArguments,
+                     "option \"" + prior_option->token() + "\" takes no arguments beside it");
+                return;
             }
             if (forbids_options) {
                 for (const auto &item : r->options) {
