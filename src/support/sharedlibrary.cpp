@@ -86,6 +86,14 @@ namespace stdc {
             dlFlags |= RTLD_DEEPBIND;
         }
 #  endif
+#  if defined(RTLD_NODELETE)
+        // The POSIX half of PreventUnloadHint, which used to be dropped here. glibc has this,
+        // so a Linux caller asking for it was not being told the platform had no equivalent,
+        // it was being ignored.
+        if (loadHints.test_flag(PreventUnloadHint)) {
+            dlFlags |= RTLD_NODELETE;
+        }
+#  endif
         return dlFlags;
 #endif
     }

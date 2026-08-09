@@ -48,6 +48,9 @@ namespace {
     fs::path unloadable() {
         return fs::path(TEST_UNLOADABLE_PATH);
     }
+    fs::path pinned() {
+        return fs::path(TEST_PINNED_PATH);
+    }
 
     // A library that is guaranteed to be present, plus a symbol it is guaranteed to export.
     // Returns an empty path when the platform has no dependable candidate, in which case the
@@ -248,6 +251,30 @@ BOOST_AUTO_TEST_CASE(test_release_keeps_the_library_loaded) {
     BOOST_CHECK_EQUAL(::dlclose(handle), 0);
 #endif
     BOOST_CHECK(!still_loaded(unloadable()));
+}
+
+// PreventUnloadHint said it was ignored only where the platform has no equivalent, and glibc
+// has RTLD_NODELETE, so on Linux it was being ignored where there is one. Its own module: a
+// module that was pinned stays for the life of the process, which is the point of it.
+BOOST_AUTO_TEST_CASE(test_preventing_the_unload_keeps_it_after_the_object_is_gone) {
+    BOOST_REQUIRE(fs::exists(pinned()));
+    BOOST_REQUIRE_MESSAGE(!still_loaded(pinned()), "another case left this module loaded");
+
+    {
+        SharedLibrary lib;
+        BOOST_REQUIRE(lib.open(pinned(), SharedLibrary::PreventUnloadHint));
+        BOOST_CHECK(lib.resolve("test_unloadable_answer") != nullptr);
+    }
+    BOOST_CHECK(still_loaded(pinned()));
+
+    // And closing it by hand does not take it away either, which is the same promise said the
+    // other way round.
+    {
+        SharedLibrary lib;
+        BOOST_REQUIRE(lib.open(pinned(), SharedLibrary::PreventUnloadHint));
+        BOOST_CHECK(lib.close());
+    }
+    BOOST_CHECK(still_loaded(pinned()));
 }
 
 // Released and then closed by hand, which is the other half: close() forgets the handle rather

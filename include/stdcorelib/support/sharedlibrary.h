@@ -42,6 +42,13 @@ namespace stdc {
             ResolveAllSymbolsHint = 0x01,
             ExportExternalSymbolsHint = 0x02,
             LoadArchiveMemberHint = 0x04, // Unused
+            /// The library stays for the life of the process, whatever anyone does with the
+            /// object that loaded it. \c RTLD_NODELETE where there is one, and the module
+            /// pinned on Windows.
+            ///
+            /// \note A wish rather than a promise. Where the loader refuses to pin, open()
+            ///       still succeeds with the library loaded and unloadable as usual, so a
+            ///       caller that has to know cannot learn it from here.
             PreventUnloadHint = 0x08,
             DeepBindHint = 0x10,
         };
