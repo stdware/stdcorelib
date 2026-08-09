@@ -578,6 +578,44 @@ BOOST_AUTO_TEST_CASE(test_a_multi_argument_leaves_room_for_what_follows) {
     bad(parser, {"only"}, ParseResult::MissingCommandArgument);
 }
 
+// The same shape as an option's own arguments, which is where it did not work. The rule is one
+// rule and both ask for it, so a shape Argument::canFollow() allows can be written wherever
+// arguments are declared rather than only after a command.
+BOOST_AUTO_TEST_CASE(test_an_options_multi_argument_leaves_room_for_what_follows) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"--copy"}, "Copy")
+                                     .arg(Argument("src").multi())
+                                     .arg(Argument("dest")))
+                      .addOption(Option({"-v"}, "Say more")));
+
+    auto result = ok(parser, {"--copy", "one", "two", "three", "out"});
+    auto handle = result.option("--copy");
+    BOOST_REQUIRE(handle);
+    BOOST_CHECK(must(handle->values<std::string>(0)) ==
+                std::vector<std::string>({"one", "two", "three"}));
+    BOOST_CHECK_EQUAL(must(handle->value<std::string>(1)), "out");
+
+    // Two tokens is one each, the same as it is for a command's own.
+    auto pair = ok(parser, {"--copy", "one", "out"});
+    BOOST_REQUIRE(pair.option("--copy"));
+    BOOST_CHECK(must(pair.option("--copy")->values<std::string>(0)) ==
+                std::vector<std::string>({"one"}));
+    BOOST_CHECK_EQUAL(must(pair.option("--copy")->value<std::string>(1)), "out");
+
+    // One token leaves the destination with nothing, which is a missing value rather than a
+    // greedy source that took it.
+    bad(parser, {"--copy", "only"}, ParseResult::MissingOptionArgument);
+
+    // The run ends where the next declared option starts, and what is left is shared out inside
+    // that run rather than across the whole line.
+    auto stopped = ok(parser, {"--copy", "one", "two", "-v"});
+    BOOST_REQUIRE(stopped.option("--copy"));
+    BOOST_CHECK(must(stopped.option("--copy")->values<std::string>(0)) ==
+                std::vector<std::string>({"one"}));
+    BOOST_CHECK_EQUAL(must(stopped.option("--copy")->value<std::string>(1)), "two");
+    BOOST_CHECK(stopped.option("-v").has_value());
+}
+
 BOOST_AUTO_TEST_CASE(test_remainder_takes_everything_left) {
     Parser parser(Command("prog").addArguments(
         {Argument("script"), Argument("args").nargs(Argument::Remainder).optional()}));

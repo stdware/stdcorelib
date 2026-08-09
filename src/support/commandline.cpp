@@ -151,6 +151,29 @@ namespace stdc::cli {
             std::vector<Occurrence> occurrences;
         };
 
+        /// How many of \a available tokens the \a index'th of \a declared may take.
+        ///
+        /// One each for the required arguments still to come, since a greedy one that took the
+        /// lot would leave \c copy \c \<src\>... \c \<dest\> with nothing for the destination.
+        /// The rule is the same whether the arguments belong to a command or to an option, so it
+        /// is written once and both ask.
+        size_t take_for(const std::vector<Argument> &declared, size_t index, size_t available) {
+            const auto &argument = declared[index];
+            if (argument.arity() == Argument::Single) {
+                return 1;
+            }
+            if (argument.arity() == Argument::Remainder) {
+                return available;
+            }
+            size_t reserved = 0;
+            for (size_t j = index + 1; j < declared.size(); ++j) {
+                if (declared[j].isRequired()) {
+                    ++reserved;
+                }
+            }
+            return available > reserved ? available - reserved : 1;
+        }
+
         bool same_token(std::string_view a, std::string_view b, bool ignore_case) {
             if (!ignore_case) {
                 return a == b;
@@ -1316,9 +1339,20 @@ namespace stdc::cli {
                     continue;
                 }
 
-                bool multiple = argument.arity() != Argument::Single;
+                // How many are here to be had, which is up to the next token that is somebody's
+                // option, and then how many of those are this argument's to take.
+                size_t available = 0;
+                while (pos + available < tokens.size()) {
+                    const auto &ahead = tokens[pos + available];
+                    if (looksLikeOption(ahead) && lookup(ahead) != nullptr) {
+                        break;
+                    }
+                    ++available;
+                }
+                size_t take = take_for(option->arguments(), i, available);
+
                 bool took_any = false;
-                while (pos < tokens.size()) {
+                for (size_t count = 0; count < take && pos < tokens.size(); ++count) {
                     const auto &token = tokens[pos];
                     // A token that is somebody's option is never quietly eaten as a value, not
                     // even by an argument that has to have one. Saying "-o needs a value" is
@@ -1336,9 +1370,6 @@ namespace stdc::cli {
                     slots[i].push_back(token);
                     ++pos;
                     took_any = true;
-                    if (!multiple) {
-                        break;
-                    }
                 }
 
                 if (!took_any && argument.isRequired() &&
@@ -1504,22 +1535,9 @@ namespace stdc::cli {
             size_t taken = 0;
             for (size_t i = 0; i < declared.size() && taken < positional.size(); ++i) {
                 const auto &argument = declared[i];
-                size_t take = 1;
-                if (argument.arity() == Argument::Remainder) {
-                    take = positional.size() - taken;
-                } else if (argument.arity() == Argument::Multiple) {
-                    // Leave one token for each required argument still to come, or a greedy
-                    // multi would eat the destination of a copy.
-                    size_t reserved = 0;
-                    for (size_t j = i + 1; j < declared.size(); ++j) {
-                        if (declared[j].isRequired()) {
-                            ++reserved;
-                        }
-                    }
-                    size_t available = positional.size() - taken;
-                    take = available > reserved ? available - reserved : 1;
-                }
-                take = std::min(take, positional.size() - taken);
+                size_t take =
+                    std::min(take_for(declared, i, positional.size() - taken),
+                             positional.size() - taken);
 
                 const std::string where = "<" + argument.displayName() + ">";
                 for (size_t k = 0; k < take; ++k) {

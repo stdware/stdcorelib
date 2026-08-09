@@ -237,7 +237,8 @@ namespace stdc::cli {
         enum Arity {
             /// Exactly one.
             Single,
-            /// One or more. Leaves enough tokens for the required arguments after it.
+            /// One or more, also called greedy. Leaves enough tokens for the required arguments
+            /// after it, so \c copy \c \<src\>... \c \<dest\> works.
             Multiple,
             /// Everything left, including anything that looks like an option.
             Remainder,
@@ -259,10 +260,12 @@ namespace stdc::cli {
         }
         inline Argument &required(bool on = true) {
             _required = on;
+            assertDefaultIsUsable();
             return *this;
         }
         inline Argument &optional(bool on = true) {
             _required = !on;
+            assertDefaultIsUsable();
             return *this;
         }
         /// The value the result gives when the argument was not given. Stored as text and
@@ -397,6 +400,10 @@ namespace stdc::cli {
             if (!_hasDefault) {
                 return;
             }
+            // A default is what stands in where nothing was given, and an argument that has to
+            // be given is never not given, so the two together say opposite things and the
+            // default is the half that never happens.
+            assert(!_required && "an argument that is required cannot also have a default value");
             assert((!_type.check || _type.check(_default)) &&
                    "the default value of this argument is not of the type it declared");
             assert((_expected.empty() ||
@@ -526,6 +533,11 @@ namespace stdc::cli {
             _required = on;
             return *this;
         }
+        /// Whether a value may be stuck to the spelling, \c -Dfoo rather than \c -D \c foo.
+        ///
+        /// \note A permission rather than a promise. The value goes into the option's one
+        ///       argument, so an option that takes none, takes an optional one, or takes more
+        ///       than one is never matched this way whatever is set here.
         inline Option &shortMatch(ShortMatch rule) {
             _shortMatch = rule;
             return *this;
@@ -544,10 +556,14 @@ namespace stdc::cli {
         }
         /// How many times it may be given, zero meaning without limit. The last argument added is
         /// the one that repeats.
+        /// \pre \a maxOccurrence is not negative. A negative is not a smaller limit, it is one
+        ///      the count can never reach, which reads back as no limit at all.
         inline Option &multi(int maxOccurrence = 0) {
+            assert(maxOccurrence >= 0 && "an option cannot be given a negative number of times");
             _maxOccurrence = maxOccurrence;
             return *this;
         }
+
 
         inline const std::vector<std::string> &tokens() const {
             return _tokens;
