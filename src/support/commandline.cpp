@@ -1324,12 +1324,26 @@ namespace stdc::cli {
 
                 // How many are here to be had, which is up to the next token that is somebody's
                 // option, and then how many of those are this argument's to take.
-                size_t available = 0;
-                while (pos + available < tokens.size()) {
-                    const auto &ahead = tokens[pos + available];
-                    if (looksLikeOption(ahead) && lookup(ahead) != nullptr) {
-                        break;
+                // What this argument's run stops at, and it is one question. A token that is
+                // somebody's option is never quietly eaten as a value, not even by an argument
+                // that has to have one: saying "-o needs a value" is worth more than taking
+                // --force and leaving the reader to work out where it went. The terminator is
+                // the same thing said more strongly, so it stops the run too, and it used to
+                // walk straight into a greedy one along with everything after it.
+                //
+                // Only a declared option counts, so a negative number is a value like any other
+                // rather than an option nobody has heard of. Writing -o=--force, or putting --
+                // first, is how a value spelled like an option is forced.
+                const auto &ends_the_run = [this](const std::string &token) {
+                    if (!saw_terminator && token == "--") {
+                        return true;
                     }
+                    return looksLikeOption(token) && lookup(token) != nullptr;
+                };
+
+                size_t available = 0;
+                while (pos + available < tokens.size() &&
+                       !ends_the_run(tokens[pos + available])) {
                     ++available;
                 }
                 size_t take = take_for(option->arguments(), i, available);
@@ -1337,14 +1351,7 @@ namespace stdc::cli {
                 bool took_any = false;
                 for (size_t count = 0; count < take && pos < tokens.size(); ++count) {
                     const auto &token = tokens[pos];
-                    // A token that is somebody's option is never quietly eaten as a value, not
-                    // even by an argument that has to have one. Saying "-o needs a value" is
-                    // worth more than taking --force and leaving the reader to work out where
-                    // it went. Writing -o=--force or putting -- first is how it is forced.
-                    //
-                    // Only a declared option counts, so a negative number is a value like any
-                    // other rather than an option nobody has heard of.
-                    if (looksLikeOption(token) && lookup(token) != nullptr) {
+                    if (ends_the_run(token)) {
                         break;
                     }
                     if (!accepts(argument, token, where)) {

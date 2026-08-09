@@ -743,6 +743,43 @@ BOOST_AUTO_TEST_CASE(test_double_dash_ends_the_options) {
     BOOST_CHECK(result.values(0) == std::vector<std::string>({"-f", "--not-an-option"}));
 }
 
+// The terminator against an option whose own argument is greedy. Each of those was covered and
+// the two were never crossed, and the greedy run stopped at any declared option while walking
+// straight over the one token that exists to say stop.
+BOOST_AUTO_TEST_CASE(test_the_terminator_ends_a_greedy_option_too) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("dest"))
+                      .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()))
+                      .addOption(Option({"-v"}, "Say more")));
+
+    // What it always did for a declared option, for contrast.
+    auto stopped = ok(parser, {"-f", "a", "b", "-v", "dest"});
+    BOOST_CHECK(must(stopped.option("-f")->values<std::string>(0)) ==
+                std::vector<std::string>({"a", "b"}));
+    BOOST_CHECK_EQUAL(must(stopped.value(0)), "dest");
+
+    // And now for the terminator, which had been taken as a value along with everything after.
+    auto ended = ok(parser, {"-f", "a", "b", "--", "dest"});
+    BOOST_CHECK(must(ended.option("-f")->values<std::string>(0)) ==
+                std::vector<std::string>({"a", "b"}));
+    BOOST_CHECK_EQUAL(must(ended.value(0)), "dest");
+
+    // What follows it is a value even where it is spelled like an option.
+    auto forced = ok(parser, {"-f", "a", "--", "-v"});
+    BOOST_CHECK(must(forced.option("-f")->values<std::string>(0)) ==
+                std::vector<std::string>({"a"}));
+    BOOST_CHECK_EQUAL(must(forced.value(0)), "-v");
+    BOOST_CHECK(!forced.option("-v").has_value());
+
+    // One rule, so an argument that has to have a value does not take it either. getopt would
+    // hand it the terminator, and this library already parts from that for a declared option,
+    // where saying the value is missing beats eating --force and leaving nobody the wiser.
+    Parser single(Command("prog").addOption(Option({"-o"}, "Out").arg("dir")));
+    bad(single, {"-o", "--"}, ParseResult::MissingOptionArgument);
+    // A negative number is still a value, since it is nobody's option.
+    BOOST_CHECK_EQUAL(must(ok(single, {"-o", "-5"}).valueForOption("-o")), "-5");
+}
+
 BOOST_AUTO_TEST_CASE(test_subcommands) {
     Parser parser(Command("prog").addCommands({
         Command("copy", "Copy").addArgument(Argument("src")),

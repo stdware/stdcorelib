@@ -85,6 +85,25 @@
 /// \c invoke() reports a parse that failed, answers \c --help and \c --version, and otherwise
 /// runs the handler of the command that was reached. Its return value is what \c main returns.
 ///
+/// \section cli_shape What a command line looks like
+///
+/// \verbatim
+///     prog  remote add   --force file.txt -j 4
+///           \________/   \_____________________/
+///            the path      everything it takes, in any order among themselves
+/// \endverbatim
+///
+/// The names come first and nothing goes between them. A command line names the command it
+/// wants by naming each one down to it, and the first token that is not one of those names ends
+/// the path and settles what was reached. Everything after belongs to that command: its own
+/// options, the ones marked Option::recursive() by the commands above it, and its arguments,
+/// with no order among them beyond what a greedy argument forces.
+///
+/// So \c prog \c --plain \c sub is an error rather than a way to reach \c sub, even where the
+/// root declares \c --plain. This is SysCmdLine's rule and it is not git's, whose root options
+/// go before the subcommand name. Option::recursive() is how an option of one command is
+/// written on a line that reached another.
+///
 /// Changing the help text is a ladder, and a program climbs only as far as it needs to. See
 /// \ref cli_help.
 
@@ -290,8 +309,14 @@ namespace stdc::cli {
             assertDefaultIsUsable();
             return *this;
         }
+        /// What this argument accepts beyond being readable as its type.
+        ///
+        /// \pre It accepts defaultValue(), where there is one. Only what a command line wrote is
+        ///      put past it while parsing, so a default it refuses would be handed back without
+        ///      ever being asked about.
         inline Argument &validate(Validator validator) {
             _validator = std::move(validator);
+            assertDefaultIsUsable();
             return *this;
         }
         inline Argument &nargs(Arity arity) {
@@ -410,6 +435,14 @@ namespace stdc::cli {
             assert((_expected.empty() ||
                     std::find(_expected.begin(), _expected.end(), _default) != _expected.end()) &&
                    "the default value of this argument is not one of the values it expects");
+            // A validator says what this argument accepts, and a default is a value it takes,
+            // so a default the validator turns down is one the argument was told to refuse and
+            // hands back anyway. Only what was written is put past it while parsing.
+            assert((!_validator || [this] {
+                       std::string ignored;
+                       return _validator(_default, &ignored);
+                   }()) &&
+                   "the default value of this argument is one its validator refuses");
         }
 
         std::string _name;

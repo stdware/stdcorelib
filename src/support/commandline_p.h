@@ -17,6 +17,28 @@ namespace stdc::cli::detail {
         return ignore_case ? str::strcasecmp(a, b) == 0 : a == b;
     }
 
+    /// The spellings of \a option that a value may be stuck to, which is what the parser tries
+    /// once an exact lookup has failed. Mirrors what readOption() will accept.
+    inline std::vector<std::string_view> sticky_spellings(const Option &option) {
+        std::vector<std::string_view> res;
+        if (option.shortMatch() == Option::NoShortMatch || option.arguments().size() != 1 ||
+            !option.arguments().front().isRequired()) {
+            return res;
+        }
+        for (const auto &spelling : option.tokens()) {
+            if (option.shortMatch() != Option::ShortMatchAll && spelling.size() != 2) {
+                continue;
+            }
+            if (option.shortMatch() == Option::ShortMatchSingleLetter &&
+                !(spelling.size() > 1 && ((spelling[1] >= 'a' && spelling[1] <= 'z') ||
+                                          (spelling[1] >= 'A' && spelling[1] <= 'Z')))) {
+                continue;
+            }
+            res.push_back(spelling);
+        }
+        return res;
+    }
+
     /// \a command's own names against \a inherited, then the same for what is under it, carrying
     /// whatever it declares recursive down with it.
     inline bool unambiguous_under(const Command &command, std::vector<const Option *> inherited,
@@ -40,6 +62,35 @@ namespace stdc::cli::detail {
         }
         for (const auto *option : inherited) {
             if (!take(*option)) {
+                return false;
+            }
+        }
+
+        // A value stuck to a spelling is matched by walking the options and taking the first
+        // whose spelling the token starts with. Where one such spelling is the start of another,
+        // -D and -Da with -Dabc, which is taken depends on the order they were declared in and
+        // neither is more right than the other.
+        std::vector<std::string_view> sticky;
+        const auto &takeSticky = [&sticky, ignoreOptionCase](const Option &option) {
+            for (auto spelling : sticky_spellings(option)) {
+                for (const auto &taken : sticky) {
+                    const auto &shorter = taken.size() < spelling.size() ? taken : spelling;
+                    const auto &longer = taken.size() < spelling.size() ? spelling : taken;
+                    if (same_name(shorter, longer.substr(0, shorter.size()), ignoreOptionCase)) {
+                        return false;
+                    }
+                }
+                sticky.push_back(spelling);
+            }
+            return true;
+        };
+        for (const auto &option : command.options()) {
+            if (!takeSticky(option)) {
+                return false;
+            }
+        }
+        for (const auto *option : inherited) {
+            if (!takeSticky(*option)) {
                 return false;
             }
         }
