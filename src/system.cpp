@@ -223,7 +223,7 @@ namespace stdc {
                 if (i != 0)
                     cmdLine += ' ';
 
-                if (args[i].find_first_of(" \t") != std::wstring::npos) {
+                if (args[i].find_first_of(" \t") != std::string::npos) {
                     std::string tmp = "\"";
                     for (const auto &c : args[i]) {
                         if (c == '"') {
