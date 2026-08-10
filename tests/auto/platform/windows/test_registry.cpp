@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 #include <algorithm>
+#include <type_traits>
+#include <utility>
 
 #include <stdcorelib/platform/windows/registry.h>
 #include <stdcorelib/scope_guard.h>
@@ -8,6 +10,78 @@
 #include <boost/test/unit_test.hpp>
 
 using namespace stdc::windows;
+
+namespace {
+
+    template <class T, class = void>
+    struct can_read_binary : std::false_type {};
+
+    template <class T>
+    struct can_read_binary<T, std::void_t<decltype(std::declval<T>().toBinary())>>
+        : std::true_type {};
+
+    template <class T, class = void>
+    struct can_read_string_view : std::false_type {};
+
+    template <class T>
+    struct can_read_string_view<T, std::void_t<decltype(std::declval<T>().toStringView())>>
+        : std::true_type {};
+
+    template <class T, class = void>
+    struct can_read_string_list : std::false_type {};
+
+    template <class T>
+    struct can_read_string_list<T, std::void_t<decltype(std::declval<T>().toStringList())>>
+        : std::true_type {};
+
+    template <class T, class = void>
+    struct can_enum_keys : std::false_type {};
+
+    template <class T>
+    struct can_enum_keys<T, std::void_t<decltype(std::declval<T>().enumKeys())>>
+        : std::true_type {};
+
+    template <class T, class = void>
+    struct can_enum_keys_with_error : std::false_type {};
+
+    template <class T>
+    struct can_enum_keys_with_error<
+        T, std::void_t<decltype(std::declval<T>().enumKeys(std::declval<std::error_code &>()))>>
+        : std::true_type {};
+
+    template <class T, class = void>
+    struct can_enum_values : std::false_type {};
+
+    template <class T>
+    struct can_enum_values<T, std::void_t<decltype(std::declval<T>().enumValues())>>
+        : std::true_type {};
+
+    template <class T, class = void>
+    struct can_enum_values_with_error : std::false_type {};
+
+    template <class T>
+    struct can_enum_values_with_error<
+        T, std::void_t<decltype(std::declval<T>().enumValues(std::declval<std::error_code &>()))>>
+        : std::true_type {};
+
+    static_assert(can_read_binary<const RegValue &>::value);
+    static_assert(!can_read_binary<RegValue &&>::value);
+    static_assert(can_read_string_view<const RegValue &>::value);
+    static_assert(!can_read_string_view<RegValue &&>::value);
+    static_assert(can_read_string_list<const RegValue &>::value);
+    static_assert(!can_read_string_list<RegValue &&>::value);
+    static_assert(std::is_same_v<decltype(std::declval<RegValue &&>().toString()), std::wstring>);
+
+    static_assert(can_enum_keys<const RegKey &>::value);
+    static_assert(!can_enum_keys<RegKey &&>::value);
+    static_assert(can_enum_keys_with_error<const RegKey &>::value);
+    static_assert(!can_enum_keys_with_error<RegKey &&>::value);
+    static_assert(can_enum_values<const RegKey &>::value);
+    static_assert(!can_enum_values<RegKey &&>::value);
+    static_assert(can_enum_values_with_error<const RegKey &>::value);
+    static_assert(!can_enum_values_with_error<RegKey &&>::value);
+
+}
 
 BOOST_AUTO_TEST_SUITE(test_registry)
 
@@ -530,6 +604,11 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
         BOOST_CHECK(moved.toStringList().vec() == TEST_STRING_LIST_VALUE);
         BOOST_CHECK(moved == original);
     }
+
+    // A temporary can return its string by value. Its view readers are rejected by the static
+    // assertions above because their storage would disappear with the RegValue.
+    std::wstring fromTemporary = RegValue(std::wstring(128, L'x')).toString();
+    BOOST_CHECK(fromTemporary == std::wstring(128, L'x'));
 }
 
 BOOST_AUTO_TEST_CASE(test_regkey) {

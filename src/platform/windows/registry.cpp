@@ -264,7 +264,7 @@ namespace stdc::windows {
 
     RegValue &RegValue::operator=(RegValue &&RHS) noexcept = default;
 
-    array_view<uint8_t> RegValue::toBinary() const {
+    array_view<uint8_t> RegValue::toBinary() const & {
         if (!isBinary()) {
             return {};
         }
@@ -286,7 +286,7 @@ namespace stdc::windows {
         return d.qw;
     }
 
-    const std::wstring &RegValue::toString() const {
+    const std::wstring &RegValue::toString() const & {
         static std::wstring empty;
 
         if (isStringList()) {
@@ -302,7 +302,11 @@ namespace stdc::windows {
         return empty;
     }
 
-    array_view<std::wstring> RegValue::toStringList() const {
+    std::wstring RegValue::toString() && {
+        return static_cast<const RegValue &>(*this).toString();
+    }
+
+    array_view<std::wstring> RegValue::toStringList() const & {
         if (!isStringList()) {
             return {};
         }

@@ -72,16 +72,20 @@ namespace stdc::windows {
             return t;
         }
 
-        array_view<uint8_t> toBinary() const;
+        array_view<uint8_t> toBinary() const &;
+        array_view<uint8_t> toBinary() const && = delete;
         int32_t toInt32() const;
         inline uint32_t toUInt32() const;
         int64_t toInt64() const;
         inline uint64_t toUInt64() const;
-        const std::wstring &toString() const;
-        inline std::wstring_view toStringView() const {
+        const std::wstring &toString() const &;
+        std::wstring toString() &&;
+        inline std::wstring_view toStringView() const & {
             return std::wstring_view(toString());
         }
-        array_view<std::wstring> toStringList() const;
+        std::wstring_view toStringView() const && = delete;
+        array_view<std::wstring> toStringList() const &;
+        array_view<std::wstring> toStringList() const && = delete;
         std::wstring toExpandString() const;
         std::wstring toLink() const;
 
@@ -592,6 +596,7 @@ namespace stdc::windows {
         /// \warning An error stops the traversal where it stands and the loop simply ends, so a
         ///          partial listing reads exactly like a complete one. Check \a ec after the
         ///          loop, not inside it.
+        /// \warning The range borrows this key and, when supplied, \a ec. Both must outlive it.
         ///
         /// \code
         ///   std::error_code ec;
@@ -604,26 +609,30 @@ namespace stdc::windows {
         /// \endcode
         ///
         /// \sa enumValues()
-        inline key_enumerator enumKeys() const {
+        inline key_enumerator enumKeys() const & {
             return key_enumerator(this, nullptr);
         }
+        key_enumerator enumKeys() const && = delete;
 
-        inline key_enumerator enumKeys(std::error_code &ec) const {
+        inline key_enumerator enumKeys(std::error_code &ec) const & {
             return key_enumerator(this, &ec);
         }
+        key_enumerator enumKeys(std::error_code &ec) const && = delete;
 
         /// The same over the values.
         ///
         /// \param query whether to read each value along with its name, which costs a second
         ///        registry call per entry and is wasted when only the names are wanted
         /// \sa enumKeys(), for the error handling this shares
-        inline value_enumerator enumValues(bool query = false) const {
+        inline value_enumerator enumValues(bool query = false) const & {
             return value_enumerator(this, nullptr, query);
         }
+        value_enumerator enumValues(bool query = false) const && = delete;
 
-        inline value_enumerator enumValues(std::error_code &ec, bool query = false) const {
+        inline value_enumerator enumValues(std::error_code &ec, bool query = false) const & {
             return value_enumerator(this, &ec, query);
         }
+        value_enumerator enumValues(std::error_code &ec, bool query = false) const && = delete;
 
     protected:
         HKEY _hkey;
