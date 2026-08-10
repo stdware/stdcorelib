@@ -558,6 +558,21 @@ BOOST_AUTO_TEST_CASE(test_a_console_is_measured_by_its_window_not_its_buffer) {
     BOOST_CHECK_EQUAL(stdc::console::detail::columns_of(dimensions(80, 7, 7)), 1);
 }
 
+BOOST_AUTO_TEST_CASE(test_legacy_console_attributes) {
+    using console::detail::attributes;
+    using console::detail::legacy_attributes;
+
+    const WORD initial = FOREGROUND_GREEN | BACKGROUND_BLUE;
+    BOOST_CHECK_EQUAL(legacy_attributes({nostyle, red, nocolor}, initial),
+                      WORD(FOREGROUND_RED | BACKGROUND_BLUE));
+    BOOST_CHECK_EQUAL(legacy_attributes({bold, red, nocolor}, initial),
+                      WORD(FOREGROUND_RED | FOREGROUND_INTENSITY | BACKGROUND_BLUE));
+    BOOST_CHECK_EQUAL(legacy_attributes({bold, nocolor, nocolor}, initial),
+                      WORD(FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_BLUE));
+    BOOST_CHECK_EQUAL(legacy_attributes({italic | underline, nocolor, lightred}, initial),
+                      WORD(FOREGROUND_GREEN | BACKGROUND_RED | BACKGROUND_INTENSITY));
+}
+
 #endif // _WIN32
 
 #ifndef _WIN32

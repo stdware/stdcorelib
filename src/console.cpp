@@ -271,94 +271,22 @@ namespace stdc {
 
         public:
             void change(int style, int fg, int bg) override {
-                (void) style;
-
-                WORD winColor = 0;
-                bool needSet = false;
-                if (fg != _fg) {
-                    _fg = fg;
-                    needSet = true;
-
-                    if (fg != console::nocolor) {
-                        winColor |= (fg & console::intensified) ? FOREGROUND_INTENSITY : 0;
-                        switch (fg & 0xF) {
-                            case console::red:
-                                winColor |= FOREGROUND_RED;
-                                break;
-                            case console::green:
-                                winColor |= FOREGROUND_GREEN;
-                                break;
-                            case console::blue:
-                                winColor |= FOREGROUND_BLUE;
-                                break;
-                            case console::yellow:
-                                winColor |= FOREGROUND_RED | FOREGROUND_GREEN;
-                                break;
-                            case console::purple:
-                                winColor |= FOREGROUND_RED | FOREGROUND_BLUE;
-                                break;
-                            case console::cyan:
-                                winColor |= FOREGROUND_GREEN | FOREGROUND_BLUE;
-                                break;
-                            case console::white:
-                                winColor |= FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
-                            default:
-                                break;
-                        }
-
-                        // emulate bold effect
-                        if (style & console::bold) {
-                            winColor |= FOREGROUND_INTENSITY;
-                        }
+                console::detail::attributes next{style, fg, bg};
+                if (next != current()) {
+                    set_current(next);
+                    if (_console != INVALID_HANDLE_VALUE) {
+                        ::SetConsoleTextAttribute(
+                            _console, console::detail::legacy_attributes(next, _csbi.wAttributes));
                     }
-                }
-
-                if (bg != _bg) {
-                    _bg = bg;
-                    needSet = true;
-
-                    if (bg != console::nocolor) {
-                        winColor |= (bg & console::intensified) ? BACKGROUND_INTENSITY : 0;
-                        switch (bg & 0xF) {
-                            case console::red:
-                                winColor |= BACKGROUND_RED;
-                                break;
-                            case console::green:
-                                winColor |= BACKGROUND_GREEN;
-                                break;
-                            case console::blue:
-                                winColor |= BACKGROUND_BLUE;
-                                break;
-                            case console::yellow:
-                                winColor |= BACKGROUND_RED | BACKGROUND_GREEN;
-                                break;
-                            case console::purple:
-                                winColor |= BACKGROUND_RED | BACKGROUND_BLUE;
-                                break;
-                            case console::cyan:
-                                winColor |= BACKGROUND_GREEN | BACKGROUND_BLUE;
-                                break;
-                            case console::white:
-                                winColor |= BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE;
-                            default:
-                                break;
-                        }
-                    }
-                }
-
-                if (needSet && _console != INVALID_HANDLE_VALUE) {
-                    ::SetConsoleTextAttribute(_console, winColor);
                 }
             }
 
             void reset() override {
-                if (_fg != _fg_init || _bg != _bg_init) {
+                if (current() != console::detail::attributes{}) {
                     if (_console != INVALID_HANDLE_VALUE) {
                         ::SetConsoleTextAttribute(_console, _csbi.wAttributes);
                     }
-
-                    _fg = _fg_init;
-                    _bg = _bg_init;
+                    set_current({});
                 }
             }
 
@@ -509,6 +437,54 @@ namespace stdc {
         namespace detail {
 
 #ifdef _WIN32
+            WORD legacy_attributes(const attributes &attrs, WORD initial) {
+                const auto &color_bits = [](int color, WORD redBit, WORD greenBit, WORD blueBit) {
+                    switch (color & 0xF) {
+                        case red:
+                            return redBit;
+                        case green:
+                            return greenBit;
+                        case blue:
+                            return blueBit;
+                        case yellow:
+                            return WORD(redBit | greenBit);
+                        case purple:
+                            return WORD(redBit | blueBit);
+                        case cyan:
+                            return WORD(greenBit | blueBit);
+                        case white:
+                            return WORD(redBit | greenBit | blueBit);
+                        default:
+                            return WORD(0);
+                    }
+                };
+
+                WORD result = initial;
+                if (attrs.fg != nocolor) {
+                    constexpr WORD mask = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE |
+                                          FOREGROUND_INTENSITY;
+                    result &= ~mask;
+                    result |= color_bits(attrs.fg, FOREGROUND_RED, FOREGROUND_GREEN,
+                                         FOREGROUND_BLUE);
+                    if ((attrs.fg & intensified) || (attrs.style & bold)) {
+                        result |= FOREGROUND_INTENSITY;
+                    }
+                } else if (attrs.style & bold) {
+                    result |= FOREGROUND_INTENSITY;
+                }
+                if (attrs.bg != nocolor) {
+                    constexpr WORD mask = BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE |
+                                          BACKGROUND_INTENSITY;
+                    result &= ~mask;
+                    result |= color_bits(attrs.bg, BACKGROUND_RED, BACKGROUND_GREEN,
+                                         BACKGROUND_BLUE);
+                    if (attrs.bg & intensified) {
+                        result |= BACKGROUND_INTENSITY;
+                    }
+                }
+                return result;
+            }
+
             int columns_of(const CONSOLE_SCREEN_BUFFER_INFO &info) {
                 return int(info.srWindow.Right) - int(info.srWindow.Left) + 1;
             }
@@ -907,7 +883,8 @@ namespace stdc {
                         break;
                     }
                     case varexp_part_type::nested_variable:
-                        break; // invalid
+                        // Nested ${} is not supported in color markup, unlike varexp().
+                        break;
                 }
             }
             return ret;

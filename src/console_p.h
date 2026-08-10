@@ -41,6 +41,10 @@ namespace stdc::console::detail {
     STDC_EXPORT std::string sgr_reset_sequence(const attributes &from);
 
 #ifdef _WIN32
+    /// Returns the legacy console attribute word for \a attrs, preserving unspecified colors from
+    /// \a initial.
+    STDC_EXPORT WORD legacy_attributes(const attributes &attrs, WORD initial);
+
     /// How many columns a console of these dimensions has.
     ///
     /// The visible window, not \c dwSize, which is the scrollback buffer. A buffer is routinely

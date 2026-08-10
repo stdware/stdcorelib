@@ -270,6 +270,7 @@ namespace stdc {
         ///
         /// The alternative to threading \a style, \a fg and \a bg arguments through every call.
         /// A group holds one or more names separated by spaces, and \c $$ writes a literal \c $.
+        /// Nested \c ${...} names are not supported and are ignored.
         /// The names are:
         ///   \li a color: \c red, \c green, \c blue, \c yellow, \c purple, \c cyan, \c white,
         ///       \c black or \c nocolor, each also available with a \c light prefix
