@@ -153,10 +153,9 @@
 ///
 /// \subsection cli_shape_trees What a tree should not be
 ///
-/// These are mistakes in the program rather than in what a user typed, so they are asserted
-/// rather than reported, and every one of them is asserted by the time parse() returns in a debug
-/// build. Argument::canFollow(), Option::canJoin() and Command::canAddCommand() are public so a
-/// program can ask instead of finding out.
+/// These are mistakes in the program rather than in what a user typed. parse() asserts that the
+/// whole tree is valid in a debug build. A program that builds one dynamically may call
+/// Parser::validate() and report the reason itself.
 ///
 /// An argument should not
 /// \li have no name, or share a name with another argument beside it, a command's own and an
@@ -174,6 +173,7 @@
 /// An option should not
 /// \li have no spelling, or one shorter than two characters, or one starting with neither \c -
 ///     nor \c /
+/// \li repeat one of its own spellings
 /// \li share a spelling with another option of the same command
 /// \li be required or take arguments where its prior() is Option::AutoSetWhenNoSymbols, since
 ///     nobody writes one of those and there is nothing to give it
@@ -184,8 +184,8 @@
 /// \li hold an Argument::Remainder and an option whose argument is greedy, both wanting the rest
 ///     of the line where only one of them can be written first
 ///
-/// A CommandCatalogue should not name one thing twice, in one group or across two of the same
-/// kind.
+/// A CommandCatalogue should not name something its command does not contain, or name one thing
+/// twice, in one group or across two of the same kind.
 ///
 /// And a tree should not, which is only visible once it is one
 /// \li have two options in scope at one command answering to one spelling, the recursive ones of
@@ -390,6 +390,10 @@ namespace stdc::cli {
         };
 
         /// Answers whether \a token is acceptable, and says why in \a error when it is not.
+        ///
+        /// It may be called repeatedly with the same token, including while the command tree is
+        /// validated. It should have no observable side effects and should give the same answer
+        /// without depending on how many times it has been called or on mutable external state.
         using Validator = std::function<bool(std::string_view token, std::string *error)>;
 
         Argument() = default;
@@ -405,12 +409,10 @@ namespace stdc::cli {
         }
         inline Argument &required(bool on = true) {
             _required = on;
-            assertDefaultIsUsable();
             return *this;
         }
         inline Argument &optional(bool on = true) {
             _required = !on;
-            assertDefaultIsUsable();
             return *this;
         }
         /// The value the result gives when the argument was not given. Stored as text and
@@ -421,7 +423,6 @@ namespace stdc::cli {
         inline Argument &defaultValue(std::string value) {
             _default = std::move(value);
             _hasDefault = true;
-            assertDefaultIsUsable();
             return *this;
         }
         /// The only values this accepts, for an argument that is a choice between a few
@@ -430,8 +431,6 @@ namespace stdc::cli {
         /// \pre Every one of them is readable as whatever type<T>() declared.
         inline Argument &expect(std::vector<std::string> values) {
             _expected = std::move(values);
-            assertExpectedMatchType();
-            assertDefaultIsUsable();
             return *this;
         }
         /// What this argument accepts beyond being readable as its type.
@@ -441,7 +440,6 @@ namespace stdc::cli {
         ///      ever being asked about.
         inline Argument &validate(Validator validator) {
             _validator = std::move(validator);
-            assertDefaultIsUsable();
             return *this;
         }
         inline Argument &nargs(Arity arity) {
@@ -459,8 +457,6 @@ namespace stdc::cli {
         template <class T>
         inline Argument &type() {
             _type = detail::type_info_for<T>();
-            assertExpectedMatchType();
-            assertDefaultIsUsable();
             return *this;
         }
 
@@ -497,79 +493,6 @@ namespace stdc::cli {
         }
 
     private:
-        // Any of the three may be written first, so each calls what it can now check.
-        inline void assertExpectedMatchType() const {
-            if (!_type.check) {
-                return;
-            }
-            for (const auto &item : _expected) {
-                assert(_type.check(item) &&
-                       "an expected value of this argument is not of the type it declared");
-                (void) item;
-            }
-        }
-
-    public:
-        /// Whether \a argument may be added after \a arguments, which is what every place that
-        /// takes one asserts.
-        ///
-        /// Public and callable rather than only asserted, since an assert is compiled out of a
-        /// release build and a rule nobody can ask about there is a rule nobody can test.
-        ///
-        /// \li it has a name, and no argument beside it has that name
-        /// \li nothing that has to be given follows one that may be left out, since a single
-        ///     token could then be meant for either
-        /// \li nothing at all follows a Remainder, which leaves nothing to follow it with
-        /// \li only something required follows a Multiple. That one leaves a token for each
-        ///     required argument after it and none for the rest, so anything else would never
-        ///     see one. \c copy \c \<src\>... \c \<dest\> is the shape this exists for.
-        static inline bool canFollow(const std::vector<Argument> &arguments,
-                                     const Argument &argument) {
-            if (argument.name().empty()) {
-                return false;
-            }
-            for (const auto &item : arguments) {
-                if (item.name() == argument.name()) {
-                    return false;
-                }
-                if (!item.isRequired() && argument.isRequired()) {
-                    return false;
-                }
-                if (item.arity() == Remainder) {
-                    return false;
-                }
-                if (item.arity() == Multiple &&
-                    (!argument.isRequired() || argument.arity() != Single)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-    private:
-        inline void assertDefaultIsUsable() const {
-            if (!_hasDefault) {
-                return;
-            }
-            // A default is what stands in where nothing was given, and an argument that has to
-            // be given is never not given, so the two together say opposite things and the
-            // default is the half that never happens.
-            assert(!_required && "an argument that is required cannot also have a default value");
-            assert((!_type.check || _type.check(_default)) &&
-                   "the default value of this argument is not of the type it declared");
-            assert((_expected.empty() ||
-                    std::find(_expected.begin(), _expected.end(), _default) != _expected.end()) &&
-                   "the default value of this argument is not one of the values it expects");
-            // A validator says what this argument accepts, and a default is a value it takes,
-            // so a default the validator turns down is one the argument was told to refuse and
-            // hands back anyway. Only what was written is put past it while parsing.
-            assert((!_validator || [this] {
-                       std::string ignored;
-                       return _validator(_default, &ignored);
-                   }()) &&
-                   "the default value of this argument is one its validator refuses");
-        }
-
         std::string _name;
         std::string _desc;
         std::string _displayName;
@@ -658,37 +581,8 @@ namespace stdc::cli {
             return arg(Argument(std::move(name), {}, required));
         }
         inline Option &arg(Argument argument) {
-            assert(Argument::canFollow(_args, argument) &&
-                   "this option cannot take that argument after the ones it has");
             _args.emplace_back(std::move(argument));
             return *this;
-        }
-
-        /// Whether \a option may be added beside \a options, which is what
-        /// Command::addOption() asserts. \sa Argument::canFollow(), on why this is public
-        ///
-        /// \li it has at least one spelling, and every one of them could be typed and told
-        ///     apart from a value
-        /// \li no spelling of it is a spelling of one already there
-        /// \li one that stands in for an empty command line is written by nobody, so it can be
-        ///     neither required nor given a value
-        static inline bool canJoin(const std::vector<Option> &options, const Option &option) {
-            if (option.tokens().empty()) {
-                return false;
-            }
-            for (const auto &token : option.tokens()) {
-                if (token.size() < 2 || (token.front() != '-' && token.front() != '/')) {
-                    return false;
-                }
-                for (const auto &item : options) {
-                    const auto &taken = item.tokens();
-                    if (std::find(taken.begin(), taken.end(), token) != taken.end()) {
-                        return false;
-                    }
-                }
-            }
-            return option.prior() != AutoSetWhenNoSymbols ||
-                   (!option.isRequired() && option.arguments().empty());
         }
         inline Option &required(bool on = true) {
             _required = on;
@@ -725,7 +619,6 @@ namespace stdc::cli {
         /// \pre \a maxOccurrence is not negative. A negative is not a smaller limit, it is one
         ///      the count can never reach, which reads back as no limit at all.
         inline Option &multi(int maxOccurrence = 0) {
-            assert(maxOccurrence >= 0 && "an option cannot be given a negative number of times");
             _maxOccurrence = maxOccurrence;
             return *this;
         }
@@ -809,43 +702,16 @@ namespace stdc::cli {
         };
 
         inline CommandCatalogue &addCommands(std::string group, std::vector<std::string> names) {
-            assert(canAddGroup(_commands, names) &&
-                   "a name in this group is in another group already");
             _commands.push_back({std::move(group), std::move(names)});
             return *this;
         }
         inline CommandCatalogue &addOptions(std::string group, std::vector<std::string> names) {
-            assert(canAddGroup(_options, names) &&
-                   "a name in this group is in another group already");
             _options.push_back({std::move(group), std::move(names)});
             return *this;
         }
         inline CommandCatalogue &addArguments(std::string group, std::vector<std::string> names) {
-            assert(canAddGroup(_arguments, names) &&
-                   "a name in this group is in another group already");
             _arguments.push_back({std::move(group), std::move(names)});
             return *this;
-        }
-
-        /// Whether \a names may be added as a group beside \a groups, which is what the three
-        /// above assert. \sa Argument::canFollow(), on why this is public
-        ///
-        /// A name in two groups would be listed under the first that claims it and silently
-        /// missing from the other, which reads as the catalogue having been ignored.
-        static inline bool canAddGroup(const std::vector<Group> &groups,
-                                       const std::vector<std::string> &names) {
-            for (size_t i = 0; i < names.size(); ++i) {
-                if (std::find(names.begin(), names.begin() + i, names[i]) != names.begin() + i) {
-                    return false;
-                }
-                for (const auto &group : groups) {
-                    if (std::find(group.members.begin(), group.members.end(), names[i]) !=
-                        group.members.end()) {
-                        return false;
-                    }
-                }
-            }
-            return true;
         }
 
         inline const std::vector<Group> &commandGroups() const {
@@ -881,8 +747,6 @@ namespace stdc::cli {
         }
 
         inline Command &addArgument(Argument argument) {
-            assert(Argument::canFollow(_args, argument) &&
-                   "this command cannot take that argument after the ones it has");
             _args.emplace_back(std::move(argument));
             return *this;
         }
@@ -893,8 +757,6 @@ namespace stdc::cli {
             return *this;
         }
         inline Command &addOption(Option option) {
-            assert(Option::canJoin(_options, option) &&
-                   "this option cannot be spelled, or is spelled the way one already here is");
             _options.emplace_back(std::move(option));
             return *this;
         }
@@ -905,8 +767,6 @@ namespace stdc::cli {
             return *this;
         }
         inline Command &addCommand(Command command) {
-            assert(canAddCommand(_commands, command) &&
-                   "this subcommand has no name, or the name of one already here");
             _commands.emplace_back(std::move(command));
             return *this;
         }
@@ -915,21 +775,6 @@ namespace stdc::cli {
                 addCommand(std::move(item));
             }
             return *this;
-        }
-
-        /// Whether \a command may be added beside \a commands, which is what addCommand()
-        /// asserts. \sa Argument::canFollow(), on why this is public
-        static inline bool canAddCommand(const std::vector<Command> &commands,
-                                         const Command &command) {
-            if (command.name().empty()) {
-                return false;
-            }
-            for (const auto &item : commands) {
-                if (item.name() == command.name()) {
-                    return false;
-                }
-            }
-            return true;
         }
 
         inline Command &setHandler(Handler handler) {
@@ -1573,9 +1418,9 @@ namespace stdc::cli {
 
     /// Turns arguments into a ParseResult against a command tree.
     ///
-    /// \li A subcommand is looked for after the options the root declared, so
-    ///     \c prog \c -V \c copy \c x reaches \c copy. An option belonging to the subcommand
-    ///     rather than to the root is unknown in front of it.
+    /// \li Subcommands form the first contiguous part of the line. Once an option or argument
+    ///     is read, no later token can name a subcommand. Thus \c prog \c copy \c -f \c x can
+    ///     reach \c copy, while \c prog \c -V \c copy \c x cannot.
     /// \li Positional tokens a command cannot take are an error.
     /// \li An option that needs a value will not take a token that is a declared option of the
     ///     same command. Anything else beginning with a dash is a value as it is there.
@@ -1677,16 +1522,24 @@ namespace stdc::cli {
         void setHelpFormatter(std::shared_ptr<HelpFormatter> formatter);
         const std::shared_ptr<HelpFormatter> &helpFormatter() const;
 
+        /// Checks whether the command tree can be parsed under \a parseOptions.
+        ///
+        /// \return nothing when it is valid, or a description of the first problem found
+        /// \note parse() performs this check only through an assertion. A program that accepts
+        ///       a command tree from somewhere else should call this explicitly before parsing.
+        std::optional<std::string> validate(ParseOptions parseOptions = Standard) const;
+
         /// What \a args means against the command tree.
         ///
-        /// \note A tree that could not be parsed sensibly is a mistake in the program rather
-        ///       than in what a user typed, and every such mistake is asserted by the time this
-        ///       returns in a debug build. Most are caught by the setter that makes them, and
-        ///       the ones no piece can see on its own are caught here, since only here are the
-        ///       whole tree and the matching rules both known. A release build checks none of
-        ///       it and is not meant to: a tree is written once and does not come from a user.
-        ParseResult parse(const std::vector<std::string> &args,
-                          ParseOptions parseOptions = Standard) const;
+        /// \pre validate() returns nothing. This is asserted in a debug build. A release build
+        ///      does not walk the tree before parsing.
+        /// \note A program whose command tree is built dynamically, such as from plugins,
+        ///       should call validate() explicitly before this even in a release build.
+        inline ParseResult parse(const std::vector<std::string> &args,
+                                 ParseOptions parseOptions = Standard) const {
+            assert(!validate(parseOptions).has_value() && "the command tree is invalid");
+            return parseImpl(args, parseOptions);
+        }
         /// Parses and does everything a \c main does with the answer, reporting a failure and
         /// answering a Help or Version option before any handler runs. \sa ParseResult::invoke()
         inline int invoke(const std::vector<std::string> &args, int errorCode = -1,
@@ -1710,6 +1563,9 @@ namespace stdc::cli {
         }
 
     private:
+        ParseResult parseImpl(const std::vector<std::string> &args,
+                              ParseOptions parseOptions) const;
+
         class Impl;
         std::unique_ptr<Impl> _impl;
     };

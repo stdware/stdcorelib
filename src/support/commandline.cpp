@@ -358,8 +358,8 @@ namespace stdc::cli {
                 row[0] = i;
                 for (size_t j = 1; j <= b.size(); ++j) {
                     size_t above = row[j];
-                    row[j] = std::min({row[j] + 1, row[j - 1] + 1,
-                                         diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
+                    row[j] = std::min(
+                        {row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
                     diagonal = above;
                 }
             }
@@ -496,8 +496,7 @@ namespace stdc::cli {
             res.spacing = data->spacing;
             // Zero means ask, and the answer is whatever stdout is: a terminal's width, or 80
             // columns for a pipe or a file, so help captured into one reads the same everywhere.
-            res.textWidth =
-                data->text_width > 0 ? data->text_width : console::width(stdout);
+            res.textWidth = data->text_width > 0 ? data->text_width : console::width(stdout);
             res.displayOptions = data->display_options;
             return res;
         }
@@ -708,10 +707,9 @@ namespace stdc::cli {
         /// whatever it does not mention left under \a fallback at the end. One block per group,
         /// all printed the way \a slot asks for.
         template <class T, class Name, class Line>
-        std::vector<HelpBlock> grouped(const std::vector<T> &items,
-                                       const std::vector<CommandCatalogue::Group> &groups,
-                                       const HelpBlock &slot, const std::string &fallback,
-                                       Name name, Line line) {
+        std::vector<HelpBlock>
+            grouped(const std::vector<T> &items, const std::vector<CommandCatalogue::Group> &groups,
+                    const HelpBlock &slot, const std::string &fallback, Name name, Line line) {
             std::vector<HelpBlock> res;
             std::vector<bool> taken(items.size(), false);
 
@@ -768,8 +766,7 @@ namespace stdc::cli {
         // the text.
         std::string usage_text(const HelpFormatter &formatter, const Command &command,
                                const std::vector<std::string> &path,
-                               const std::vector<Option> &inherited, int indent,
-                               int text_width) {
+                               const std::vector<Option> &inherited, int indent, int text_width) {
             std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
                 head += (i ? " " : "") + path[i];
@@ -1019,8 +1016,8 @@ namespace stdc::cli {
                 appendRun(out, block.entryStyle, entry.left);
                 if (!entry.right.empty()) {
                     auto lines = wrapped(entry.right, room);
-                    size_t padding = widest - size_t(console::display_width(entry.left)) +
-                                     size_t(sizes.spacing);
+                    size_t padding =
+                        widest - size_t(console::display_width(entry.left)) + size_t(sizes.spacing);
                     appendRun(out, {}, std::string(padding, ' '));
                     appendRun(out, block.bodyStyle, lines.front());
                     for (size_t i = 1; i < lines.size(); ++i) {
@@ -1094,8 +1091,7 @@ namespace stdc::cli {
         /// other without a dozen parameters.
         class ParserCore {
         public:
-            ParserCore(detail::parse_data *out, Parser::ParseOptions flags)
-                : r(out), flags(flags) {
+            ParserCore(detail::parse_data *out, Parser::ParseOptions flags) : r(out), flags(flags) {
             }
 
             void run(const std::vector<std::string> &args);
@@ -1678,9 +1674,8 @@ namespace stdc::cli {
             size_t taken = 0;
             for (size_t i = 0; i < declared.size() && taken < positional.size(); ++i) {
                 const auto &argument = declared[i];
-                size_t take =
-                    std::min(take_for(declared, i, positional.size() - taken),
-                             positional.size() - taken);
+                size_t take = std::min(take_for(declared, i, positional.size() - taken),
+                                       positional.size() - taken);
 
                 const std::string where = "<" + argument.displayName() + ">";
                 for (size_t k = 0; k < take; ++k) {
@@ -1703,8 +1698,8 @@ namespace stdc::cli {
                         declared.push_back(command.name());
                     }
                     failFor(ParseResult::UnknownCommand,
-                            "\"" + positional[0] + "\" is not a command of \"" +
-                                r->target->name() + "\"",
+                            "\"" + positional[0] + "\" is not a command of \"" + r->target->name() +
+                                "\"",
                             positional[0], std::move(declared));
                     return;
                 }
@@ -1848,7 +1843,8 @@ namespace stdc::cli {
         /// What a parser starts with. Shared rather than one per parser, since a plain formatter
         /// keeps nothing between calls and every method on it is const.
         const std::shared_ptr<HelpFormatter> &defaultFormatter() {
-            static const std::shared_ptr<HelpFormatter> instance = std::make_shared<HelpFormatter>();
+            static const std::shared_ptr<HelpFormatter> instance =
+                std::make_shared<HelpFormatter>();
             return instance;
         }
 
@@ -1865,27 +1861,12 @@ namespace stdc::cli {
         int text_width = 0;
         int indent = 4;
         int spacing = 4;
-
-        /// Asked where a tree arrives and again where one is parsed, since the parse options
-        /// decide whether two names differing only in case are one name and nothing before the
-        /// parse knows which way the line will be read. A release build asks nothing: the body
-        /// is the assert and nothing else, so no tree is walked.
-        static void assertNames(const Command &command, bool ignoreOptionCase = false,
-                                bool ignoreCommandCase = false) {
-            assert(detail::tree_can_be_parsed(command, ignoreOptionCase, ignoreCommandCase) &&
-                   "this command tree cannot be parsed: two names in one scope cannot be "
-                   "told apart, or a Remainder argument shares a command with a greedy option");
-            (void) command;
-            (void) ignoreOptionCase;
-            (void) ignoreCommandCase;
-        }
     };
 
     Parser::Parser() : _impl(std::make_unique<Impl>()) {
     }
 
     Parser::Parser(Command root) : _impl(std::make_unique<Impl>()) {
-        Impl::assertNames(root);
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1900,7 +1881,6 @@ namespace stdc::cli {
         // out shares this pointer and holds raw pointers into what it addresses, so assigning
         // through it leaves them all reading freed vectors. Checked: assigning through it dies
         // under ASAN in test_a_parser_is_reusable_and_its_tree_can_be_replaced.
-        Impl::assertNames(root);
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1974,11 +1954,13 @@ namespace stdc::cli {
         return _impl->formatter;
     }
 
-    ParseResult Parser::parse(const std::vector<std::string> &args,
-                              ParseOptions parseOptions) const {
-        Impl::assertNames(*_impl->root, parseOptions.test_flag(IgnoreOptionCase),
-                          parseOptions.test_flag(IgnoreCommandCase));
+    std::optional<std::string> Parser::validate(ParseOptions parseOptions) const {
+        return detail::validate_tree(*_impl->root, parseOptions.test_flag(IgnoreOptionCase),
+                                     parseOptions.test_flag(IgnoreCommandCase));
+    }
 
+    ParseResult Parser::parseImpl(const std::vector<std::string> &args,
+                                  ParseOptions parseOptions) const {
         ParseResult result;
         result._impl->root = _impl->root;
         result._impl->target = _impl->root.get();

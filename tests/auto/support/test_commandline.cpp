@@ -16,8 +16,8 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/support/commandline.h>
 
-// Private header: the whole-tree check is asserted by Parser and has no public caller, so it
-// lives beside the implementation rather than in the API.
+// Private header: the small checks that make up whole-tree validation are shared with their
+// focused tests but are not API of their own.
 #include "support/commandline_p.h"
 
 #include <boost/test/unit_test.hpp>
@@ -599,14 +599,14 @@ BOOST_AUTO_TEST_CASE(test_a_multi_argument_leaves_room_for_what_follows) {
 }
 
 // The same shape as an option's own arguments, which is where it did not work. The rule is one
-// rule and both ask for it, so a shape Argument::canFollow() allows can be written wherever
+// rule and both ask for it, so a shape detail::arguments_can_follow() allows can be written
 // arguments are declared rather than only after a command.
 BOOST_AUTO_TEST_CASE(test_an_options_multi_argument_leaves_room_for_what_follows) {
-    Parser parser(Command("prog")
-                      .addOption(Option({"--copy"}, "Copy")
-                                     .arg(Argument("src").multi())
-                                     .arg(Argument("dest")))
-                      .addOption(Option({"-v"}, "Say more")));
+    Parser parser(
+        Command("prog")
+            .addOption(
+                Option({"--copy"}, "Copy").arg(Argument("src").multi()).arg(Argument("dest")))
+            .addOption(Option({"-v"}, "Say more")));
 
     auto result = ok(parser, {"--copy", "one", "two", "three", "out"});
     auto handle = result.option("--copy");
@@ -640,14 +640,13 @@ BOOST_AUTO_TEST_CASE(test_an_options_multi_argument_leaves_room_for_what_follows
 // option went through a plain lookup while reading one accepted three spellings besides, so a
 // run walked over --out=x and -Dfoo and took them for values of what it was reading.
 BOOST_AUTO_TEST_CASE(test_a_run_stops_at_every_spelling_of_an_option) {
-    Parser parser(Command("prog")
-                      .addOption(Option({"-c"}, "Copy").arg(Argument("src").multi()))
-                      .addOption(Option({"--out"}, "Where").arg("dir"))
-                      .addOption(Option({"-D"}, "Define")
-                                     .arg("macro")
-                                     .shortMatch(Option::ShortMatchAll))
-                      .addOption(Option({"-a"}, "A"))
-                      .addOption(Option({"-b"}, "B")));
+    Parser parser(
+        Command("prog")
+            .addOption(Option({"-c"}, "Copy").arg(Argument("src").multi()))
+            .addOption(Option({"--out"}, "Where").arg("dir"))
+            .addOption(Option({"-D"}, "Define").arg("macro").shortMatch(Option::ShortMatchAll))
+            .addOption(Option({"-a"}, "A"))
+            .addOption(Option({"-b"}, "B")));
 
     const std::vector<std::string> one{"x"};
 
@@ -672,8 +671,8 @@ BOOST_AUTO_TEST_CASE(test_a_run_stops_at_every_spelling_of_an_option) {
                 std::vector<std::string>({"x", "-ab"}));
 
     // The same option written twice, each occurrence reading its own run.
-    Parser twice(Command("prog").addOption(
-        Option({"-c"}, "Copy").arg(Argument("src").multi()).multi()));
+    Parser twice(
+        Command("prog").addOption(Option({"-c"}, "Copy").arg(Argument("src").multi()).multi()));
     auto both = ok(twice, {"-c=a", "b", "-c=x", "y"});
     BOOST_CHECK_EQUAL(both.option("-c")->count(), 2);
     BOOST_CHECK(both.option("-c")->at(0).values() == std::vector<std::string>({"a", "b"}));
@@ -894,11 +893,12 @@ BOOST_AUTO_TEST_CASE(test_the_terminator_ends_a_greedy_option_too) {
 
     // A declared word does the same, and what follows it is a value even where it is spelled
     // like an option, which is the whole of what a Remainder is for.
-    Parser withRest(Command("prog")
-                        .addArgument(Argument("dest"))
-                        .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()))
-                        .addOption(Option({"--"}, "The rest")
-                                       .arg(Argument("rest").nargs(Argument::Remainder))));
+    Parser withRest(
+        Command("prog")
+            .addArgument(Argument("dest"))
+            .addOption(Option({"-f"}, "Files").arg(Argument("file").multi()))
+            .addOption(
+                Option({"--"}, "The rest").arg(Argument("rest").nargs(Argument::Remainder))));
     auto ended = ok(withRest, {"dest", "-f", "a", "b", "--", "-f", "x"});
     BOOST_CHECK(must(ended.option("-f")->values<std::string>(0)) ==
                 std::vector<std::string>({"a", "b"}));
@@ -1099,17 +1099,14 @@ BOOST_AUTO_TEST_CASE(test_the_parser_reads_the_same_a_level_down) {
                 what += " " + item;
             }
 
-            const auto &at = [&line, options](const Parser &parser,
-                                              std::vector<std::string> path) {
+            const auto &at = [&line, options](const Parser &parser, std::vector<std::string> path) {
                 path.insert(path.end(), line.begin(), line.end());
                 return parser.parse(path, options);
             };
             auto root = readBack(at(flat, {"prog"}));
-            for (const auto &deeperOne : {std::make_pair(std::vector<std::string>{"prog", "inner"},
-                                                         &deep),
-                                          std::make_pair(std::vector<std::string>{"prog", "mid",
-                                                                                 "inner"},
-                                                         &deeper)}) {
+            for (const auto &deeperOne :
+                 {std::make_pair(std::vector<std::string>{"prog", "inner"}, &deep),
+                  std::make_pair(std::vector<std::string>{"prog", "mid", "inner"}, &deeper)}) {
                 auto below = readBack(at(*deeperOne.second, deeperOne.first));
                 BOOST_CHECK_MESSAGE(root == below,
                                     "[" + what + "] reads one way at the root and another " +
@@ -1132,8 +1129,7 @@ BOOST_AUTO_TEST_CASE(test_the_prior_ladder_reads_the_same_a_level_down) {
                          .addOption(Option(Option::Help).prior(level));
         return nested ? Command("prog").addCommand(std::move(inner)) : std::move(inner);
     };
-    const auto &given = [&shaped](Option::Prior level, bool nested,
-                                  std::vector<std::string> args) {
+    const auto &given = [&shaped](Option::Prior level, bool nested, std::vector<std::string> args) {
         Parser parser(shaped(level, nested));
         std::vector<std::string> line = {"prog"};
         if (nested) {
@@ -1143,15 +1139,17 @@ BOOST_AUTO_TEST_CASE(test_the_prior_ladder_reads_the_same_a_level_down) {
         return parser.parse(line);
     };
 
-    for (auto level : {Option::NoPrior, Option::IgnoreMissingArguments,
-                       Option::IgnoreMissingSymbols, Option::AutoSetWhenNoSymbols,
-                       Option::ExclusiveToArguments, Option::ExclusiveToOptions,
-                       Option::ExclusiveToAll}) {
+    for (auto level :
+         {Option::NoPrior, Option::IgnoreMissingArguments, Option::IgnoreMissingSymbols,
+          Option::AutoSetWhenNoSymbols, Option::ExclusiveToArguments, Option::ExclusiveToOptions,
+          Option::ExclusiveToAll}) {
         const std::string at = "prior level " + std::to_string(int(level));
-        for (const auto &args : {std::vector<std::string>{},
-                                 std::vector<std::string>{"--help"},
-                                 std::vector<std::string>{"--help", "-j", "4"},
-                                 std::vector<std::string>{"x"}}) {
+        for (const auto &args : {
+                 std::vector<std::string>{},
+                 std::vector<std::string>{"--help"},
+                 std::vector<std::string>{"--help", "-j", "4"},
+                 std::vector<std::string>{"x"}
+        }) {
             auto flat = given(level, false, args);
             auto deep = given(level, true, args);
 
@@ -1163,7 +1161,7 @@ BOOST_AUTO_TEST_CASE(test_the_prior_ladder_reads_the_same_a_level_down) {
                                 what + ": valid at the root and not a level down, or the other "
                                        "way about");
             BOOST_CHECK_MESSAGE(int(flat.error()) == int(deep.error()), what + ": a different "
-                                                                              "error each way");
+                                                                               "error each way");
             BOOST_CHECK_MESSAGE(flat.isRoleSet(Option::Help) == deep.isRoleSet(Option::Help),
                                 what + ": the option was set at one depth and not the other");
         }
@@ -1176,13 +1174,14 @@ BOOST_AUTO_TEST_CASE(test_the_prior_ladder_reads_the_same_a_level_down) {
 // addHelpOption(true) on a subcommand was dead.
 BOOST_AUTO_TEST_CASE(test_prior_sets_itself_on_a_bare_subcommand) {
     const auto &tree = [] {
-        return Parser(Command("prog")
-                          .addOption(Option(Option::Version).prior(Option::AutoSetWhenNoSymbols))
-                          .addCommand(Command("build")
-                                          .addArgument(Argument("target"))
-                                          .addOption(Option({"-j"}, "Jobs").arg("n"))
-                                          .addOption(Option(Option::Help)
-                                                         .prior(Option::AutoSetWhenNoSymbols))));
+        return Parser(
+            Command("prog")
+                .addOption(Option(Option::Version).prior(Option::AutoSetWhenNoSymbols))
+                .addCommand(
+                    Command("build")
+                        .addArgument(Argument("target"))
+                        .addOption(Option({"-j"}, "Jobs").arg("n"))
+                        .addOption(Option(Option::Help).prior(Option::AutoSetWhenNoSymbols))));
     };
 
     // A subcommand with nothing after it, which is the case that never worked. Its required
@@ -1255,17 +1254,16 @@ BOOST_AUTO_TEST_CASE(test_an_exclusive_option_reads_what_was_given_not_what_stoo
 
     // ExclusiveToAll forbids both, and the option it was given beside is what it should name.
     // Reading the defaults made this the argument complaint, which is the wrong one.
-    bad(build(Option::ExclusiveToAll, true), {"--stat", "-f"},
-        ParseResult::PriorOptionWithOptions);
+    bad(build(Option::ExclusiveToAll, true), {"--stat", "-f"}, ParseResult::PriorOptionWithOptions);
     BOOST_CHECK_EQUAL(ok(build(Option::ExclusiveToAll, true), {"--stat"}).value(0).value_or(""),
                       "a.out");
 
     // More than one argument, so the token count and the argument count differ.
-    Parser several(Command("prog")
-                       .addArgument(Argument("a").optional().defaultValue("1"))
-                       .addArgument(Argument("b").optional().defaultValue("2"))
-                       .addOption(Option({"--stat"}, "Just report")
-                                      .prior(Option::ExclusiveToArguments)));
+    Parser several(
+        Command("prog")
+            .addArgument(Argument("a").optional().defaultValue("1"))
+            .addArgument(Argument("b").optional().defaultValue("2"))
+            .addOption(Option({"--stat"}, "Just report").prior(Option::ExclusiveToArguments)));
     auto filled = ok(several, {"--stat"});
     BOOST_CHECK_EQUAL(filled.value(0).value_or(""), "1");
     BOOST_CHECK_EQUAL(filled.value(1).value_or(""), "2");
@@ -1273,21 +1271,21 @@ BOOST_AUTO_TEST_CASE(test_an_exclusive_option_reads_what_was_given_not_what_stoo
 
     // Crossed with a leading Remainder, whose default stands in the same way and whose tokens
     // are read before any argument is filled.
-    Parser tail(Command("prog")
-                    .addArgument(
-                        Argument("rest").nargs(Argument::Remainder).optional().defaultValue("none"))
-                    .addOption(Option({"--stat"}, "Just report")
-                                   .prior(Option::ExclusiveToArguments)));
+    Parser tail(
+        Command("prog")
+            .addArgument(
+                Argument("rest").nargs(Argument::Remainder).optional().defaultValue("none"))
+            .addOption(Option({"--stat"}, "Just report").prior(Option::ExclusiveToArguments)));
     BOOST_CHECK_EQUAL(ok(tail, {"--stat"}).value(0).value_or(""), "none");
     bad(tail, {"--stat", "x"}, ParseResult::PriorOptionWithArguments);
 
     // Crossed with recursive, where the option forbidding arguments belongs to another command.
-    Parser below(Command("prog")
-                     .addOption(Option({"--stat"}, "Just report")
-                                    .prior(Option::ExclusiveToArguments)
-                                    .recursive())
-                     .addCommand(Command("build").addArgument(
-                         Argument("target").optional().defaultValue("all"))));
+    Parser below(
+        Command("prog")
+            .addOption(
+                Option({"--stat"}, "Just report").prior(Option::ExclusiveToArguments).recursive())
+            .addCommand(
+                Command("build").addArgument(Argument("target").optional().defaultValue("all"))));
     BOOST_CHECK_EQUAL(ok(below, {"build", "--stat"}).value(0).value_or(""), "all");
     bad(below, {"build", "--stat", "x"}, ParseResult::PriorOptionWithArguments);
 }
@@ -1334,7 +1332,8 @@ BOOST_AUTO_TEST_CASE(test_unix_short_options_can_be_turned_off) {
     BOOST_CHECK(!result.option("-f").has_value());
     BOOST_CHECK_EQUAL(must(result.value(0)), "-f");
     // The long spelling is untouched.
-    BOOST_CHECK(ok(parser, {"--force"}, Parser::DontAllowUnixShortOptions).option("-f").has_value());
+    BOOST_CHECK(
+        ok(parser, {"--force"}, Parser::DontAllowUnixShortOptions).option("-f").has_value());
 }
 
 BOOST_AUTO_TEST_CASE(test_invoke_runs_the_command_that_was_reached) {
@@ -1479,12 +1478,12 @@ BOOST_AUTO_TEST_CASE(test_two_greedy_arguments_in_a_row) {
     // A mistake, and said so wherever the question is asked. A greedy argument leaves a token
     // for each required argument after it and none for anything else, so a second one would
     // never see a token.
-    BOOST_CHECK(!Argument::canFollow({Argument("first").multi()},
-                                     Argument("second").multi().optional()));
+    BOOST_CHECK(!detail::arguments_can_follow({Argument("first").multi()},
+                                              Argument("second").multi().optional()));
 
 #ifdef NDEBUG
-    // Built anyway, since the assert saying so is not compiled in here. The first is greedy and
-    // the second is not required, so the first takes the lot rather than anything going wrong.
+    // Parsed anyway, since parse() does not walk the tree in a release build. The first is
+    // greedy and the second is not required, so the first takes the lot.
     Parser parser(Command("prog").addArguments({
         Argument("first").multi(),
         Argument("second").multi().optional(),
@@ -1585,9 +1584,8 @@ BOOST_AUTO_TEST_CASE(test_short_matching_needs_one_required_argument) {
     // One that has to have exactly one but reads on past it is the same case: a value written
     // against the spelling says this is the value, and a greedy run would take the next token
     // as well. Written out with a space it works.
-    Parser greedy(Command("prog").addOption(Option({"-I"}, "Includes")
-                                                .arg(Argument("dir").multi())
-                                                .shortMatch(Option::ShortMatchAll)));
+    Parser greedy(Command("prog").addOption(
+        Option({"-I"}, "Includes").arg(Argument("dir").multi()).shortMatch(Option::ShortMatchAll)));
     bad(greedy, {"-IX"}, ParseResult::UnknownOption);
     BOOST_CHECK(ok(greedy, {"-I", "X", "Y"}).option("-I")->values() ==
                 std::vector<std::string>({"X", "Y"}));
@@ -1599,27 +1597,25 @@ BOOST_AUTO_TEST_CASE(test_short_matching_needs_one_required_argument) {
 BOOST_AUTO_TEST_CASE(test_a_joined_value_starts_an_argument_rather_than_finishing_it) {
     const std::vector<std::string> both{"a", "b"};
 
-    Parser greedy(Command("prog").addOption(
-        Option({"-I"}, "Includes").arg(Argument("dir").multi())));
+    Parser greedy(
+        Command("prog").addOption(Option({"-I"}, "Includes").arg(Argument("dir").multi())));
     BOOST_CHECK(ok(greedy, {"-I=a", "b"}).option("-I")->values() == both);
     BOOST_CHECK(ok(greedy, {"-I", "a", "b"}).option("-I")->values() == both);
     // Nothing after it, and the joined value is the one value the argument had to have.
-    BOOST_CHECK(ok(greedy, {"-I=a"}).option("-I")->values() ==
-                std::vector<std::string>({"a"}));
+    BOOST_CHECK(ok(greedy, {"-I=a"}).option("-I")->values() == std::vector<std::string>({"a"}));
 
     // The same for a Remainder, which takes what is left whether an option is among it or not.
-    Parser rest(Command("prog")
-                    .addOption(Option({"--rest"}, "The rest")
-                                   .arg(Argument("r").nargs(Argument::Remainder)))
-                    .addOption(Option({"-f"}, "Force")));
+    Parser rest(
+        Command("prog")
+            .addOption(Option({"--rest"}, "The rest").arg(Argument("r").nargs(Argument::Remainder)))
+            .addOption(Option({"-f"}, "Force")));
     auto joined = ok(rest, {"--rest=a", "-f", "b"});
     BOOST_CHECK(joined.option("--rest")->values() == std::vector<std::string>({"a", "-f", "b"}));
     BOOST_CHECK(!joined.option("-f").has_value());
 
     // A Single argument still takes only what was joined to it, the rest being positional.
-    Parser one(Command("prog")
-                   .addArgument(Argument("path"))
-                   .addOption(Option({"-o"}, "Out").arg("dir")));
+    Parser one(
+        Command("prog").addArgument(Argument("path")).addOption(Option({"-o"}, "Out").arg("dir")));
     auto single = ok(one, {"-o=x", "y"});
     BOOST_CHECK_EQUAL(single.option("-o")->value().value_or(""), "x");
     BOOST_CHECK_EQUAL(single.value(0).value_or(""), "y");
@@ -1637,8 +1633,8 @@ BOOST_AUTO_TEST_CASE(test_a_joined_value_starts_an_argument_rather_than_finishin
 // nothing left to force and what follows keeps what was reserved for it. Without this the
 // smallest line that should work, -c=a b, is the one that does not.
 BOOST_AUTO_TEST_CASE(test_a_joined_value_keeps_the_promise_the_reservation_would_have_kept) {
-    Parser copy(Command("prog").addOption(
-        Option({"-c"}, "Copy").arg(Argument("src").multi()).arg("dest")));
+    Parser copy(
+        Command("prog").addOption(Option({"-c"}, "Copy").arg(Argument("src").multi()).arg("dest")));
 
     // Every line here and its spaced twin, which is the property that was broken.
     const auto &same_as_spaced = [&copy](std::initializer_list<std::string> joined,
@@ -1690,8 +1686,7 @@ BOOST_AUTO_TEST_CASE(test_a_joined_value_keeps_the_promise_the_reservation_would
     Parser positional(
         Command("prog").addArgument(Argument("src").multi()).addArgument(Argument("dest")));
     BOOST_CHECK(ok(positional, {"a", "b"}).values(0) == std::vector<std::string>({"a"}));
-    BOOST_CHECK(ok(positional, {"a", "b", "c"}).values(0) ==
-                std::vector<std::string>({"a", "b"}));
+    BOOST_CHECK(ok(positional, {"a", "b", "c"}).values(0) == std::vector<std::string>({"a", "b"}));
 }
 
 // IgnoreOptionCase is about the spellings a program declared, so it holds wherever one is
@@ -1806,7 +1801,11 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_line_is_not_taken_as_it_is_written) {
     // Only the first line carries one, and only whole. Two of its three bytes are not a mark
     // and belong to whatever they are part of.
     BOOST_CHECK_EQUAL(must(given("x\n\xEF\xBB\xBFy\n").value(1)), "\xEF\xBB\xBFy");
-    BOOST_CHECK_EQUAL(must(given("\xEF\xBB" "y\nx\n").value(0)), "\xEF\xBB" "y");
+    BOOST_CHECK_EQUAL(must(given("\xEF\xBB"
+                                 "y\nx\n")
+                               .value(0)),
+                      "\xEF\xBB"
+                      "y");
 
     // A line that is only a pair of quotes is an empty argument, which is the one way a response
     // file has of writing one. A line that is empty or only blanks is not an argument at all.
@@ -1827,9 +1826,11 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_line_is_not_taken_as_it_is_written) {
     // Read as bytes, so nothing in the file is interpreted. A Windows text stream takes a Ctrl-Z
     // for the end of the file, which would drop everything a response file has after one.
     {
-        auto result = given("one\n\x1a" "two\n");
+        auto result = given("one\n\x1a"
+                            "two\n");
         BOOST_CHECK_EQUAL(must(result.value(0)), "one");
-        BOOST_CHECK_EQUAL(must(result.value(1)), "\x1a" "two");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "\x1a"
+                                                 "two");
     }
 
     std::filesystem::remove(path);
@@ -1896,22 +1897,22 @@ namespace {
         catalogue.addCommands("Filesystem Commands", {"copy"})
             .addCommands("Buildsystem Commands", {"configure"});
 
-        Parser parser(Command("prog", "What the program is for")
-                          .addOptions(
-                              {Option(Option::Help), Option({"-V"}, "Say more").recursive()})
-                          .addCommands({
-                              Command("copy", "Copy things")
-                                  .addArguments({Argument("src", "Where from").multi(),
-                                                 Argument("dest", "Where to")})
-                                  .addOption(Option({"-f", "--force"}, "Overwrite")),
-                              Command("configure", "Configure things")
-                                  .addArgument(Argument("mode", "Which way", false)
-                                                   .defaultValue("fast")
-                                                   .expect({"fast", "slow"}))
-                                  .addOption(Option({"-p"}, "Project").arg("name").required()),
-                              Command("orphan", "Not in any group"),
-                          })
-                          .setCatalogue(catalogue));
+        Parser parser(
+            Command("prog", "What the program is for")
+                .addOptions({Option(Option::Help), Option({"-V"}, "Say more").recursive()})
+                .addCommands({
+                    Command("copy", "Copy things")
+                        .addArguments(
+                            {Argument("src", "Where from").multi(), Argument("dest", "Where to")})
+                        .addOption(Option({"-f", "--force"}, "Overwrite")),
+                    Command("configure", "Configure things")
+                        .addArgument(Argument("mode", "Which way", false)
+                                         .defaultValue("fast")
+                                         .expect({"fast", "slow"}))
+                        .addOption(Option({"-p"}, "Project").arg("name").required()),
+                    Command("orphan", "Not in any group"),
+                })
+                .setCatalogue(catalogue));
         parser.setPrologue("A prologue line");
         parser.setEpilogue("An epilogue line");
         // Fixed, so that what these cases assert does not depend on the terminal the suite
@@ -1942,8 +1943,7 @@ BOOST_AUTO_TEST_CASE(test_help_layout_is_in_a_fixed_order) {
 
 BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
     auto parser = helpTree();
-    BOOST_CHECK(
-        has(parser.parse(argv({})).helpText(), "Usage:\n    prog [commands] [options]"));
+    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog [commands] [options]"));
     BOOST_CHECK(has(parser.parse(argv({"copy", "a", "b"})).helpText(),
                     "Usage:\n    prog copy [options] <src>... <dest>"));
     // An optional argument is bracketed, and one that repeats carries the ellipsis. The only
@@ -1972,7 +1972,8 @@ BOOST_AUTO_TEST_CASE(test_usage_writes_a_subcommand_before_the_options) {
     BOOST_CHECK(has(bare.parse(argv({})).helpText(), "Usage:\n    prog [commands]\n"));
 
     // No subcommands, so nothing in front of the options.
-    Parser flat(Command("prog").addArgument(Argument("path")).addOption(Option({"-v"}, "Say more")));
+    Parser flat(
+        Command("prog").addArgument(Argument("path")).addOption(Option({"-v"}, "Say more")));
     BOOST_CHECK(has(flat.parse(argv({"x"})).helpText(), "Usage:\n    prog [options] <path>\n"));
 
     // A command that was reached says nothing about commands unless it has some of its own.
@@ -1987,13 +1988,13 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
     // Its first spelling and whatever it takes, in the order they were declared, ahead of the
     // hint that stands for the rest.
     {
-        Parser parser(Command("prog")
-                          .addArgument(Argument("path"))
-                          .addOption(Option({"-o", "--output"}, "Where to write").arg("file")
-                                         .required())
-                          .addOption(Option({"-v"}, "Say more")));
-        BOOST_CHECK(has(parser.parse(argv({})).helpText(),
-                        "Usage:\n    prog -o <file> [options] <path>"));
+        Parser parser(
+            Command("prog")
+                .addArgument(Argument("path"))
+                .addOption(Option({"-o", "--output"}, "Where to write").arg("file").required())
+                .addOption(Option({"-v"}, "Say more")));
+        BOOST_CHECK(
+            has(parser.parse(argv({})).helpText(), "Usage:\n    prog -o <file> [options] <path>"));
     }
 
     // More than one, and no hint left when every option is accounted for.
@@ -2013,8 +2014,8 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
 
     // An option carrying an optional argument of its own keeps that argument's brackets.
     {
-        Parser parser(Command("prog").addOption(
-            Option({"-c"}, "Config").arg("file", false).required()));
+        Parser parser(
+            Command("prog").addOption(Option({"-c"}, "Config").arg("file", false).required()));
         BOOST_CHECK(has(parser.parse(argv({"-c"})).helpText(), "Usage:\n    prog -c [<file>]\n"));
     }
 
@@ -2029,8 +2030,8 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
 #ifdef NDEBUG
     // An option with no spelling cannot be typed, so it is not in the hint either. It used to
     // be counted, which put "[options]" on a command that had nothing to offer. Adding one is
-    // a mistake the assert catches where it is compiled in, and this is what happens where it
-    // is not. \sa test_an_option_with_no_spelling_is_ignored_rather_than_fatal
+    // a mistake parse() asserts through validate() in a debug build, and this is what happens
+    // where it does not. \sa test_an_option_with_no_spelling_is_ignored_rather_than_fatal
     {
         Parser parser(Command("prog").addOption(Option()));
         BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog\n"));
@@ -2100,8 +2101,7 @@ BOOST_AUTO_TEST_CASE(test_an_options_own_argument_carries_its_extras_too) {
 BOOST_AUTO_TEST_CASE(test_roles_describe_themselves) {
     // The two options every program has are otherwise the two with nothing written beside them,
     // which is where a generated help text starts looking unfinished.
-    Parser parser(
-        Command("prog").addOptions({Option(Option::Help), Option(Option::Version)}));
+    Parser parser(Command("prog").addOptions({Option(Option::Help), Option(Option::Version)}));
     auto text = parser.parse(argv({})).helpText();
 
     BOOST_CHECK(has(text, "Show this help and exit"));
@@ -2345,11 +2345,11 @@ BOOST_AUTO_TEST_CASE(test_an_option_with_no_spelling_is_ignored_rather_than_fata
     // also why a first attempt at this test passed with the defect still in.
     // A mistake, and said so wherever the question is asked: an option nobody can type is an
     // option nobody can give.
-    BOOST_CHECK(!Option::canJoin({}, Option()));
-    BOOST_CHECK(!Option::canJoin({}, Option(Option::NoRole)));
+    BOOST_CHECK(!detail::options_can_join({}, Option()));
+    BOOST_CHECK(!detail::options_can_join({}, Option(Option::NoRole)));
 
 #ifdef NDEBUG
-    // Built anyway, since the assert saying so is not compiled in here.
+    // Parsed anyway, since parse() does not walk the tree in a release build.
     CommandCatalogue catalogue;
     catalogue.addOptions("Common Options", {"-f"});
 
@@ -2466,8 +2466,10 @@ BOOST_AUTO_TEST_CASE(test_the_checking_read_on_an_option) {
     // is there and whether the token is empty are different questions, and empty text cannot
     // answer both, which is why the read hands back an optional rather than a view.
     Parser prefix(Command("prog").addOption(Option({"--prefix"}, "Prefix").arg("text")));
-    for (const auto &given : {std::vector<std::string>{"prog", "--prefix="},
-                              std::vector<std::string>{"prog", "--prefix", ""}}) {
+    for (const auto &given : {
+             std::vector<std::string>{"prog", "--prefix="},
+             std::vector<std::string>{"prog", "--prefix", ""}
+    }) {
         auto result = prefix.parse(given);
         BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
         auto option = result.option("--prefix");
@@ -2693,8 +2695,8 @@ BOOST_AUTO_TEST_CASE(test_a_mistyped_name_is_answered_with_the_ones_it_is_near) 
 
     // one of the few words an argument accepts
     {
-        Parser parser(Command("prog").addArgument(
-            Argument("mode").expect({"fast", "slow", "careful"})));
+        Parser parser(
+            Command("prog").addArgument(Argument("mode").expect({"fast", "slow", "careful"})));
         auto text = bad(parser, {"fest"}, ParseResult::InvalidArgumentValue).correctionText();
         BOOST_CHECK(has(text, "\n    fast"));
         BOOST_CHECK(!has(text, "\n  careful"));
@@ -2763,16 +2765,16 @@ BOOST_AUTO_TEST_CASE(test_the_error_points_at_the_help_this_program_has) {
     BOOST_CHECK(has(printedFor(Command("prog").addOption(
                         Option(Option::Help, {"-?", "--usage"}, "Say how to use this"))),
                     "Try \"prog --usage\" for more information."));
-    BOOST_CHECK(has(printedFor(Command("prog").addOption(
-                        Option(Option::Help, {"-h"}, "Say how to use this"))),
-                    "Try \"prog -h\" for more information."));
+    BOOST_CHECK(has(
+        printedFor(Command("prog").addOption(Option(Option::Help, {"-h"}, "Say how to use this"))),
+        "Try \"prog -h\" for more information."));
 
     // A tree with none is told to try nothing.
     BOOST_CHECK(!has(printedFor(Command("prog")), "Try "));
 
     // An option is not the help option merely by being spelled like one.
-    BOOST_CHECK(!has(printedFor(Command("prog").addOption(Option({"--help"}, "Not the role"))),
-                     "Try "));
+    BOOST_CHECK(
+        !has(printedFor(Command("prog").addOption(Option({"--help"}, "Not the role"))), "Try "));
 
     // A subcommand names itself and the option it inherited.
     Parser parser(Command("prog")
@@ -2945,8 +2947,8 @@ BOOST_AUTO_TEST_CASE(test_wrapping_edges) {
     // readable column anyway rather than one character per line. It still wraps: giving up and
     // writing one long line would be the other way to survive this, and is not what is wanted.
     {
-        auto lines = entryLines(help("a description of some length here that will not fit", 4),
-                                "-x");
+        auto lines =
+            entryLines(help("a description of some length here that will not fit", 4), "-x");
         BOOST_REQUIRE_GT(lines.size(), 1u);
         for (const auto &line : lines) {
             auto first = line.find_first_not_of(' ');
@@ -3045,13 +3047,14 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
 // ones above have nothing to say about it.
 BOOST_AUTO_TEST_CASE(test_recursive_options_are_written_after_the_command_that_was_reached) {
     const auto &tree = [] {
-        Parser parser(Command("prog")
-                          .addOption(Option({"--root-wide"}, "From the top").recursive())
-                          .addCommand(Command("remote")
-                                          .addOption(Option({"--mid"}, "From the middle").recursive())
-                                          .addCommand(Command("add")
-                                                          .addOption(Option({"--leaf"}, "Here"))
-                                                          .addArgument(Argument("name")))));
+        Parser parser(
+            Command("prog")
+                .addOption(Option({"--root-wide"}, "From the top").recursive())
+                .addCommand(Command("remote")
+                                .addOption(Option({"--mid"}, "From the middle").recursive())
+                                .addCommand(Command("add")
+                                                .addOption(Option({"--leaf"}, "Here"))
+                                                .addArgument(Argument("name")))));
         parser.setTextWidth(80);
         return parser;
     };
@@ -3068,10 +3071,10 @@ BOOST_AUTO_TEST_CASE(test_recursive_options_are_written_after_the_command_that_w
 
     // In any order among themselves, since where an option sits after the command says nothing.
     for (const auto &line : {
-             std::vector<std::string>{"remote", "add", "--mid", "--leaf", "--root-wide", "x"},
-             std::vector<std::string>{"remote", "add", "--leaf", "x", "--root-wide", "--mid"},
-             std::vector<std::string>{"remote", "add", "x", "--root-wide", "--mid", "--leaf"},
-         }) {
+             std::vector<std::string>{"remote", "add", "--mid",  "--leaf",      "--root-wide", "x"     },
+             std::vector<std::string>{"remote", "add", "--leaf", "x",           "--root-wide", "--mid" },
+             std::vector<std::string>{"remote", "add", "x",      "--root-wide", "--mid",       "--leaf"},
+    }) {
         std::vector<std::string> args{"prog"};
         args.insert(args.end(), line.begin(), line.end());
         auto result = parser.parse(args);
@@ -3124,8 +3127,9 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
         file << "build\n-j\n4\ntarget\n";
     }
 
-    Parser parser(Command("prog").addCommand(
-        Command("build").addArgument(Argument("target")).addOption(Option({"-j"}, "Jobs").arg("n"))));
+    Parser parser(Command("prog").addCommand(Command("build")
+                                                 .addArgument(Argument("target"))
+                                                 .addOption(Option({"-j"}, "Jobs").arg("n"))));
     auto result = ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
     BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "build"}));
     BOOST_CHECK_EQUAL(must(result.value(0)), "target");
@@ -3136,13 +3140,13 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
 
 // Inheritance is from every command above, not only the one directly above.
 BOOST_AUTO_TEST_CASE(test_globals_reach_a_grandchild) {
-    Parser parser(Command("prog")
-                      .addOption(Option({"--root-wide"}, "From the top").recursive())
-                      .addCommand(Command("remote", "Remotes")
-                                      .addOption(Option({"--mid"}, "From the middle").recursive())
-                                      .addOption(Option({"--mid-local"}, "Not inherited"))
-                                      .addCommand(Command("add", "Add one")
-                                                      .addArgument(Argument("name")))));
+    Parser parser(
+        Command("prog")
+            .addOption(Option({"--root-wide"}, "From the top").recursive())
+            .addCommand(Command("remote", "Remotes")
+                            .addOption(Option({"--mid"}, "From the middle").recursive())
+                            .addOption(Option({"--mid-local"}, "Not inherited"))
+                            .addCommand(Command("add", "Add one").addArgument(Argument("name")))));
     parser.setTextWidth(80);
 
     auto text = parser.parse(argv({"remote", "add", "x"})).helpText();
@@ -3331,8 +3335,7 @@ BOOST_AUTO_TEST_CASE(test_a_layout_says_which_blocks_and_in_what_order) {
     BOOST_CHECK(!has(text, "Filesystem Commands:"));
 
     // What it asks for twice prints twice.
-    parser.setHelpLayout(
-        HelpLayout().add(HelpBlock::Description).add(HelpBlock::Description));
+    parser.setHelpLayout(HelpLayout().add(HelpBlock::Description).add(HelpBlock::Description));
     auto twice = parser.parse(argv({})).helpText();
     size_t count = 0;
     for (size_t at_ = twice.find("Description:"); at_ != std::string::npos;
@@ -3349,8 +3352,7 @@ BOOST_AUTO_TEST_CASE(test_a_layout_says_which_blocks_and_in_what_order) {
 // A block the program wrote itself goes through the same layout as the rest, which is the whole
 // point of it being a block rather than something the program prints after the help text.
 BOOST_AUTO_TEST_CASE(test_a_layout_carries_blocks_of_the_programs_own) {
-    Parser parser(Command("prog").addOption(
-        Option({"--output"}, "Where to write").arg("file")));
+    Parser parser(Command("prog").addOption(Option({"--output"}, "Where to write").arg("file")));
     parser.setTextWidth(80);
 
     HelpBlock examples;
@@ -3359,10 +3361,11 @@ BOOST_AUTO_TEST_CASE(test_a_layout_carries_blocks_of_the_programs_own) {
 
     HelpBlock environment;
     environment.title = "Environment";
-    environment.entries = {{"PROG_HOME", "Where it looks for its data"}};
+    environment.entries = {
+        {"PROG_HOME", "Where it looks for its data"}
+    };
 
-    parser.setHelpLayout(
-        HelpLayout().add(HelpBlock::Options).add(environment).add(examples));
+    parser.setHelpLayout(HelpLayout().add(HelpBlock::Options).add(environment).add(examples));
     auto text = parser.parse(argv({})).helpText();
 
     BOOST_CHECK(has(text, "Environment:\n    PROG_HOME    Where it looks for its data\n"));
@@ -3429,8 +3432,7 @@ BOOST_AUTO_TEST_CASE(test_help_blocks_are_what_the_text_is_made_of) {
 // A style says how a block is printed, not what it says. helpText() answers with the text and
 // showHelp() puts the escapes around it.
 BOOST_AUTO_TEST_CASE(test_styling_is_in_what_is_printed_and_not_in_the_text) {
-    Parser parser(Command("prog", "What the program is for")
-                      .addOption(Option({"-v"}, "Say more")));
+    Parser parser(Command("prog", "What the program is for").addOption(Option({"-v"}, "Say more")));
     parser.setEpilogue("An epilogue line");
     parser.setTextWidth(80);
 
@@ -3478,12 +3480,11 @@ namespace {
     /// A tree with one of everything the rungs below touch, so that a case can say which of
     /// them moved and which did not.
     Parser formatterTree() {
-        Parser parser(Command("prog", "What the program is for")
-                          .addArgument(Argument("path", "Where to work"))
-                          .addOption(Option({"-o", "--output"}, "Where to write")
-                                         .arg("file")
-                                         .required())
-                          .addOption(Option({"-v"}, "Say more")));
+        Parser parser(
+            Command("prog", "What the program is for")
+                .addArgument(Argument("path", "Where to work"))
+                .addOption(Option({"-o", "--output"}, "Where to write").arg("file").required())
+                .addOption(Option({"-v"}, "Say more")));
         parser.setEpilogue("An epilogue line");
         parser.setTextWidth(80);
         return parser;
@@ -3615,8 +3616,9 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
                                 const HelpSizes &) const override {
             std::vector<Run> res;
             for (const auto &block : blocks) {
-                res.push_back({{}, std::to_string(int(block.role)) + ":" +
-                                       std::to_string(block.entries.size()) + " "});
+                res.push_back({{},
+                               std::to_string(int(block.role)) + ":" +
+                                   std::to_string(block.entries.size()) + " "});
             }
             return res;
         }
@@ -3713,65 +3715,68 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_a_row) {
 // Whether a tree may be built that way at all
 // ---------------------------------------------------------------------------------------------
 
-// What a tree may not be built out of. Every one of these is asserted where an assert survives,
-// and every one is asked here as a question, so the rule is checked in a release build too.
+// The pieces retain an invalid tree intact so that one validator can diagnose it once it is
+// complete. These helpers are private implementation shared by that validator and these tests.
 BOOST_AUTO_TEST_CASE(test_what_an_argument_may_follow) {
     const std::vector<Argument> none;
-    BOOST_CHECK(Argument::canFollow(none, Argument("path")));
+    BOOST_CHECK(detail::arguments_can_follow(none, Argument("path")));
 
     // A name to be known by, and one nobody else has.
-    BOOST_CHECK(!Argument::canFollow(none, Argument("")));
-    BOOST_CHECK(!Argument::canFollow({Argument("path")}, Argument("path")));
-    BOOST_CHECK(Argument::canFollow({Argument("path")}, Argument("dest")));
+    BOOST_CHECK(!detail::arguments_can_follow(none, Argument("")));
+    BOOST_CHECK(!detail::arguments_can_follow({Argument("path")}, Argument("path")));
+    BOOST_CHECK(detail::arguments_can_follow({Argument("path")}, Argument("dest")));
 
     // Nothing that has to be given after one that may be left out, or a single token could be
     // meant for either.
-    BOOST_CHECK(!Argument::canFollow({Argument("a").optional()}, Argument("b")));
-    BOOST_CHECK(Argument::canFollow({Argument("a").optional()}, Argument("b").optional()));
-    BOOST_CHECK(Argument::canFollow({Argument("a")}, Argument("b").optional()));
+    BOOST_CHECK(!detail::arguments_can_follow({Argument("a").optional()}, Argument("b")));
+    BOOST_CHECK(detail::arguments_can_follow({Argument("a").optional()}, Argument("b").optional()));
+    BOOST_CHECK(detail::arguments_can_follow({Argument("a")}, Argument("b").optional()));
 
     // A greedy one leaves a token for each required argument after it, so a required one may
     // follow and nothing else may. This is copy <src>... <dest>.
-    BOOST_CHECK(Argument::canFollow({Argument("src").multi()}, Argument("dest")));
-    BOOST_CHECK(!Argument::canFollow({Argument("src").multi()}, Argument("dest").optional()));
-    BOOST_CHECK(!Argument::canFollow({Argument("src").multi()}, Argument("dest").multi()));
+    BOOST_CHECK(detail::arguments_can_follow({Argument("src").multi()}, Argument("dest")));
+    BOOST_CHECK(
+        !detail::arguments_can_follow({Argument("src").multi()}, Argument("dest").optional()));
+    BOOST_CHECK(!detail::arguments_can_follow({Argument("src").multi()}, Argument("dest").multi()));
 
     // One that takes everything leaves nothing to follow it with.
-    BOOST_CHECK(!Argument::canFollow({Argument("rest").nargs(Argument::Remainder)},
-                                     Argument("dest")));
+    BOOST_CHECK(!detail::arguments_can_follow({Argument("rest").nargs(Argument::Remainder)},
+                                              Argument("dest")));
 
     // The same rules wherever arguments are held, so an option's own list obeys them.
-    BOOST_CHECK(!Argument::canFollow({Argument("a").optional()}, Argument("b")));
+    BOOST_CHECK(!detail::arguments_can_follow({Argument("a").optional()}, Argument("b")));
 }
 
 BOOST_AUTO_TEST_CASE(test_what_an_option_may_join) {
     const std::vector<Option> none;
-    BOOST_CHECK(Option::canJoin(none, Option({"-f", "--force"}, "Force")));
+    BOOST_CHECK(detail::options_can_join(none, Option({"-f", "--force"}, "Force")));
 
     // Something to type, and something that could not be taken for a value.
-    BOOST_CHECK(!Option::canJoin(none, Option()));
-    BOOST_CHECK(!Option::canJoin(none, Option({""}, "Nameless")));
-    BOOST_CHECK(!Option::canJoin(none, Option({"force"}, "No dash")));
-    BOOST_CHECK(!Option::canJoin(none, Option({"-"}, "Just a dash")));
-    BOOST_CHECK(Option::canJoin(none, Option({"/f"}, "The DOS spelling")));
+    BOOST_CHECK(!detail::options_can_join(none, Option()));
+    BOOST_CHECK(!detail::options_can_join(none, Option({""}, "Nameless")));
+    BOOST_CHECK(!detail::options_can_join(none, Option({"force"}, "No dash")));
+    BOOST_CHECK(!detail::options_can_join(none, Option({"-"}, "Just a dash")));
+    BOOST_CHECK(detail::options_can_join(none, Option({"/f"}, "The DOS spelling")));
 
     // -- is a spelling like any other, since the parser keeps no word of its own. A program
     // that wants the usual one declares it, and one that wants another declares that.
-    BOOST_CHECK(Option::canJoin(none, Option({"--"}, "The rest")));
-    BOOST_CHECK(Option::canJoin(none, Option({"--force"}, "An ordinary long one")));
+    BOOST_CHECK(detail::options_can_join(none, Option({"--"}, "The rest")));
+    BOOST_CHECK(detail::options_can_join(none, Option({"--force"}, "An ordinary long one")));
 
     // No spelling that one already there answers to, whichever of its spellings it is.
     const std::vector<Option> taken = {Option({"-f", "--force"}, "Force")};
-    BOOST_CHECK(!Option::canJoin(taken, Option({"-f"}, "Again")));
-    BOOST_CHECK(!Option::canJoin(taken, Option({"-x", "--force"}, "Again by its long name")));
-    BOOST_CHECK(Option::canJoin(taken, Option({"-x", "--other"}, "Neither")));
+    BOOST_CHECK(!detail::options_can_join(taken, Option({"-f"}, "Again")));
+    BOOST_CHECK(
+        !detail::options_can_join(taken, Option({"-x", "--force"}, "Again by its long name")));
+    BOOST_CHECK(detail::options_can_join(taken, Option({"-x", "--other"}, "Neither")));
 
     // One that stands in for an empty command line is written by nobody, so there is nothing to
     // require and nothing to give it.
-    BOOST_CHECK(Option::canJoin(none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols)));
-    BOOST_CHECK(!Option::canJoin(
+    BOOST_CHECK(
+        detail::options_can_join(none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols)));
+    BOOST_CHECK(!detail::options_can_join(
         none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols).required()));
-    BOOST_CHECK(!Option::canJoin(
+    BOOST_CHECK(!detail::options_can_join(
         none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols).arg("topic")));
 }
 
@@ -3879,8 +3884,7 @@ BOOST_AUTO_TEST_CASE(test_a_leading_remainder_starts_at_the_first_token_that_is_
     BOOST_CHECK(wrapped.values(0) == std::vector<std::string>({"ls", "-v", "-u", "x"}));
 
     // Nothing of its own, so the whole line is the tail.
-    BOOST_CHECK(ok(parser, {"ls", "-l"}).values(0) ==
-                std::vector<std::string>({"ls", "-l"}));
+    BOOST_CHECK(ok(parser, {"ls", "-l"}).values(0) == std::vector<std::string>({"ls", "-l"}));
     // Nothing but its own, and the tail is empty.
     auto bare = ok(parser, {"-v"});
     BOOST_CHECK(bare.option("-v").has_value());
@@ -3905,20 +3909,152 @@ BOOST_AUTO_TEST_CASE(test_a_leading_remainder_starts_at_the_first_token_that_is_
 
 BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {
     const std::vector<Command> none;
-    BOOST_CHECK(Command::canAddCommand(none, Command("copy")));
-    BOOST_CHECK(!Command::canAddCommand(none, Command("")));
-    BOOST_CHECK(!Command::canAddCommand({Command("copy")}, Command("copy")));
-    BOOST_CHECK(Command::canAddCommand({Command("copy")}, Command("move")));
+    BOOST_CHECK(detail::commands_can_join(none, Command("copy")));
+    BOOST_CHECK(!detail::commands_can_join(none, Command("")));
+    BOOST_CHECK(!detail::commands_can_join({Command("copy")}, Command("copy")));
+    BOOST_CHECK(detail::commands_can_join({Command("copy")}, Command("move")));
 
     // A name in two groups would be listed under the first that claims it and missing from the
     // other, which reads as the catalogue having been ignored.
     const std::vector<CommandCatalogue::Group> none_yet;
-    BOOST_CHECK(CommandCatalogue::canAddGroup(none_yet, {"copy", "move"}));
-    BOOST_CHECK(!CommandCatalogue::canAddGroup(none_yet, {"copy", "copy"}));
+    BOOST_CHECK(detail::catalogue_can_add_group(none_yet, {"copy", "move"}));
+    BOOST_CHECK(!detail::catalogue_can_add_group(none_yet, {"copy", "copy"}));
 
-    const std::vector<CommandCatalogue::Group> filesystem = {{"Filesystem", {"copy", "move"}}};
-    BOOST_CHECK(!CommandCatalogue::canAddGroup(filesystem, {"build", "copy"}));
-    BOOST_CHECK(CommandCatalogue::canAddGroup(filesystem, {"build", "configure"}));
+    const std::vector<CommandCatalogue::Group> filesystem = {
+        {"Filesystem", {"copy", "move"}}
+    };
+    BOOST_CHECK(!detail::catalogue_can_add_group(filesystem, {"build", "copy"}));
+    BOOST_CHECK(detail::catalogue_can_add_group(filesystem, {"build", "configure"}));
+}
+
+BOOST_AUTO_TEST_CASE(test_a_parser_can_validate_a_complete_tree_on_request) {
+    Parser valid(Command("prog")
+                     .addArgument(Argument("source"))
+                     .addOption(Option({"-f", "--force"}, "Force"))
+                     .addCommand(Command("copy")));
+    BOOST_CHECK(!valid.validate().has_value());
+
+    // The invalid pieces all made it into the tree. No constructor or builder had to know
+    // whether the caller was finished with it yet.
+    Parser badArguments(Command("prog")
+                            .addArgument(Argument("source").optional())
+                            .addArgument(Argument("destination")));
+    BOOST_REQUIRE(badArguments.validate().has_value());
+    BOOST_CHECK(has(*badArguments.validate(), "argument sequence"));
+
+    Parser badOptions(Command("prog")
+                          .addOption(Option({"-f", "-f"}, "Force"))
+                          .addOption(Option({"-n"}, "Count").multi(-1)));
+    BOOST_REQUIRE(badOptions.validate().has_value());
+    BOOST_CHECK(has(*badOptions.validate(), "option spelling"));
+
+    Parser badOccurrence(Command("prog").addOption(Option({"-n"}, "Count").multi(-1)));
+    BOOST_REQUIRE(badOccurrence.validate().has_value());
+    BOOST_CHECK(has(*badOccurrence.validate(), "negative occurrence"));
+
+    Parser badOptionArguments(
+        Command("prog").addOption(Option({"-o"}, "Output")
+                                      .arg(Argument("format").optional())
+                                      .arg(Argument("path"))));
+    BOOST_REQUIRE(badOptionArguments.validate().has_value());
+    BOOST_CHECK(has(*badOptionArguments.validate(), "argument sequence"));
+
+    Parser badAutomatic(Command("prog").addOption(
+        Option({"-h"}, "Help").required().prior(Option::AutoSetWhenNoSymbols)));
+    BOOST_REQUIRE(badAutomatic.validate().has_value());
+    BOOST_CHECK(has(*badAutomatic.validate(), "automatic option"));
+
+    Parser badCommands(Command("prog").addCommand(Command("copy")).addCommand(Command("copy")));
+    BOOST_REQUIRE(badCommands.validate().has_value());
+    BOOST_CHECK(has(*badCommands.validate(), "subcommand name"));
+}
+
+BOOST_AUTO_TEST_CASE(test_validation_checks_argument_defaults_and_catalogue_references) {
+    Parser badDefault(
+        Command("prog").addArgument(Argument("count").optional().type<int>().defaultValue("many")));
+    BOOST_REQUIRE(badDefault.validate().has_value());
+    BOOST_CHECK(has(*badDefault.validate(), "default value"));
+
+    Parser badExpected(
+        Command("prog").addArgument(Argument("count").type<int>().expect({"many"})));
+    BOOST_REQUIRE(badExpected.validate().has_value());
+    BOOST_CHECK(has(*badExpected.validate(), "expected value"));
+
+    Parser requiredDefault(
+        Command("prog").addArgument(Argument("count").defaultValue("1")));
+    BOOST_REQUIRE(requiredDefault.validate().has_value());
+    BOOST_CHECK(has(*requiredDefault.validate(), "required"));
+
+    Parser unexpectedDefault(Command("prog").addArgument(
+        Argument("color").optional().expect({"red", "blue"}).defaultValue("green")));
+    BOOST_REQUIRE(unexpectedDefault.validate().has_value());
+    BOOST_CHECK(has(*unexpectedDefault.validate(), "outside its expected values"));
+
+    Parser refusedDefault(
+        Command("prog").addArgument(Argument("count").optional().defaultValue("0").validate(
+            [](std::string_view, std::string *error) {
+                *error = "zero is reserved";
+                return false;
+            })));
+    BOOST_REQUIRE(refusedDefault.validate().has_value());
+    BOOST_CHECK(has(*refusedDefault.validate(), "zero is reserved"));
+
+    CommandCatalogue catalogue;
+    catalogue.addOptions("Common", {"--missing"});
+    Parser badCatalogue(Command("prog").addOption(Option({"-f"}, "Force")).setCatalogue(catalogue));
+    BOOST_REQUIRE(badCatalogue.validate().has_value());
+    BOOST_CHECK(has(*badCatalogue.validate(), "unknown member"));
+
+    CommandCatalogue duplicateCatalogue;
+    duplicateCatalogue.addOptions("Common", {"-f"}).addOptions("Other", {"-f"});
+    Parser duplicateGroup(
+        Command("prog").addOption(Option({"-f"}, "Force")).setCatalogue(duplicateCatalogue));
+    BOOST_REQUIRE(duplicateGroup.validate().has_value());
+    BOOST_CHECK(has(*duplicateGroup.validate(), "more than one group"));
+}
+
+BOOST_AUTO_TEST_CASE(test_validation_uses_the_requested_matching_rules) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"--force"}, "Force"))
+                      .addOption(Option({"--FORCE"}, "Also force"))
+                      .addCommand(Command("copy"))
+                      .addCommand(Command("COPY")));
+
+    BOOST_CHECK(!parser.validate().has_value());
+    BOOST_CHECK(parser.validate(Parser::IgnoreOptionCase).has_value());
+    BOOST_CHECK(parser.validate(Parser::IgnoreCommandCase).has_value());
+}
+
+BOOST_AUTO_TEST_CASE(test_a_tree_is_checked_only_on_request_or_by_a_debug_parse) {
+    // Deliberately stateful instrumentation, not an example of a validator to write. It makes
+    // the otherwise invisible release guarantee measurable.
+    int calls = 0;
+    const auto &tree = [&calls] {
+        return Command("prog").addArgument(
+            Argument("count")
+                .optional()
+                .defaultValue("1")
+                .validate([&calls](std::string_view, std::string *) {
+                    ++calls;
+                    return true;
+                }));
+    };
+
+    Parser parser(tree());
+    BOOST_CHECK_EQUAL(calls, 0);
+    parser.setRootCommand(tree());
+    BOOST_CHECK_EQUAL(calls, 0);
+
+    BOOST_CHECK(!parser.validate().has_value());
+    BOOST_CHECK_EQUAL(calls, 1);
+
+    calls = 0;
+    BOOST_CHECK(ok(parser, {}).isValid());
+#ifdef NDEBUG
+    BOOST_CHECK_EQUAL(calls, 0);
+#else
+    BOOST_CHECK_EQUAL(calls, 1);
+#endif
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4047,11 +4183,16 @@ BOOST_AUTO_TEST_CASE(test_the_formatter_lends_out_what_it_measures_with) {
     BOOST_CHECK_EQUAL(lines[2], "four");
 
     HelpBlock block;
-    block.entries = {{"-v", "Say more"}, {"--verbose", "The same"}};
+    block.entries = {
+        {"-v",        "Say more"},
+        {"--verbose", "The same"}
+    };
     BOOST_CHECK_EQUAL(HelpFormatter::widestOf(block), 9u);
 
     HelpBlock wider;
-    wider.entries = {{"--configuration", ""}};
+    wider.entries = {
+        {"--configuration", ""}
+    };
     BOOST_CHECK_EQUAL(HelpFormatter::widestOf(std::vector<HelpBlock>{block, wider}), 15u);
 }
 
@@ -4074,20 +4215,19 @@ BOOST_AUTO_TEST_CASE(test_alignment_counts_columns_not_bytes) {
     // as each other, so both are. Counting bytes gives the wider-in-bytes one a padding it does
     // not need and moves the whole column.
     // Found by description, since the usage line above holds the metavars too.
-    for (const auto &pair :
-         {std::make_pair(std::string("<path>"), std::string("Where to write")),
-          std::make_pair("<" + metavar + ">", std::string("How to write it"))}) {
+    for (const auto &pair : {std::make_pair(std::string("<path>"), std::string("Where to write")),
+                             std::make_pair("<" + metavar + ">", std::string("How to write it"))}) {
         auto lines = entryLines(text, pair.second);
         BOOST_REQUIRE_MESSAGE(!lines.empty(), "no row for " + pair.second);
         auto at = lines[0].find(pair.second);
         BOOST_REQUIRE(at != std::string::npos);
 
         auto left = lines[0].substr(0, at);
-        BOOST_CHECK_MESSAGE(has(left, pair.first), "[" + left + "] is not the row for " +
-                                                       pair.first);
+        BOOST_CHECK_MESSAGE(has(left, pair.first),
+                            "[" + left + "] is not the row for " + pair.first);
         auto spaces = left.size() - left.find_last_not_of(' ') - 1;
-        BOOST_CHECK_MESSAGE(spaces == 4, pair.first + " is followed by " +
-                                             std::to_string(spaces) + " spaces, not 4");
+        BOOST_CHECK_MESSAGE(spaces == 4, pair.first + " is followed by " + std::to_string(spaces) +
+                                             " spaces, not 4");
     }
 }
 
@@ -4194,9 +4334,9 @@ BOOST_AUTO_TEST_CASE(test_a_read_outlives_the_result_it_came_from) {
 
     // A view is still there for a caller who asks for one, and is still theirs to keep alive.
     auto result = parser.parse(argv({"-f", "some/path.txt", "the-source"}));
-    static_assert(
-        std::is_same_v<decltype(result.value<std::string_view>(0)), std::optional<std::string_view>>,
-        "asking for a view still gives a view");
+    static_assert(std::is_same_v<decltype(result.value<std::string_view>(0)),
+                                 std::optional<std::string_view>>,
+                  "asking for a view still gives a view");
     BOOST_CHECK_EQUAL(must(result.value<std::string_view>(0)), "the-source");
     BOOST_CHECK_EQUAL(must(result.rawValue(0)), "the-source");
 }
