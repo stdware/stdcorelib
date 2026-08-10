@@ -1108,9 +1108,9 @@ BOOST_AUTO_TEST_CASE(test_restore_signals) {
 //
 // What the guard is for is the gap between poll saying a descriptor is writable and the write
 // happening: the child can exit in there, and then the write raises SIGPIPE and ends the
-// process. A test cannot arrange that gap. What it can do is watch the disposition while a
-// communicate runs, so the guard is known to be installed rather than to have quietly become a
-// no-op, and known to put back what it found.
+// process. The ordinary suite has no hook to arrange that gap. What it can do is watch the
+// disposition while a communicate runs, so the guard is known to be installed rather than to
+// have quietly become a no-op, and known to put back what it found.
 BOOST_AUTO_TEST_CASE(test_sigpipe_is_ignored_for_the_length_of_a_communicate) {
     const auto &disposition = [] {
         struct sigaction current{};

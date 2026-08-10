@@ -38,9 +38,9 @@ namespace stdc {
     /// exit in there, and then write raises SIGPIPE and ends the process. Nothing about poll
     /// closes that gap, so it is closed here.
     ///
-    /// Measured over 900 rounds of a child that exits at once against a megabyte of input,
-    /// without this: never hit. Narrow is not the same as impossible, and what it costs to be
-    /// sure is two system calls per communicate() call.
+    /// Measured on macOS by interposing write() and delaying it until the child closed its pipe.
+    /// The guarded call survived EPIPE. The same write without the guard ended on SIGPIPE. What
+    /// it costs to be sure is two system calls per communicate() call.
     ///
     /// \note The disposition belongs to the process, not to this thread, so a program that
     ///       wanted SIGPIPE to end it does not get that while communicate() runs. Children are
