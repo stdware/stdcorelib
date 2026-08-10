@@ -88,10 +88,10 @@ namespace stdc::windows {
     }
 
     struct RegValue::Comp {
-        mutable std::variant<std::monostate, std::vector<uint8_t>, std::wstring> s;
-        mutable std::optional<std::vector<std::wstring>> sl;
+        std::variant<std::monostate, std::vector<uint8_t>, std::wstring> s;
+        std::optional<std::vector<std::wstring>> sl;
 
-        void s2sl() const {
+        void initializeStringList() {
             assert(s.index() == 2);
 
             std::vector<std::wstring> stringList;
@@ -106,16 +106,16 @@ namespace stdc::windows {
             sl = std::move(stringList);
         }
 
-        void sl2s() const {
+        void initializeRawStringList() {
             assert(sl);
 
-            std::wstring env_str;
+            std::wstring rawString;
             for (const auto &item : std::as_const(sl.value())) {
-                env_str += item;
-                env_str.push_back(L'\0');
+                rawString += item;
+                rawString.push_back(L'\0');
             }
-            env_str.push_back(L'\0');
-            s = std::move(env_str);
+            rawString.push_back(L'\0');
+            s = std::move(rawString);
         }
     };
 
@@ -143,6 +143,7 @@ namespace stdc::windows {
             case StringList:
                 comp = std::make_shared<Comp>();
                 comp->sl = std::vector<std::wstring>();
+                comp->initializeRawStringList();
                 break;
             default:
                 d.p = nullptr;
@@ -211,6 +212,7 @@ namespace stdc::windows {
             }
             case StringList: {
                 comp->s = rawStringToStringList(value.data(), value.size());
+                comp->initializeStringList();
                 break;
             }
             default: {
@@ -232,6 +234,7 @@ namespace stdc::windows {
             case StringList:
                 comp = std::make_shared<Comp>();
                 comp->s = rawStringToStringList(value, size);
+                comp->initializeStringList();
                 break;
             default: {
                 t = Invalid;
@@ -243,11 +246,13 @@ namespace stdc::windows {
     RegValue::RegValue(const array_view<std::wstring> &value)
         : t(StringList), comp(std::make_shared<Comp>()) {
         comp->sl = value.vec();
+        comp->initializeRawStringList();
     }
 
     RegValue::RegValue(std::vector<std::wstring> &&value)
         : t(StringList), comp(std::make_shared<Comp>()) {
         comp->sl = std::move(value);
+        comp->initializeRawStringList();
     }
 
     RegValue::RegValue(const void *data, int type) : t(type) {
@@ -296,10 +301,7 @@ namespace stdc::windows {
         static const std::wstring empty;
 
         if (isStringList()) {
-            assert(comp && (comp->s.index() == 2 || comp->sl));
-            if (comp->s.index() == 0) {
-                comp->sl2s();
-            }
+            assert(comp && comp->s.index() == 2 && comp->sl);
             return std::get<2>(comp->s);
         }
         if (comp && comp->s.index() == 2) {
@@ -314,10 +316,7 @@ namespace stdc::windows {
         if (!isStringList()) {
             return empty;
         }
-        assert(comp && (comp->s.index() == 2 || comp->sl));
-        if (!comp->sl) {
-            comp->s2sl();
-        }
+        assert(comp && comp->s.index() == 2 && comp->sl);
         return comp->sl.value();
     }
 

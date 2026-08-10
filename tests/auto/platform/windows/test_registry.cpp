@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <algorithm>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -587,6 +588,36 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
         RegValue moved = std::move(copy);
         BOOST_CHECK(moved.toStringList() == TEST_STRING_LIST_VALUE);
         BOOST_CHECK(moved == original);
+    }
+
+    // Copies share their immutable representation. Concurrent const reads must not race to
+    // populate storage behind that shared pointer, whichever form the value was built from.
+    {
+        RegValue fromRaw(TEST_STRING_LIST_LITERAL_3,
+                         int(sizeof(TEST_STRING_LIST_LITERAL_3) / sizeof(wchar_t)) - 1,
+                         RegValue::StringList);
+        RegValue rawCopy = fromRaw;
+        std::vector<std::wstring> rawResult1;
+        std::vector<std::wstring> rawResult2;
+        std::thread rawReader1([&] { rawResult1 = fromRaw.toStringList(); });
+        std::thread rawReader2([&] { rawResult2 = rawCopy.toStringList(); });
+        rawReader1.join();
+        rawReader2.join();
+        BOOST_CHECK(rawResult1 == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(rawResult2 == TEST_STRING_LIST_VALUE);
+
+        RegValue fromList(TEST_STRING_LIST_VALUE);
+        RegValue listCopy = fromList;
+        std::wstring listResult1;
+        std::wstring listResult2;
+        std::thread listReader1([&] { listResult1 = fromList.toString(); });
+        std::thread listReader2([&] { listResult2 = listCopy.toString(); });
+        listReader1.join();
+        listReader2.join();
+        BOOST_CHECK(RegValue(listResult1, RegValue::StringList).toStringList() ==
+                    TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(RegValue(listResult2, RegValue::StringList).toStringList() ==
+                    TEST_STRING_LIST_VALUE);
     }
 
     // Copying an owning result from a temporary completes before that RegValue is destroyed.
