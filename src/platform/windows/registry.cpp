@@ -264,12 +264,18 @@ namespace stdc::windows {
 
     RegValue &RegValue::operator=(RegValue &&RHS) noexcept = default;
 
-    array_view<uint8_t> RegValue::toBinary() const & {
+    const std::vector<uint8_t> &RegValue::toBinary() const {
+        static const std::vector<uint8_t> empty;
+
         if (!isBinary()) {
-            return {};
+            return empty;
         }
         assert(comp && comp->s.index() == 1);
         return std::get<1>(comp->s);
+    }
+
+    array_view<uint8_t> RegValue::toBinaryView() const {
+        return toBinary();
     }
 
     int32_t RegValue::toInt32() const {
@@ -286,8 +292,8 @@ namespace stdc::windows {
         return d.qw;
     }
 
-    const std::wstring &RegValue::toString() const & {
-        static std::wstring empty;
+    const std::wstring &RegValue::toString() const {
+        static const std::wstring empty;
 
         if (isStringList()) {
             assert(comp && (comp->s.index() == 2 || comp->sl));
@@ -302,19 +308,21 @@ namespace stdc::windows {
         return empty;
     }
 
-    std::wstring RegValue::toString() && {
-        return static_cast<const RegValue &>(*this).toString();
-    }
+    const std::vector<std::wstring> &RegValue::toStringList() const {
+        static const std::vector<std::wstring> empty;
 
-    array_view<std::wstring> RegValue::toStringList() const & {
         if (!isStringList()) {
-            return {};
+            return empty;
         }
         assert(comp && (comp->s.index() == 2 || comp->sl));
         if (!comp->sl) {
             comp->s2sl();
         }
         return comp->sl.value();
+    }
+
+    array_view<std::wstring> RegValue::toStringListView() const {
+        return toStringList();
     }
 
     std::wstring RegValue::toExpandString() const {
@@ -342,7 +350,7 @@ namespace stdc::windows {
             case Invalid:
                 return true;
             case Binary:
-                return toBinary().vec() == RHS.toBinary();
+                return toBinary() == RHS.toBinary();
             case Int32:
                 return toInt32() == RHS.toInt32();
             case Int64:

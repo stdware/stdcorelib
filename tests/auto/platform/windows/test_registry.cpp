@@ -13,26 +13,14 @@ using namespace stdc::windows;
 
 namespace {
 
-    template <class T, class = void>
-    struct can_read_binary : std::false_type {};
-
-    template <class T>
-    struct can_read_binary<T, std::void_t<decltype(std::declval<T>().toBinary())>>
-        : std::true_type {};
-
-    template <class T, class = void>
-    struct can_read_string_view : std::false_type {};
-
-    template <class T>
-    struct can_read_string_view<T, std::void_t<decltype(std::declval<T>().toStringView())>>
-        : std::true_type {};
-
-    template <class T, class = void>
-    struct can_read_string_list : std::false_type {};
-
-    template <class T>
-    struct can_read_string_list<T, std::void_t<decltype(std::declval<T>().toStringList())>>
-        : std::true_type {};
+    static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toBinary()),
+                                 const std::vector<uint8_t> &>);
+    static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toBinaryView()),
+                                 stdc::array_view<uint8_t>>);
+    static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toStringList()),
+                                 const std::vector<std::wstring> &>);
+    static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toStringListView()),
+                                 stdc::array_view<std::wstring>>);
 
     template <class T, class = void>
     struct can_enum_keys : std::false_type {};
@@ -63,14 +51,6 @@ namespace {
     struct can_enum_values_with_error<
         T, std::void_t<decltype(std::declval<T>().enumValues(std::declval<std::error_code &>()))>>
         : std::true_type {};
-
-    static_assert(can_read_binary<const RegValue &>::value);
-    static_assert(!can_read_binary<RegValue &&>::value);
-    static_assert(can_read_string_view<const RegValue &>::value);
-    static_assert(!can_read_string_view<RegValue &&>::value);
-    static_assert(can_read_string_list<const RegValue &>::value);
-    static_assert(!can_read_string_list<RegValue &&>::value);
-    static_assert(std::is_same_v<decltype(std::declval<RegValue &&>().toString()), std::wstring>);
 
     static_assert(can_enum_keys<const RegKey &>::value);
     static_assert(!can_enum_keys<RegKey &&>::value);
@@ -522,10 +502,14 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
         BOOST_CHECK(val5.type() == RegValue::Binary);
 
         BOOST_CHECK(val1.toString() == TEST_STRING_VALUE);
-        BOOST_CHECK(val2.toStringList().vec() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(val2.toStringList() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(val2.toStringListView().vec() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(val2.toStringListView().data() == val2.toStringList().data());
         BOOST_CHECK(val3.toUInt32() == TEST_DWORD_VALUE);
         BOOST_CHECK(val4.toUInt64() == TEST_QWORD_VALUE);
-        BOOST_CHECK(val5.toBinary().vec() == TEST_BINARY_VALUE);
+        BOOST_CHECK(val5.toBinary() == TEST_BINARY_VALUE);
+        BOOST_CHECK(val5.toBinaryView().vec() == TEST_BINARY_VALUE);
+        BOOST_CHECK(val5.toBinaryView().data() == val5.toBinary().data());
     }
 
     const wchar_t TEST_STRING_LIST_LITERAL_1[] =
@@ -556,9 +540,9 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
         BOOST_CHECK(val2.type() == RegValue::StringList);
         BOOST_CHECK(val3.type() == RegValue::StringList);
 
-        BOOST_CHECK(val1.toStringList().vec() == TEST_STRING_LIST_VALUE);
-        BOOST_CHECK(val2.toStringList().vec() == TEST_STRING_LIST_VALUE);
-        BOOST_CHECK(val3.toStringList().vec() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(val1.toStringList() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(val2.toStringList() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(val3.toStringList() == TEST_STRING_LIST_VALUE);
 
         // and they compare equal to each other, not just to the same vector
         BOOST_CHECK(val1 == val2);
@@ -598,17 +582,19 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
         RegValue original(TEST_STRING_LIST_VALUE);
         RegValue copy = original;
         BOOST_CHECK(copy == original);
-        BOOST_CHECK(copy.toStringList().vec() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(copy.toStringList() == TEST_STRING_LIST_VALUE);
 
         RegValue moved = std::move(copy);
-        BOOST_CHECK(moved.toStringList().vec() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(moved.toStringList() == TEST_STRING_LIST_VALUE);
         BOOST_CHECK(moved == original);
     }
 
-    // A temporary can return its string by value. Its view readers are rejected by the static
-    // assertions above because their storage would disappear with the RegValue.
+    // Copying an owning result from a temporary completes before that RegValue is destroyed.
     std::wstring fromTemporary = RegValue(std::wstring(128, L'x')).toString();
     BOOST_CHECK(fromTemporary == std::wstring(128, L'x'));
+    std::vector<uint8_t> binaryFromTemporary =
+        RegValue(std::vector<uint8_t>{1, 2, 3, 4}).toBinary();
+    BOOST_CHECK(binaryFromTemporary == std::vector<uint8_t>({1, 2, 3, 4}));
 }
 
 BOOST_AUTO_TEST_CASE(test_regkey) {

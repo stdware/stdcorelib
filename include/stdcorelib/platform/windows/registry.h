@@ -72,20 +72,22 @@ namespace stdc::windows {
             return t;
         }
 
-        array_view<uint8_t> toBinary() const &;
-        array_view<uint8_t> toBinary() const && = delete;
+        /// The stored bytes, or an empty vector when this is not binary.
+        const std::vector<uint8_t> &toBinary() const;
+        /// A borrowed view of toBinary().
+        array_view<uint8_t> toBinaryView() const;
         int32_t toInt32() const;
         inline uint32_t toUInt32() const;
         int64_t toInt64() const;
         inline uint64_t toUInt64() const;
-        const std::wstring &toString() const &;
-        std::wstring toString() &&;
-        inline std::wstring_view toStringView() const & {
+        const std::wstring &toString() const;
+        inline std::wstring_view toStringView() const {
             return std::wstring_view(toString());
         }
-        std::wstring_view toStringView() const && = delete;
-        array_view<std::wstring> toStringList() const &;
-        array_view<std::wstring> toStringList() const && = delete;
+        /// The stored strings, or an empty vector when this is not a string list.
+        const std::vector<std::wstring> &toStringList() const;
+        /// A borrowed view of toStringList().
+        array_view<std::wstring> toStringListView() const;
         std::wstring toExpandString() const;
         std::wstring toLink() const;
 
