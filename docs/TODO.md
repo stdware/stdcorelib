@@ -13,7 +13,6 @@ Released as v1.1.0.0, and used by qmsetup's `qmcorecmd`. What the version promis
 ## Wanted
 
 - Mutually exclusive option groups for `cli`, so that `--json` and `--xml` can rule each other out. SysCmdLine's version of this interacts with its option priority ladder, so decide what the semantics should be rather than copying its shape.
-- A public whole-tree validation API for `cli`. The local `Argument::canFollow()`, `Option::canJoin()` and `Command::canAddCommand()` checks are callable in release builds, but recursive option collisions and ambiguities introduced by case-insensitive parsing are only checked by a debug assertion after the pieces become a tree. Dynamic command trees need a way to reject those configurations deliberately, preferably with a structured reason.
 - `communicate()` on **Windows** starts one worker thread per open pipe, and with a single pipe there is nothing to interleave with, so the thread is only there to make a timeout interruptible. CPython skips it in that case (`Lib/subprocess.py:1199`, at most one pipe and no timeout). POSIX here has nothing to fix: it is one `poll()` loop and no threads, which is what CPython does on that side too. Probably not worth doing at all, since a thread costs tens of microseconds against the milliseconds of `CreateProcessW` beside it, and it buys a second path through the one function in this library whose deadlock reasoning is subtle. Measure before writing it.
 
 ## Unverified
