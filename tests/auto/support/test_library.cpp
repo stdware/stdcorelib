@@ -287,6 +287,9 @@ BOOST_AUTO_TEST_CASE(test_preventing_the_unload_keeps_it_after_the_object_is_gon
         SharedLibrary lib;
         BOOST_REQUIRE(lib.open(pinned(), SharedLibrary::PreventUnloadHint));
         BOOST_CHECK(lib.close());
+        BOOST_CHECK(!lib.isOpen());
+        BOOST_CHECK(lib.path().empty());
+        BOOST_CHECK(lib.handle() == nullptr);
     }
     BOOST_CHECK(still_loaded(pinned()));
 }

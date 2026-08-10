@@ -12,6 +12,12 @@
 #  include <dlfcn.h>
 #  include <limits.h>
 #  include <string.h>
+
+// dyld can keep an image mapped after dlclose(), but Objective-C plugins can then run in an
+// unsafe half-unloaded state. Retain the loader reference instead, as Qt does on Darwin.
+#  ifdef __APPLE__
+#    undef RTLD_NODELETE
+#  endif
 #endif
 
 #include "str.h"
@@ -218,7 +224,16 @@ namespace stdc {
             impl.error = "library already open";
             return false;
         }
-        return impl.open(path, hints);
+        if (!impl.open(path, hints)) {
+            return false;
+        }
+#if !defined(_WIN32) && !defined(RTLD_NODELETE)
+        // There is no safe loader flag to request, so retain the dlopen reference instead.
+        if (hints.test_flag(PreventUnloadHint)) {
+            release();
+        }
+#endif
+        return true;
     }
 
     bool SharedLibrary::close() {

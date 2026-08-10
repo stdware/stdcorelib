@@ -39,17 +39,20 @@ namespace stdc {
         /// Passed to open(). These map onto the \c dlopen flags and are ignored where the
         /// platform has no equivalent.
         enum LoadHint {
+            /// Resolves all undefined symbols while loading the library. Maps to \c RTLD_NOW
+            /// on POSIX.
             ResolveAllSymbolsHint = 0x01,
+            /// Makes the library's symbols available to libraries loaded later. Maps to
+            /// \c RTLD_GLOBAL on POSIX.
             ExportExternalSymbolsHint = 0x02,
-            LoadArchiveMemberHint = 0x04, // Unused
-            /// The library stays for the life of the process, whatever anyone does with the
-            /// object that loaded it. \c RTLD_NODELETE where there is one, and the module
-            /// pinned on Windows.
-            ///
-            /// \note A wish rather than a promise. Where the loader refuses to pin, open()
-            ///       still succeeds with the library loaded and unloadable as usual, so a
-            ///       caller that has to know cannot learn it from here.
+            /// Reserved for loading a member of an archive library. Currently ignored.
+            LoadArchiveMemberHint = 0x04,
+            /// Keeps the library loaded for the life of the process. Uses \c RTLD_NODELETE on
+            /// POSIX and pins the module on Windows. Without a safe loader flag, as on macOS,
+            /// open() calls release() after loading succeeds. Pinning failure does not fail open().
             PreventUnloadHint = 0x08,
+            /// Prefers this library's symbols over previously loaded global symbols when
+            /// resolving references. Maps to \c RTLD_DEEPBIND where available.
             DeepBindHint = 0x10,
         };
         STDC_DECLARE_FLAGS(LoadHints, LoadHint)
