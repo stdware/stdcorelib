@@ -1,11 +1,121 @@
 // SPDX-License-Identifier: MIT
 
-#include <algorithm>
-#include <thread>
 #include <type_traits>
 #include <utility>
 
 #include <stdcorelib/platform/windows/registry.h>
+
+#ifndef STDC_HAS_EXCEPTIONS
+
+using stdc::windows::RegKey;
+using stdc::windows::RegValue;
+
+namespace {
+
+    template <template <class> class Operation, class T, class = void>
+    struct is_detected : std::false_type {};
+
+    template <template <class> class Operation, class T>
+    struct is_detected<Operation, T, std::void_t<Operation<T>>> : std::true_type {};
+
+    template <class T>
+    using open_without_error = decltype(std::declval<T>().open(std::declval<std::wstring>()));
+    template <class T>
+    using create_without_error = decltype(std::declval<T>().create(std::declval<std::wstring>()));
+    template <class T>
+    using close_without_error = decltype(std::declval<T>().close());
+    template <class T>
+    using key_count_without_error = decltype(std::declval<T>().keyCount());
+    template <class T>
+    using key_at_without_error = decltype(std::declval<T>().keyAt(0));
+    template <class T>
+    using value_count_without_error = decltype(std::declval<T>().valueCount());
+    template <class T>
+    using value_at_without_error = decltype(std::declval<T>().valueAt(0));
+    template <class T>
+    using flush_without_error = decltype(std::declval<T>().flush());
+    template <class T>
+    using save_without_error = decltype(std::declval<T>().save(std::declval<std::wstring>()));
+    template <class T>
+    using has_key_without_error = decltype(std::declval<T>().hasKey(std::declval<std::wstring>()));
+    template <class T>
+    using has_value_without_error =
+        decltype(std::declval<T>().hasValue(std::declval<std::wstring>()));
+    template <class T>
+    using value_without_error = decltype(std::declval<T>().value(std::declval<std::wstring>()));
+    template <class T>
+    using value_or_without_error =
+        decltype(std::declval<T>().valueOr(std::declval<std::wstring>()));
+    template <class T>
+    using set_value_without_error = decltype(
+        std::declval<T>().setValue(std::declval<std::wstring>(), std::declval<RegValue>()));
+    template <class T>
+    using remove_key_without_error =
+        decltype(std::declval<T>().removeKey(std::declval<std::wstring>()));
+    template <class T>
+    using remove_value_without_error =
+        decltype(std::declval<T>().removeValue(std::declval<std::wstring>()));
+    template <class T>
+    using remove_all_without_error = decltype(std::declval<T>().removeAll());
+    template <class T>
+    using notify_without_error = decltype(std::declval<T>().notify());
+    template <class T>
+    using enum_keys_without_error = decltype(std::declval<T>().enumKeys());
+    template <class T>
+    using enum_values_without_error = decltype(std::declval<T>().enumValues());
+
+    static_assert(!is_detected<open_without_error, RegKey &>::value);
+    static_assert(!is_detected<create_without_error, RegKey &>::value);
+    static_assert(!is_detected<close_without_error, RegKey &>::value);
+    static_assert(!is_detected<key_count_without_error, const RegKey &>::value);
+    static_assert(!is_detected<key_at_without_error, const RegKey &>::value);
+    static_assert(!is_detected<value_count_without_error, const RegKey &>::value);
+    static_assert(!is_detected<value_at_without_error, const RegKey &>::value);
+    static_assert(!is_detected<flush_without_error, RegKey &>::value);
+    static_assert(!is_detected<save_without_error, RegKey &>::value);
+    static_assert(!is_detected<has_key_without_error, const RegKey &>::value);
+    static_assert(!is_detected<has_value_without_error, const RegKey &>::value);
+    static_assert(!is_detected<value_without_error, const RegKey &>::value);
+    static_assert(!is_detected<value_or_without_error, const RegKey &>::value);
+    static_assert(!is_detected<set_value_without_error, RegKey &>::value);
+    static_assert(!is_detected<remove_key_without_error, RegKey &>::value);
+    static_assert(!is_detected<remove_value_without_error, RegKey &>::value);
+    static_assert(!is_detected<remove_all_without_error, RegKey &>::value);
+    static_assert(!is_detected<notify_without_error, RegKey &>::value);
+    static_assert(!is_detected<enum_keys_without_error, const RegKey &>::value);
+    static_assert(!is_detected<enum_values_without_error, const RegKey &>::value);
+
+    [[maybe_unused]] void use_error_code_overloads(RegKey &key, const RegKey &constKey,
+                                                    std::error_code &ec) {
+        (void) key.open(L"", ec);
+        (void) key.create(L"", ec);
+        (void) key.close(ec);
+        (void) constKey.keyCount(ec);
+        (void) constKey.keyAt(0, ec);
+        (void) constKey.valueCount(ec);
+        (void) constKey.valueAt(0, ec);
+        (void) key.flush(ec);
+        (void) key.save(L"", ec);
+        (void) constKey.hasKey(L"", ec);
+        (void) constKey.hasValue(L"", ec);
+        (void) constKey.value(L"", ec);
+        (void) constKey.valueOr(L"", ec);
+        (void) key.setValue(L"", RegValue(), ec);
+        (void) key.removeKey(L"", ec);
+        (void) key.removeValue(L"", ec);
+        (void) key.removeAll(ec);
+        (void) key.notify(ec);
+        (void) constKey.enumKeys(ec);
+        (void) constKey.enumValues(ec);
+    }
+
+}
+
+#else
+
+#include <algorithm>
+#include <thread>
+
 #include <stdcorelib/scope_guard.h>
 
 #include <boost/test/unit_test.hpp>
@@ -701,3 +811,5 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
+#endif

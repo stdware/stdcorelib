@@ -245,62 +245,98 @@ namespace stdc::windows {
         /// \note Every operation on this class comes in these two forms. The one taking an \a ec
         ///       sets it to the failure reason and is \c noexcept, the one without throws. Only
         ///       the \a ec form is there in a translation unit compiled without exceptions.
+#ifdef STDC_HAS_EXCEPTIONS
         inline RegKey open(const std::wstring &path, int access = DA_Read);
+#endif
         RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline RegKey create(const std::wstring &path, int access = DA_Read | DA_Write,
                              int options = CO_NonVolatile, LPSECURITY_ATTRIBUTES sa = nullptr,
                              bool *exists = nullptr);
+#endif
         RegKey create(const std::wstring &path, std::error_code &ec,
                       int access = DA_Read | DA_Write, int options = CO_NonVolatile,
                       LPSECURITY_ATTRIBUTES sa = nullptr, bool *exists = nullptr) noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool close();
+#endif
         bool close(std::error_code &ec) noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline int keyCount() const;
+#endif
         int keyCount(std::error_code &ec) const noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline std::optional<KeyData> keyAt(int index) const;
+#endif
         std::optional<KeyData> keyAt(int index, std::error_code &ec) const noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline int valueCount() const;
+#endif
         int valueCount(std::error_code &ec) const noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline std::optional<ValueData> valueAt(int index, bool query = false) const;
+#endif
         std::optional<ValueData> valueAt(int index, std::error_code &ec,
                                          bool query = false) const noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool flush();
+#endif
         bool flush(std::error_code &ec) noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool save(const std::wstring &filename, LPSECURITY_ATTRIBUTES sa = nullptr,
                          int flags = SF_StandardFormat);
+#endif
         bool save(const std::wstring &filename, std::error_code &ec,
                   LPSECURITY_ATTRIBUTES sa = nullptr, int flags = SF_StandardFormat) noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool hasKey(const std::wstring &path) const;
+#endif
         bool hasKey(const std::wstring &path, std::error_code &ec) const noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool hasValue(const std::wstring &name) const;
+#endif
         bool hasValue(const std::wstring &name, std::error_code &ec) const noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline RegValue value(const std::wstring &name) const;
+#endif
         RegValue value(const std::wstring &name, std::error_code &ec) const noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline RegValue valueOr(const std::wstring &name,
                                 const RegValue &defaultValue = RegValue::Invalid) const;
+#endif
         inline RegValue valueOr(const std::wstring &name, std::error_code &ec,
                                 const RegValue &defaultValue = RegValue::Invalid) const noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool setValue(const std::wstring &name, const RegValue &value);
+#endif
         bool setValue(const std::wstring &name, const RegValue &value,
                       std::error_code &ec) noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool removeKey(const std::wstring &path);
+#endif
         bool removeKey(const std::wstring &path, std::error_code &ec) noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool removeValue(const std::wstring &name);
+#endif
         bool removeValue(const std::wstring &name, std::error_code &ec) noexcept;
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool removeAll();
+#endif
         bool removeAll(std::error_code &ec) noexcept;
 
+#ifdef STDC_HAS_EXCEPTIONS
         inline bool notify(bool watchSubtree = false,
                            int notifyFilter = NF_ChangeName | NF_ChangeAttributes,
                            HANDLE event = nullptr, bool async = false);
+#endif
         bool notify(std::error_code &ec, bool watchSubtree = false,
                     int notifyFilter = NF_ChangeName | NF_ChangeAttributes, HANDLE event = nullptr,
                     bool async = false) noexcept;
@@ -399,10 +435,12 @@ namespace stdc::windows {
             inline void fetch() const {
                 if (_index >= _count || _index < 0)
                     return;
+#ifdef STDC_HAS_EXCEPTIONS
                 if (!_ec) {
                     _data = _key->keyAt(_index);
                     return;
                 }
+#endif
                 _data = _key->keyAt(_index, *_ec);
                 if (_ec->value() != ERROR_SUCCESS) {
                     _error_occurred = true;
@@ -423,8 +461,13 @@ namespace stdc::windows {
 
         class key_enumerator {
         public:
-            inline key_enumerator(const RegKey *key, std::error_code *ec)
-                : _key(key), _ec(ec), _count(ec ? _key->keyCount(*ec) : _key->keyCount()) {
+#ifdef STDC_HAS_EXCEPTIONS
+            inline explicit key_enumerator(const RegKey *key)
+                : _key(key), _ec(nullptr), _count(_key->keyCount()) {
+            }
+#endif
+            inline key_enumerator(const RegKey *key, std::error_code &ec)
+                : _key(key), _ec(&ec), _count(_key->keyCount(ec)) {
             }
             inline key_iterator begin() const {
                 return key_iterator(_key, 0, _count, _ec);
@@ -540,10 +583,12 @@ namespace stdc::windows {
             inline void fetch() const {
                 if (_index >= _count || _index < 0)
                     return;
+#ifdef STDC_HAS_EXCEPTIONS
                 if (!_ec) {
                     _data = _key->valueAt(_index, _query);
                     return;
                 }
+#endif
                 _data = _key->valueAt(_index, *_ec, _query);
                 if (_ec->value() != ERROR_SUCCESS) {
                     _error_occurred = true;
@@ -565,9 +610,13 @@ namespace stdc::windows {
 
         class value_enumerator {
         public:
-            inline value_enumerator(const RegKey *key, std::error_code *ec, bool query)
-                : _key(key), _ec(ec), _count(ec ? _key->valueCount(*ec) : _key->valueCount()),
-                  _query(query) {
+#ifdef STDC_HAS_EXCEPTIONS
+            inline value_enumerator(const RegKey *key, bool query)
+                : _key(key), _ec(nullptr), _count(_key->valueCount()), _query(query) {
+            }
+#endif
+            inline value_enumerator(const RegKey *key, std::error_code &ec, bool query)
+                : _key(key), _ec(&ec), _count(_key->valueCount(ec)), _query(query) {
             }
             inline value_iterator begin() const {
                 return value_iterator(_key, 0, _count, _ec, _query);
@@ -611,13 +660,15 @@ namespace stdc::windows {
         /// \endcode
         ///
         /// \sa enumValues()
+#ifdef STDC_HAS_EXCEPTIONS
         inline key_enumerator enumKeys() const & {
-            return key_enumerator(this, nullptr);
+            return key_enumerator(this);
         }
         key_enumerator enumKeys() const && = delete;
+#endif
 
         inline key_enumerator enumKeys(std::error_code &ec) const & {
-            return key_enumerator(this, &ec);
+            return key_enumerator(this, ec);
         }
         key_enumerator enumKeys(std::error_code &ec) const && = delete;
 
@@ -626,13 +677,15 @@ namespace stdc::windows {
         /// \param query whether to read each value along with its name, which costs a second
         ///        registry call per entry and is wasted when only the names are wanted
         /// \sa enumKeys(), for the error handling this shares
+#ifdef STDC_HAS_EXCEPTIONS
         inline value_enumerator enumValues(bool query = false) const & {
-            return value_enumerator(this, nullptr, query);
+            return value_enumerator(this, query);
         }
         value_enumerator enumValues(bool query = false) const && = delete;
+#endif
 
         inline value_enumerator enumValues(std::error_code &ec, bool query = false) const & {
-            return value_enumerator(this, &ec, query);
+            return value_enumerator(this, ec, query);
         }
         value_enumerator enumValues(std::error_code &ec, bool query = false) const && = delete;
 

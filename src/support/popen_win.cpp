@@ -143,12 +143,14 @@ namespace stdc {
         }
         close_std_files();
 
+#ifdef STDC_HAS_EXCEPTIONS
         if (in_error)
             std::rethrow_exception(in_error);
         if (out_error)
             std::rethrow_exception(out_error);
         if (err_error)
             std::rethrow_exception(err_error);
+#endif
         return {out, err};
     }
 

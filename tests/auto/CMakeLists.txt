@@ -27,6 +27,25 @@ endif()
 set(_src ${_common_src} ${_subdir_src} ${_platform_src})
 add_executable(${PROJECT_NAME} ${_src})
 
+if(WIN32)
+    # This is a compile test rather than part of the Boost.Test binary. It verifies both sides
+    # of the public contract when the caller itself cannot throw: the throwing Registry
+    # overloads disappear and every error_code overload remains usable.
+    add_library(test_registry_noexceptions OBJECT platform/windows/test_registry.cpp)
+    target_link_libraries(test_registry_noexceptions PRIVATE stdcorelib)
+    set_target_properties(test_registry_noexceptions PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+    )
+    if(MSVC)
+        target_compile_options(test_registry_noexceptions PRIVATE /EHs-c- /wd4530)
+    else()
+        target_compile_options(test_registry_noexceptions PRIVATE -fno-exceptions)
+    endif()
+    add_dependencies(${PROJECT_NAME} test_registry_noexceptions)
+endif()
+
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::unit_test_framework)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE stdcorelib)
