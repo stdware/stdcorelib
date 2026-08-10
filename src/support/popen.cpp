@@ -420,14 +420,11 @@ namespace stdc {
 
     Popen::~Popen() = default;
 
-    Popen::Popen(Popen &&RHS) noexcept {
-        std::swap(_impl, RHS._impl);
+    Popen::Popen(Popen &&RHS) noexcept : _impl(std::move(RHS._impl)) {
     }
 
-    // Not a swap. Swapping would hand this object's child to RHS, which then kills it whenever
-    // RHS happens to go away, so a caller assigning over a running process could not say when it
-    // ended. Releasing here ends it at the assignment, and leaves RHS in the same empty state the
-    // move constructor leaves it in.
+    // Not a swap. Moving releases this object's child at the assignment and leaves RHS empty,
+    // instead of handing the old child to RHS for its destructor to kill at some later point.
     Popen &Popen::operator=(Popen &&RHS) noexcept {
         _impl = std::move(RHS._impl);
         return *this;
