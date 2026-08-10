@@ -553,7 +553,8 @@ namespace stdc {
     }
 
     Popen &Popen::user(int user) {
-        auto &info = _impl->user;
+        stdc_impl_t;
+        auto &info = impl.user;
         info.has_value = true;
         info.is_name = false;
         info.num = user;
@@ -561,7 +562,8 @@ namespace stdc {
     }
 
     Popen &Popen::user(const char *user) {
-        auto &info = _impl->user;
+        stdc_impl_t;
+        auto &info = impl.user;
         info.has_value = true;
         info.is_name = true;
         info.str = user ? user : "";
