@@ -27,6 +27,7 @@
 
 #include "str.h"
 #include "scope_guard.h"
+#include "system.h"
 
 namespace stdc {
 
@@ -868,7 +869,7 @@ namespace stdc {
     }
 
     // https://github.com/llvm/llvm-project/blob/llvmorg-21.1.8/llvm/lib/Support/Unix/Program.inc#L549
-    bool Popen::commandLineFits(const std::vector<std::string> &args) {
+    bool system::command_line_fits(const std::vector<std::string> &args) {
         static const long arg_max = sysconf(_SC_ARG_MAX);
         if (arg_max == -1) {
             // The system declines to name a limit, so there is nothing here to check against.

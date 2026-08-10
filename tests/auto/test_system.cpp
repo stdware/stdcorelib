@@ -144,6 +144,20 @@ BOOST_AUTO_TEST_CASE(test_command_line_round_trip) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(test_command_line_fits) {
+    BOOST_CHECK(system::command_line_fits({}));
+    BOOST_CHECK(system::command_line_fits({"program", "short"}));
+
+    // One argument past what either platform takes. Windows counts the whole line against
+    // 32767 characters and Linux refuses any single argument of 128 KiB whatever the total is.
+    BOOST_CHECK(!system::command_line_fits({"program", std::string(1 << 20, 'a')}));
+
+    // Or many arguments that add up to too much.
+    std::vector<std::string> args = {"program"};
+    args.insert(args.end(), 8000, std::string(64, 'a'));
+    BOOST_CHECK(!system::command_line_fits(args));
+}
+
 // This was declared static in the header, which gave it internal linkage and left every caller
 // with a link error against a definition that was right there in the library.
 BOOST_AUTO_TEST_CASE(test_environment) {

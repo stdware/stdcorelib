@@ -16,6 +16,7 @@
 #include "str.h"
 #include "scope_guard.h"
 #include "vlarray.h"
+#include "system.h"
 
 namespace fs = std::filesystem;
 
@@ -690,7 +691,7 @@ namespace stdc {
     }
 
     // https://github.com/llvm/llvm-project/blob/llvmorg-21.1.8/llvm/lib/Support/Windows/Program.inc#L564
-    bool Popen::commandLineFits(const std::vector<std::string> &args) {
+    bool system::command_line_fits(const std::vector<std::string> &args) {
         // CreateProcessW documents 32767 characters as the most lpCommandLine may be, counting
         // the terminator. Below that rather than at it, because a few things about the line
         // this function cannot see are still counted there.

@@ -90,6 +90,27 @@ namespace stdc {
         /// \sa split_command_line()
         STDC_EXPORT std::string join_command_line(const std::vector<std::string> &args);
 
+        /// Whether \a args is short enough for the system to start a program with.
+        ///
+        /// Windows builds one string for \c CreateProcess and refuses it past 32767 characters,
+        /// so this quotes \a args the way a process launcher would and measures what comes out
+        /// rather than guessing at it. POSIX counts the arguments and the environment together
+        /// against \c ARG_MAX, so half of it is left for the environment, and no single argument
+        /// may reach the 128 KiB one of its own that Linux imposes.
+        ///
+        /// This is what a response file is for. A build system generating one long command line
+        /// asks this first, and writes the arguments to a file and passes \c \@file instead when
+        /// the answer is no.
+        ///
+        /// \note What Windows counts is the UTF-16 these become, and UTF-8 is never shorter
+        ///       than the UTF-16 of the same text, so counting bytes here can only refuse a
+        ///       line the system would have taken. It never accepts one the system would
+        ///       refuse, which is the direction that matters.
+        /// \note A yes is not a promise that starting the program will succeed, only that it
+        ///       will not fail for this reason. Both limits are approached conservatively.
+        /// \sa cli::Parser::EnableResponseFile, which is the other end of the same problem
+        STDC_EXPORT bool command_line_fits(const std::vector<std::string> &args);
+
         /// @}
 
         /// The environment of the current process, as UTF-8.

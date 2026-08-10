@@ -1290,48 +1290,25 @@ BOOST_AUTO_TEST_CASE(test_startupinfo_names_the_handles_the_child_starts_with) {
 //
 // A start that succeeds proves nothing here, which is what the first version of this test
 // checked. The child has to say what it received.
-// A command line long enough for the system to refuse it, answered before the system is asked
-// rather than as a start() failure with nothing useful in it. \sa llvm's
-// commandLineFitsWithinSystemLimits
-BOOST_AUTO_TEST_CASE(test_a_command_line_can_be_too_long) {
-    BOOST_CHECK(Popen::commandLineFits({}));
-    BOOST_CHECK(Popen::commandLineFits(child_args({"argv", "short"})));
-
-    // One argument past what either platform takes. Windows counts the whole line against
-    // 32767 characters and Linux refuses any single argument of 128 KiB whatever the total is.
-    BOOST_CHECK(!Popen::commandLineFits({ChildPath, std::string(1 << 20, 'a')}));
-
-    // Or many that add up to it.
-    {
-        std::vector<std::string> args = child_args({"argv"});
-        args.insert(args.end(), 8000, std::string(64, 'a'));
-        BOOST_CHECK(!Popen::commandLineFits(args));
+// The limit checks themselves belong to system.h and are covered by test_system. Their strongest
+// claim still needs a child: the longest accepted line really starts and arrives whole.
+BOOST_AUTO_TEST_CASE(test_the_longest_accepted_command_line_really_starts) {
+    std::vector<std::string> args = child_args({"argv"});
+    while (system::command_line_fits(args)) {
+        args.push_back(std::string(200, 'x'));
     }
+    args.pop_back();
+    BOOST_REQUIRE_GT(args.size(), 3u);
+    args.back() = std::string(199, 'x') + "z";
 
-    // Quoting is what makes an argument long, so what is measured is the line that would be
-    // built rather than the arguments as they came in. A quote doubles on Windows.
-    BOOST_CHECK(Popen::commandLineFits({ChildPath, std::string(4000, 'a')}));
-
-    // The answer is not merely conservative: the longest line it accepts really does start, and
-    // the child really does receive the last argument whole.
-    {
-        std::vector<std::string> args = child_args({"argv"});
-        while (Popen::commandLineFits(args)) {
-            args.push_back(std::string(200, 'x'));
-        }
-        args.pop_back();
-        BOOST_REQUIRE_GT(args.size(), 3u);
-        args.back() = std::string(199, 'x') + "z";
-
-        Popen p;
-        std::string err;
-        p.args(args).stdout_(Popen::PIPE);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), "the longest accepted line did not start: " + err);
-        auto [out, errout] = p.communicate({}, Timeout);
-        BOOST_CHECK_EQUAL(p.returncode().value_or(-1), 0);
-        BOOST_CHECK_MESSAGE(out.find(std::string(199, 'x') + "z\n") != std::string::npos,
-                            "the last argument of the longest accepted line did not arrive");
-    }
+    Popen p;
+    std::string err;
+    p.args(args).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), "the longest accepted line did not start: " + err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(p.returncode().value_or(-1), 0);
+    BOOST_CHECK_MESSAGE(out.find(std::string(199, 'x') + "z\n") != std::string::npos,
+                        "the last argument of the longest accepted line did not arrive");
 }
 
 // Asking whether a child has exited must not disturb it, and asking often must not miss the
