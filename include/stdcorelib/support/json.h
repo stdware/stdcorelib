@@ -39,6 +39,9 @@ namespace stdc {
     ///
     ///       An integer is exact, up to the range of \c int64_t. Anything outside it, including an
     ///       unsigned value above \c INT64_MAX, becomes a \c Double and is exact only up to 2^53.
+    ///
+    /// \warning Accessors returning a reference or view borrow this value. Calling one on a
+    ///          temporary leaves the result dangling at the end of the statement.
     class STDC_EXPORT JsonValue {
     public:
         enum Type {
@@ -118,23 +121,19 @@ namespace stdc {
         double toDouble(double defaultValue = 0) const;
         int64_t toInt(int64_t defaultValue = 0) const;
         std::string_view toStringView(std::string_view defaultValue = {}) const;
-        /// \warning When the type differs, the returned reference points at \a defaultValue.
-        ///          A temporary default lives only until the end of the full expression.
         const std::string &toString(const std::string &defaultValue = {}) const;
+        std::string toString(std::string &&defaultValue) const;
+        /// \warning The returned view borrows either this value or \a defaultValue. That storage
+        ///          must outlive the view, so a temporary container leaves it dangling.
         array_view<uint8_t> toBinaryView(array_view<uint8_t> defaultValue = {}) const;
-        /// \warning When the type differs, the returned reference points at \a defaultValue.
-        ///          A temporary default lives only until the end of the full expression.
         const std::vector<uint8_t> &toBinary(const std::vector<uint8_t> &defaultValue = {}) const;
+        std::vector<uint8_t> toBinary(std::vector<uint8_t> &&defaultValue) const;
         const JsonArray &toArray() const;
         const JsonArray &toArray(const JsonArray &defaultValue) const;
-        inline JsonArray toArray(JsonArray &&defaultValue) {
-            return toArray(defaultValue);
-        }
+        JsonArray toArray(JsonArray &&defaultValue) const;
         const JsonObject &toObject() const;
         const JsonObject &toObject(const JsonObject &defaultValue) const;
-        inline JsonObject toObject(JsonObject &&defaultValue) {
-            return toObject(defaultValue);
-        }
+        JsonObject toObject(JsonObject &&defaultValue) const;
 
         const JsonValue &operator[](std::string_view key) const;
         const JsonValue &operator[](size_t i) const;

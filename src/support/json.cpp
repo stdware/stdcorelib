@@ -1260,6 +1260,13 @@ namespace stdc {
         return _type == String ? *_p.s : defaultValue;
     }
 
+    std::string JsonValue::toString(std::string &&defaultValue) const {
+        if (_type == String) {
+            return *_p.s;
+        }
+        return std::move(defaultValue);
+    }
+
     stdc::array_view<uint8_t>
         JsonValue::toBinaryView(stdc::array_view<uint8_t> defaultValue) const {
         if (_type != Binary) {
@@ -1273,6 +1280,13 @@ namespace stdc {
         return _type == Binary ? *_p.bin : defaultValue;
     }
 
+    std::vector<uint8_t> JsonValue::toBinary(std::vector<uint8_t> &&defaultValue) const {
+        if (_type == Binary) {
+            return *_p.bin;
+        }
+        return std::move(defaultValue);
+    }
+
     const JsonArray &JsonValue::toArray() const {
         return _type == Array ? *_p.arr : EmptyValues::emptyArray();
     }
@@ -1281,12 +1295,26 @@ namespace stdc {
         return _type == Array ? *_p.arr : defaultValue;
     }
 
+    JsonArray JsonValue::toArray(JsonArray &&defaultValue) const {
+        if (_type == Array) {
+            return *_p.arr;
+        }
+        return std::move(defaultValue);
+    }
+
     const JsonObject &JsonValue::toObject() const {
         return _type == Object ? *_p.obj : EmptyValues::emptyObject();
     }
 
     const JsonObject &JsonValue::toObject(const JsonObject &defaultValue) const {
         return _type == Object ? *_p.obj : defaultValue;
+    }
+
+    JsonObject JsonValue::toObject(JsonObject &&defaultValue) const {
+        if (_type == Object) {
+            return *_p.obj;
+        }
+        return std::move(defaultValue);
     }
 
     const JsonValue &JsonValue::operator[](std::string_view key) const {

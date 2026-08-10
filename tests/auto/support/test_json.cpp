@@ -139,6 +139,46 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Conversions) {
         BOOST_CHECK(s.toArray(arrayFallback).size() == 1);
         BOOST_CHECK(s.toObject(objectFallback).size() == 1);
     }
+    // Rvalue defaults are returned by value so a temporary cannot leave a dangling reference.
+    // Their storage is moved rather than copied when the value has the wrong type.
+    {
+        std::string stringFallback(128, 's');
+        const char *stringData = stringFallback.data();
+
+        std::vector<uint8_t> binaryFallback;
+        binaryFallback.reserve(8);
+        binaryFallback.push_back(6);
+        const uint8_t *binaryData = binaryFallback.data();
+
+        JsonArray arrayFallback;
+        arrayFallback.reserve(8);
+        arrayFallback.emplace_back(7);
+        const JsonValue *arrayData = arrayFallback.data();
+
+        JsonObject objectFallback{{"fallback", JsonValue(8)}};
+        const JsonValue *objectValue = &objectFallback.begin()->second;
+
+        JsonValue s("text");
+        std::string string = JsonValue().toString(std::move(stringFallback));
+        std::vector<uint8_t> binary = s.toBinary(std::move(binaryFallback));
+        JsonArray array = s.toArray(std::move(arrayFallback));
+        JsonObject object = s.toObject(std::move(objectFallback));
+        BOOST_CHECK(string.data() == stringData);
+        BOOST_CHECK(binary.data() == binaryData);
+        BOOST_CHECK(array.data() == arrayData);
+        BOOST_CHECK(&object.begin()->second == objectValue);
+        BOOST_CHECK(array[0].toInt() == 7);
+        BOOST_CHECK(binary[0] == 6);
+        BOOST_CHECK(object["fallback"].toInt() == 8);
+
+        auto actualArray =
+            JsonValue(JsonArray{JsonValue(1)}).toArray(JsonArray{JsonValue(9)});
+        BOOST_CHECK(actualArray[0].toInt() == 1);
+        BOOST_CHECK(JsonValue(JsonObject{{"actual", JsonValue(2)}})
+                        .toObject(JsonObject{{"fallback", JsonValue(9)}})
+                        .at("actual")
+                        .toInt() == 2);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_JsonValue_Subscript) {
