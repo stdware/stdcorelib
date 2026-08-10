@@ -1,11 +1,13 @@
 ﻿// SPDX-License-Identifier: MIT
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
 #include <fstream>
+#include <limits>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -184,6 +186,21 @@ BOOST_AUTO_TEST_CASE(test_floating_point) {
     BOOST_CHECK(!reads("1.5x", &out));
     // Beyond what a double can hold, rather than silently infinite.
     BOOST_CHECK(!reads("1e400", &out));
+
+    // The range belongs to the type asked for. Going through double first accepted this and
+    // narrowed it to infinity.
+    float narrow;
+    BOOST_CHECK(!reads("1e39", &narrow));
+
+    // A platform whose long double is wider than double must not lose that range by going
+    // through double. MSVC and Apple arm64 make the two types alike, so there is no wider value
+    // to ask for there.
+    if constexpr (std::numeric_limits<long double>::max_exponent10 >
+                  std::numeric_limits<double>::max_exponent10) {
+        long double wide;
+        BOOST_REQUIRE(reads("1e400", &wide));
+        BOOST_CHECK(std::isfinite(wide));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_booleans_spell_themselves_several_ways) {

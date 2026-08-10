@@ -282,7 +282,9 @@ namespace stdc::cli {
         STDC_EXPORT bool parse_signed(std::string_view token, int64_t *out, int64_t min,
                                       int64_t max);
         STDC_EXPORT bool parse_unsigned(std::string_view token, uint64_t *out, uint64_t max);
+        STDC_EXPORT bool parse_floating(std::string_view token, float *out);
         STDC_EXPORT bool parse_floating(std::string_view token, double *out);
+        STDC_EXPORT bool parse_floating(std::string_view token, long double *out);
         STDC_EXPORT bool parse_boolean(std::string_view token, bool *out);
 
     }
@@ -348,17 +350,13 @@ namespace stdc::cli {
         }
     };
 
-    /// \c float, \c double and \c long double. Uses \c strtod rather than \c from_chars, which
-    /// libc++ did not implement for floating point for a long time.
+    /// \c float, \c double and \c long double. Uses the matching function from the \c strto*
+    /// family rather than \c from_chars, which libc++ did not implement for floating point for
+    /// a long time.
     template <class T>
     struct value_traits<T, std::enable_if_t<std::is_floating_point_v<T>>> {
         static inline bool parse(std::string_view token, T *out) {
-            double v;
-            if (!detail::parse_floating(token, &v)) {
-                return false;
-            }
-            *out = T(v);
-            return true;
+            return detail::parse_floating(token, out);
         }
         static inline const char *type_name() {
             return "number";
@@ -618,6 +616,9 @@ namespace stdc::cli {
 
         /// The highest level among the options given decides. This is what lets \c --help be
         /// answered on a command line that is missing everything it requires.
+        ///
+        /// ###QUESTION: Should automatic activation and exclusivity be split from missing-value
+        /// priority? This enum prevents combining those policies and orders unrelated values.
         enum Prior {
             NoPrior,
             /// Its own missing arguments are not an error.

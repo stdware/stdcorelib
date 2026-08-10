@@ -36,6 +36,23 @@ namespace stdc::cli {
                 return token;
             }
 
+            template <class T>
+            bool parse_floating_with(std::string_view token, T *out,
+                                     T (*convert)(const char *, char **)) {
+                if (token.empty()) {
+                    return false;
+                }
+                std::string buf(token);
+                errno = 0;
+                char *end = nullptr;
+                T value = convert(buf.c_str(), &end);
+                if (end != buf.c_str() + buf.size() || end == buf.c_str() || errno == ERANGE) {
+                    return false;
+                }
+                *out = value;
+                return true;
+            }
+
         }
 
         bool parse_signed(std::string_view token, int64_t *out, int64_t min, int64_t max) {
@@ -76,24 +93,16 @@ namespace stdc::cli {
             return true;
         }
 
+        bool parse_floating(std::string_view token, float *out) {
+            return parse_floating_with(token, out, std::strtof);
+        }
+
         bool parse_floating(std::string_view token, double *out) {
-            if (token.empty()) {
-                return false;
-            }
-            // strtod rather than from_chars: libc++ went years without the floating point
-            // overload, and macOS is one of the platforms this has to work on.
-            std::string buf(token);
-            errno = 0;
-            char *end = nullptr;
-            double v = std::strtod(buf.c_str(), &end);
-            if (end != buf.c_str() + buf.size() || end == buf.c_str()) {
-                return false;
-            }
-            if (errno == ERANGE) {
-                return false;
-            }
-            *out = v;
-            return true;
+            return parse_floating_with(token, out, std::strtod);
+        }
+
+        bool parse_floating(std::string_view token, long double *out) {
+            return parse_floating_with(token, out, std::strtold);
         }
 
         bool parse_boolean(std::string_view token, bool *out) {
