@@ -123,8 +123,6 @@ namespace stdc {
         std::string_view toStringView(std::string_view defaultValue = {}) const;
         const std::string &toString(const std::string &defaultValue = {}) const;
         std::string toString(std::string &&defaultValue) const;
-        /// \warning The returned view borrows either this value or \a defaultValue. That storage
-        ///          must outlive the view, so a temporary container leaves it dangling.
         array_view<uint8_t> toBinaryView(array_view<uint8_t> defaultValue = {}) const;
         const std::vector<uint8_t> &toBinary(const std::vector<uint8_t> &defaultValue = {}) const;
         std::vector<uint8_t> toBinary(std::vector<uint8_t> &&defaultValue) const;
