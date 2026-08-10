@@ -268,7 +268,7 @@ namespace stdc {
             if (this == &other)
                 return;
 
-            if (!is_inline() && !other.is_inline()) {
+            if (!is_inline() && !other.is_inline() && allocators_equal(other)) {
                 std::swap(m_begin, other.m_begin);
                 std::swap(m_size, other.m_size);
                 std::swap(m_capacity, other.m_capacity);
@@ -327,7 +327,12 @@ namespace stdc {
             if (this == &other)
                 return;
             reset_to_inline();
-            if (!other.is_inline()) {
+            bool may_steal = allocators_equal(other);
+            if constexpr (AT::propagate_on_container_move_assignment::value) {
+                m_alloc = std::move(other.m_alloc);
+                may_steal = true;
+            }
+            if (!other.is_inline() && may_steal) {
                 // Steal the heap buffer outright. Its elements come along with it.
                 m_begin = other.m_begin;
                 m_size = other.m_size;
@@ -337,15 +342,31 @@ namespace stdc {
                 other.m_size = 0;
             } else {
                 reserve(other.m_size);
-                for (m_size = 0; m_size < other.m_size; ++m_size)
+                for (m_size = 0; m_size < other.m_size; ++m_size) {
                     AT::construct(m_alloc, m_begin + m_size, std::move(other.m_begin[m_size]));
-                other.clear();
+                }
+                if constexpr (AT::propagate_on_container_move_assignment::value) {
+                    for (size_type i = 0; i < other.m_size; ++i) {
+                        AT::destroy(m_alloc, other.m_begin + i);
+                    }
+                    other.m_size = 0;
+                } else {
+                    other.clear();
+                }
             }
         }
 
     private:
         bool is_inline() const {
             return m_begin == m_inline_begin;
+        }
+
+        bool allocators_equal(const vlarray_base &other) const {
+            if constexpr (AT::is_always_equal::value) {
+                return true;
+            } else {
+                return m_alloc == other.m_alloc;
+            }
         }
 
         void destroy_range(size_type from, size_type to) {
@@ -440,6 +461,7 @@ namespace stdc {
     template <class T, std::size_t N = 4, class Alloc = std::allocator<T>>
     class vlarray : public vlarray_base<T, Alloc> {
         using Base = vlarray_base<T, Alloc>;
+        using AllocTraits = std::allocator_traits<Alloc>;
 
     public:
         using size_type = typename Base::size_type;
@@ -460,7 +482,8 @@ namespace stdc {
         vlarray(const vlarray &other) : vlarray(other.get_allocator()) {
             this->assign(other);
         }
-        vlarray(vlarray &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
+        vlarray(vlarray &&other) noexcept(std::is_nothrow_move_constructible_v<T> &&
+                                         std::is_nothrow_copy_constructible_v<Alloc>)
             : vlarray(other.get_allocator()) {
             this->assign(std::move(other));
         }
@@ -486,7 +509,10 @@ namespace stdc {
             this->assign(other);
             return *this;
         }
-        vlarray &operator=(vlarray &&other) noexcept(std::is_nothrow_move_constructible_v<T>) {
+        vlarray &operator=(vlarray &&other) noexcept(
+            std::is_nothrow_move_constructible_v<T> &&
+            (!AllocTraits::propagate_on_container_move_assignment::value ||
+             std::is_nothrow_move_assignable_v<Alloc>)) {
             this->assign(std::move(other));
             return *this;
         }
