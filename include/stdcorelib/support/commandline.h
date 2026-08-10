@@ -1413,7 +1413,9 @@ namespace stdc::cli {
 
     private:
         friend class Parser;
-        std::unique_ptr<detail::parse_data> _impl;
+
+        using Impl = detail::parse_data;
+        std::unique_ptr<Impl> _impl;
     };
 
     /// Turns arguments into a ParseResult against a command tree.

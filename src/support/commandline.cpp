@@ -15,6 +15,7 @@
 #include "console.h"
 #include "path.h"
 #include "utf.h"
+#include "pimpl.h"
 
 namespace stdc::cli {
 
@@ -336,11 +337,13 @@ namespace stdc::cli {
     ParseResult::~ParseResult() = default;
 
     ParseResult::Error ParseResult::error() const {
-        return _impl->error;
+        stdc_impl_t;
+        return impl.error;
     }
 
     const std::string &ParseResult::errorText() const {
-        return _impl->error_text;
+        stdc_impl_t;
+        return impl.error_text;
     }
 
     namespace {
@@ -369,8 +372,9 @@ namespace stdc::cli {
     }
 
     std::string ParseResult::correctionText() const {
-        const auto &input = _impl->error_token;
-        if (input.empty() || _impl->error_candidates.empty()) {
+        stdc_impl_t;
+        const auto &input = impl.error_token;
+        if (input.empty() || impl.error_candidates.empty()) {
             return {};
         }
 
@@ -380,9 +384,9 @@ namespace stdc::cli {
 
         // Set in as far as the help text sets a section body in, since this is a list under a
         // line that introduces it and reads as one.
-        const std::string margin(size_t(_impl->indent < 0 ? 0 : _impl->indent), ' ');
+        const std::string margin(size_t(impl.indent < 0 ? 0 : impl.indent), ' ');
         std::string suggestions;
-        for (const auto &item : _impl->error_candidates) {
+        for (const auto &item : impl.error_candidates) {
             if (edit_distance(input, item) <= threshold) {
                 suggestions += "\n" + margin + item;
             }
@@ -394,23 +398,26 @@ namespace stdc::cli {
     }
 
     const Command *ParseResult::command() const {
-        return _impl->target;
+        stdc_impl_t;
+        return impl.target;
     }
 
     const std::vector<std::string> &ParseResult::commandPath() const {
-        return _impl->path;
+        stdc_impl_t;
+        return impl.path;
     }
 
     // The innermost command on the path that was given one, so a subcommand may say a version of
     // its own and everything under a root that says one inherits it.
     std::string ParseResult::versionText() const {
+        stdc_impl_t;
         std::string res;
-        const Command *at = _impl->root.get();
+        const Command *at = impl.root.get();
         for (size_t i = 0; at; ++i) {
             if (!at->version().empty()) {
                 res = at->version();
             }
-            at = i + 1 < _impl->path.size() ? at->findCommand(_impl->path[i + 1]) : nullptr;
+            at = i + 1 < impl.path.size() ? at->findCommand(impl.path[i + 1]) : nullptr;
         }
         return res;
     }
@@ -420,7 +427,8 @@ namespace stdc::cli {
         if (role == Option::NoRole) {
             return false;
         }
-        for (const auto &item : _impl->options) {
+        stdc_impl_t;
+        for (const auto &item : impl.options) {
             if (item.option->role() == role && !item.occurrences.empty()) {
                 return true;
             }
@@ -431,7 +439,8 @@ namespace stdc::cli {
     // Nothing rather than an empty result, so that there is one way to ask whether an option
     // was given and one kind of OptionResult to hold.
     std::optional<OptionResult> ParseResult::option(std::string_view token) const {
-        auto data = _impl->find(token);
+        stdc_impl_t;
+        auto data = impl.find(token);
         if (!data || data->occurrences.empty()) {
             return std::nullopt;
         }
@@ -439,51 +448,57 @@ namespace stdc::cli {
     }
 
     std::optional<std::string_view> ParseResult::rawValue(int index) const {
-        if (index < 0 || size_t(index) >= _impl->arguments.size() ||
-            _impl->arguments[size_t(index)].empty()) {
+        stdc_impl_t;
+        if (index < 0 || size_t(index) >= impl.arguments.size() ||
+            impl.arguments[size_t(index)].empty()) {
             return std::nullopt;
         }
-        return std::string_view(_impl->arguments[size_t(index)].front());
+        return std::string_view(impl.arguments[size_t(index)].front());
     }
 
     std::vector<std::string_view> ParseResult::rawValues(int index) const {
+        stdc_impl_t;
         std::vector<std::string_view> res;
-        if (index < 0 || size_t(index) >= _impl->arguments.size()) {
+        if (index < 0 || size_t(index) >= impl.arguments.size()) {
             return res;
         }
-        for (const auto &item : _impl->arguments[size_t(index)]) {
+        for (const auto &item : impl.arguments[size_t(index)]) {
             res.emplace_back(item);
         }
         return res;
     }
 
     const std::string &ParseResult::prologue() const {
-        return _impl->prologue;
+        stdc_impl_t;
+        return impl.prologue;
     }
 
     const std::string &ParseResult::epilogue() const {
-        return _impl->epilogue;
+        stdc_impl_t;
+        return impl.epilogue;
     }
 
     const HelpLayout &ParseResult::helpLayout() const {
-        return _impl->help_layout;
+        stdc_impl_t;
+        return impl.help_layout;
     }
 
     // Gathered by walking down the path the way the parser did. What it gathered on the way is
     // what it demands at the end, so this is where the help text has to agree with it.
     std::vector<const Option *> ParseResult::inheritedOptions() const {
+        stdc_impl_t;
         std::vector<const Option *> res;
-        if (!_impl->root || _impl->path.size() <= 1) {
+        if (!impl.root || impl.path.size() <= 1) {
             return res;
         }
-        const Command *at = _impl->root.get();
-        for (size_t i = 1; i < _impl->path.size() && at; ++i) {
+        const Command *at = impl.root.get();
+        for (size_t i = 1; i < impl.path.size() && at; ++i) {
             for (const auto &option : at->options()) {
                 if (option.isRecursive()) {
                     res.push_back(&option);
                 }
             }
-            at = at->findCommand(_impl->path[i]);
+            at = at->findCommand(impl.path[i]);
         }
         return res;
     }
@@ -516,25 +531,28 @@ namespace stdc::cli {
     }
 
     std::vector<HelpBlock> ParseResult::helpBlocks() const {
-        if (!_impl->target || !_impl->formatter) {
+        stdc_impl_t;
+        if (!impl.target || !impl.formatter) {
             return {};
         }
-        return _impl->formatter->blocks(*this, sizesOf(_impl.get()));
+        return impl.formatter->blocks(*this, sizesOf(&impl));
     }
 
     std::string ParseResult::helpText() const {
+        stdc_impl_t;
         std::string out;
-        for (const auto &run : helpRuns(*this, _impl.get())) {
+        for (const auto &run : helpRuns(*this, &impl)) {
             out += run.text;
         }
         return out;
     }
 
     void ParseResult::showHelp() const {
+        stdc_impl_t;
         // Through the library's own console rather than fwrite, so that one program does not
         // talk to the terminal two different ways, and so a Windows console gets the transcoding
         // it needs.
-        for (const auto &run : helpRuns(*this, _impl.get())) {
+        for (const auto &run : helpRuns(*this, &impl)) {
             console::fputs(run.style.style, run.style.foreground, run.style.background, run.text,
                            stdout);
         }
@@ -544,11 +562,12 @@ namespace stdc::cli {
         if (isValid()) {
             return;
         }
+        stdc_impl_t;
         // What went wrong is worth a color where there is one to be had, and console works out
         // for itself whether stderr is somewhere escapes belong.
-        console::fputs(console::bold, console::red, console::nocolor, _impl->error_text + "\n",
+        console::fputs(console::bold, console::red, console::nocolor, impl.error_text + "\n",
                        stderr);
-        if (!_impl->display_options.test_flag(Parser::SkipCorrection)) {
+        if (!impl.display_options.test_flag(Parser::SkipCorrection)) {
             auto correction = correctionText();
             if (!correction.empty()) {
                 console::fputs(console::nostyle, console::nocolor, console::nocolor,
@@ -559,7 +578,7 @@ namespace stdc::cli {
         // does not offer it at all gets no line, since pointing at something nobody declared is
         // worse than saying nothing.
         std::string help;
-        for (const auto &item : _impl->options) {
+        for (const auto &item : impl.options) {
             if (item.option->role() != Option::Help) {
                 continue;
             }
@@ -571,10 +590,10 @@ namespace stdc::cli {
             }
             break;
         }
-        if (_impl->target && !help.empty()) {
+        if (impl.target && !help.empty()) {
             std::string name;
-            for (size_t i = 0; i < _impl->path.size(); ++i) {
-                name += (i ? " " : "") + _impl->path[i];
+            for (size_t i = 0; i < impl.path.size(); ++i) {
+                name += (i ? " " : "") + impl.path[i];
             }
             console::fputs(console::nostyle, console::nocolor, console::nocolor,
                            "Try \"" + name + " " + help + "\" for more information.\n", stderr);
@@ -1867,7 +1886,8 @@ namespace stdc::cli {
     }
 
     Parser::Parser(Command root) : _impl(std::make_unique<Impl>()) {
-        _impl->root = std::make_shared<Command>(std::move(root));
+        stdc_impl_t;
+        impl.root = std::make_shared<Command>(std::move(root));
     }
 
     Parser::~Parser() = default;
@@ -1877,102 +1897,124 @@ namespace stdc::cli {
     Parser &Parser::operator=(Parser &&other) noexcept = default;
 
     void Parser::setRootCommand(Command root) {
+        stdc_impl_t;
+
         // A new tree rather than new contents for the old one. Every ParseResult already handed
         // out shares this pointer and holds raw pointers into what it addresses, so assigning
         // through it leaves them all reading freed vectors. Checked: assigning through it dies
         // under ASAN in test_a_parser_is_reusable_and_its_tree_can_be_replaced.
-        _impl->root = std::make_shared<Command>(std::move(root));
+        impl.root = std::make_shared<Command>(std::move(root));
     }
 
     const Command &Parser::rootCommand() const {
-        return *_impl->root;
+        stdc_impl_t;
+        return *impl.root;
     }
 
     void Parser::setPrologue(std::string text) {
-        _impl->prologue = std::move(text);
+        stdc_impl_t;
+        impl.prologue = std::move(text);
     }
 
     const std::string &Parser::prologue() const {
-        return _impl->prologue;
+        stdc_impl_t;
+        return impl.prologue;
     }
 
     void Parser::setEpilogue(std::string text) {
-        _impl->epilogue = std::move(text);
+        stdc_impl_t;
+        impl.epilogue = std::move(text);
     }
 
     const std::string &Parser::epilogue() const {
-        return _impl->epilogue;
+        stdc_impl_t;
+        return impl.epilogue;
     }
 
     void Parser::setDisplayOptions(DisplayOptions options) {
-        _impl->display_options = options;
+        stdc_impl_t;
+        impl.display_options = options;
     }
 
     Parser::DisplayOptions Parser::displayOptions() const {
-        return _impl->display_options;
+        stdc_impl_t;
+        return impl.display_options;
     }
 
     void Parser::setTextWidth(int width) {
-        _impl->text_width = width;
+        stdc_impl_t;
+        impl.text_width = width;
     }
 
     int Parser::textWidth() const {
-        return _impl->text_width;
+        stdc_impl_t;
+        return impl.text_width;
     }
 
     void Parser::setIndent(int columns) {
-        _impl->indent = columns;
+        stdc_impl_t;
+        impl.indent = columns;
     }
 
     int Parser::indent() const {
-        return _impl->indent;
+        stdc_impl_t;
+        return impl.indent;
     }
 
     void Parser::setSpacing(int columns) {
-        _impl->spacing = columns;
+        stdc_impl_t;
+        impl.spacing = columns;
     }
 
     int Parser::spacing() const {
-        return _impl->spacing;
+        stdc_impl_t;
+        return impl.spacing;
     }
 
     void Parser::setHelpLayout(HelpLayout layout) {
-        _impl->help_layout = std::move(layout);
+        stdc_impl_t;
+        impl.help_layout = std::move(layout);
     }
 
     const HelpLayout &Parser::helpLayout() const {
-        return _impl->help_layout;
+        stdc_impl_t;
+        return impl.help_layout;
     }
 
     // Null puts the plain one back rather than leaving a parser that cannot answer for its own
     // help text, which every rung above this one still goes through.
     void Parser::setHelpFormatter(std::shared_ptr<HelpFormatter> formatter) {
-        _impl->formatter = formatter ? std::move(formatter) : defaultFormatter();
+        stdc_impl_t;
+        impl.formatter = formatter ? std::move(formatter) : defaultFormatter();
     }
 
     const std::shared_ptr<HelpFormatter> &Parser::helpFormatter() const {
-        return _impl->formatter;
+        stdc_impl_t;
+        return impl.formatter;
     }
 
     std::optional<std::string> Parser::validate(ParseOptions parseOptions) const {
-        return detail::validate_tree(*_impl->root, parseOptions.test_flag(IgnoreOptionCase),
+        stdc_impl_t;
+        return detail::validate_tree(*impl.root, parseOptions.test_flag(IgnoreOptionCase),
                                      parseOptions.test_flag(IgnoreCommandCase));
     }
 
     ParseResult Parser::parseImpl(const std::vector<std::string> &args,
                                   ParseOptions parseOptions) const {
+        stdc_impl_t;
         ParseResult result;
-        result._impl->root = _impl->root;
-        result._impl->target = _impl->root.get();
-        result._impl->prologue = _impl->prologue;
-        result._impl->epilogue = _impl->epilogue;
-        result._impl->help_layout = _impl->help_layout;
-        result._impl->formatter = _impl->formatter;
-        result._impl->display_options = _impl->display_options;
-        result._impl->text_width = _impl->text_width;
-        result._impl->indent = _impl->indent;
-        result._impl->spacing = _impl->spacing;
-        ParserCore(result._impl.get(), parseOptions).run(args);
+        auto &out = *result._impl;
+        out.root = impl.root;
+        out.target = impl.root.get();
+        out.prologue = impl.prologue;
+        out.epilogue = impl.epilogue;
+        out.help_layout = impl.help_layout;
+        out.formatter = impl.formatter;
+        out.display_options = impl.display_options;
+        out.text_width = impl.text_width;
+        out.indent = impl.indent;
+        out.spacing = impl.spacing;
+        ParserCore(&out, parseOptions).run(args);
         return result;
     }
 
