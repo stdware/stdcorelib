@@ -185,8 +185,9 @@ namespace stdc {
         Popen();
         ~Popen();
 
-        /// Moving takes the child, its pipes and its settings across. Assigning over a Popen
-        /// whose child is still running ends that child first.
+        /// Moving takes the child, its pipes and its settings across. Move assignment destroys
+        /// the destination's previous state immediately. A running child owned by that state is
+        /// killed and waited for then, while a detached child keeps running.
         ///
         /// \note A Popen that has been moved from holds nothing and is only good for being
         ///       destroyed or assigned to.
