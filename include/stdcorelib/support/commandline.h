@@ -51,8 +51,9 @@
 ///     return parser.invoke(system::command_line_arguments());
 /// \endcode
 ///
-/// \c invoke() reports a parse that failed, answers \c --help and \c --version, and otherwise
-/// runs the handler of the command that was reached. Its return value is what \c main returns.
+/// \c invoke() reports a parse that failed, answers \c --help and a \c --version with text to
+/// print, and otherwise runs the handler of the command that was reached. Its return value is
+/// what \c main returns.
 ///
 /// \section cli_shape What a command line looks like
 ///
@@ -733,6 +734,7 @@ namespace stdc::cli {
         }
         /// The first spelling, which is the one the help text and diagnostics use.
         inline const std::string &token() const {
+            assert(!_tokens.empty() && "an option with no spelling has no token");
             return _tokens.front();
         }
         inline const std::string &description() const {
@@ -949,6 +951,7 @@ namespace stdc::cli {
         /// The switch is this command's and the string cascades, so a subcommand adds its own
         /// switch and says a version of its own or does not. An empty \a version is the second
         /// of those: the switch answers here with whatever the nearest command above it said.
+        /// Where the whole path is empty, invoke() leaves the Version role for the handler.
         /// \sa ParseResult::versionText()
         ///
         /// \code
@@ -1431,11 +1434,12 @@ namespace stdc::cli {
         /// returns.
         ///
         /// \li a parse that failed is reported, and \a errorCode comes back
-        /// \li a Help or Version option that was given is answered, and 0 comes back, without
-        ///     the handler running. That is what keeps \c prog \c copy \c --help from doing
-        ///     whatever copy does.
+        /// \li a Help option, or a Version option with nonempty versionText(), is answered and
+        ///     0 comes back without the handler running. That is what keeps \c prog \c copy
+        ///     \c --help from doing whatever copy does.
         /// \li otherwise the handler of the command that was reached runs, and \a errorCode
-        ///     comes back where there is none
+        ///     comes back where there is none. This includes a Version option for which the
+        ///     command path supplies no text, so the handler may answer it itself.
         ///
         /// A program that wants to answer any of this itself calls parse() and does so. There
         /// is nothing left over for a caller of this to have to finish.
