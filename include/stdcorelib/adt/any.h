@@ -199,6 +199,9 @@ namespace stdc {
         /// \note Not a pointer swap. A value living in the buffer has to be moved, so this is
         ///       three moves rather than nothing.
         ///
+        /// ##QUESTION: Would separate inline and heap paths make this materially cheaper without
+        /// complicating the storage invariants?
+        ///
         /// \note Written out rather than through the assignment operator, which swaps and would
         ///       call straight back into here.
         void swap(any &other) noexcept {
