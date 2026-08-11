@@ -110,7 +110,7 @@ namespace stdc {
             enum Kind {
                 None,
                 Builtin,
-                FD,
+                FileDescriptor,
                 CFile,
             };
             IODev() : kind(None) {
@@ -118,7 +118,7 @@ namespace stdc {
             IODev(IOType builtin) : kind(Builtin) {
                 data.builtin = builtin;
             }
-            IODev(int fd) : kind(FD) {
+            IODev(int fd) : kind(FileDescriptor) {
                 data.fd = fd;
             }
             IODev(FILE *file) : kind(CFile) {

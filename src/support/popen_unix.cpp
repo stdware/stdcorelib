@@ -385,7 +385,7 @@ namespace stdc {
                 }
                 break;
             }
-            case IODev::FD: {
+            case IODev::FileDescriptor: {
                 if (!convert_from_fd(p2cread, stdin_dev.data.fd)) {
                     return false;
                 }
@@ -436,7 +436,7 @@ namespace stdc {
                 }
                 break;
             }
-            case IODev::FD: {
+            case IODev::FileDescriptor: {
                 if (!convert_from_fd(c2pwrite, stdout_dev.data.fd)) {
                     return false;
                 }
@@ -489,7 +489,7 @@ namespace stdc {
                 }
                 break;
             }
-            case IODev::FD: {
+            case IODev::FileDescriptor: {
                 if (!convert_from_fd(errwrite, stderr_dev.data.fd)) {
                     return false;
                 }
