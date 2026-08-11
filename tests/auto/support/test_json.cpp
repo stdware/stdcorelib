@@ -217,6 +217,26 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Equality) {
     BOOST_CHECK(JsonValue::fromJson("[1,2]", false) != JsonValue::fromJson("[2,1]", false));
 }
 
+BOOST_AUTO_TEST_CASE(test_JsonValue_RepeatedKey) {
+    // A repeated key keeps the last value. The parser takes the map node before it reads the
+    // value, so the check is that the second one lands on top of the first rather than beside it.
+    {
+        JsonValue v = JsonValue::fromJson(R"({"a": 1, "b": 2, "a": [3, 4]})", false);
+        BOOST_REQUIRE(v.isObject());
+        BOOST_CHECK(v.toObject().size() == 2);
+        BOOST_REQUIRE(v["a"].isArray());
+        BOOST_CHECK(v["a"][1].toInt() == 4);
+        BOOST_CHECK(v["b"].toInt() == 2);
+    }
+    // The other direction, where what is replaced owns something.
+    {
+        JsonValue v = JsonValue::fromJson(R"({"a": {"x": [1, 2]}, "a": null})", false);
+        BOOST_REQUIRE(v.isObject());
+        BOOST_CHECK(v.toObject().size() == 1);
+        BOOST_CHECK(v["a"].isNull());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(test_JsonValue_Parse) {
     // A parse failure leaves a null value behind and fills in the message.
     {

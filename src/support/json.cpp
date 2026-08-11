@@ -394,8 +394,14 @@ namespace {
             }
             for (;;) {
                 skipSpace();
-                JsonValue item;
-                if (!parseValue(&item, depth + 1)) {
+                // The slot has to exist before the value can be parsed into it, so the count is
+                // guessed here rather than deduced from a comma later. Two is the guess; a
+                // one-element array pays one unused slot, not another allocation.
+                if (arr.empty()) {
+                    arr.reserve(2);
+                }
+                arr.emplace_back();
+                if (!parseValue(&arr.back(), depth + 1)) {
                     return false;
                 }
                 skipSpace();
@@ -412,12 +418,6 @@ namespace {
                     return fail("expected ',' or ']'");
                 }
 
-                if (arr.empty() && hasNext) {
-                    // The comma proves that the array needs at least two slots. Reserve them before
-                    // the first insertion without overallocating a one-element array.
-                    arr.reserve(2);
-                }
-                arr.push_back(std::move(item));
                 if (!hasNext) {
                     *out = JsonValue(std::move(arr));
                     return true;
@@ -449,12 +449,13 @@ namespace {
                 }
                 ++_pos;
                 skipSpace();
-                JsonValue value;
-                if (!parseValue(&value, depth + 1)) {
+                // A repeated key keeps the last one, which is what every JSON reader does: the
+                // node is taken first, and the value is parsed straight into it, over whatever a
+                // previous occurrence of the key left there.
+                auto it = obj.try_emplace(std::move(key)).first;
+                if (!parseValue(&it->second, depth + 1)) {
                     return false;
                 }
-                // A repeated key keeps the last one, which is what every JSON reader does.
-                obj[std::move(key)] = std::move(value);
                 skipSpace();
                 if (atEnd()) {
                     return fail("expected ',' or '}'");
