@@ -28,15 +28,15 @@ namespace stdc::detail {
 
     }
 
-    const void *resolve_type_id(type_entry &entry) {
-        // Written once and read forever after, so the lock is only touched on the first call per
-        // type per module rather than on every comparison.
+    const void *register_type_id(type_entry &entry) {
+        auto &table = registry();
+        std::lock_guard<std::mutex> guard(table.lock);
+
+        // Another thread may have registered this entry after the inline check and before this
+        // thread acquired the lock.
         if (const void *cached = entry.id.load(std::memory_order_acquire)) {
             return cached;
         }
-
-        auto &table = registry();
-        std::lock_guard<std::mutex> guard(table.lock);
 
         auto it = table.names.find(entry.name);
         if (it == table.names.end()) {

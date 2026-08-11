@@ -63,7 +63,8 @@ namespace stdc {
             std::atomic<const void *> id;
         };
 
-        /// Gives \a entry the one address this process uses to stand for that name.
+        /// Registers \a entry and returns the one address this process uses to stand for its
+        /// name.
         ///
         /// An address rather than a number, because a number would have to come from a counter,
         /// and a build where two modules each hold a table would have two counters both starting
@@ -75,7 +76,15 @@ namespace stdc {
         ///       copy of the library. Statically linking stdcorelib into two of them gives each
         ///       its own table, and then a type simply does not carry across, which is a refusal
         ///       rather than a wrong answer.
-        STDC_EXPORT const void *resolve_type_id(type_entry &entry);
+        STDC_EXPORT const void *register_type_id(type_entry &entry);
+
+        /// Returns the canonical address cached in \a entry, registering it on the first call.
+        inline const void *resolve_type_id(type_entry &entry) {
+            if (const void *cached = entry.id.load(std::memory_order_acquire)) {
+                return cached;
+            }
+            return register_type_id(entry);
+        }
 
         template <class T>
         type_entry &entry_of() {
