@@ -70,6 +70,7 @@ namespace stdc {
             : JsonValue(size < 0 ? std::string(s) : std::string(s, size)) {
         }
         JsonValue(array_view<uint8_t> bytes);
+        JsonValue(std::vector<uint8_t> bytes);
         inline JsonValue(const uint8_t *data, int size)
             : JsonValue(array_view<uint8_t>(data, size)) {
         }

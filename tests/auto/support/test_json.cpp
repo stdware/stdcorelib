@@ -64,6 +64,13 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Types) {
         BOOST_CHECK(v.toBinary().size() == 4);
         BOOST_CHECK(v.toBinaryView().size() == 4);
         BOOST_CHECK(v.toBinary()[3] == 0xFF);
+
+        // A vector of bytes is taken as it stands rather than through a view, so nothing is
+        // copied when the caller already has one.
+        std::vector<uint8_t> owned(raw, raw + 4);
+        JsonValue w(std::move(owned));
+        BOOST_CHECK(w.type() == JsonValue::Binary);
+        BOOST_CHECK(w == v);
     }
     // A container built up first and then wrapped is copied rather than taken over, which is a
     // separate constructor from the one every case above reaches with a temporary.

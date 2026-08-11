@@ -868,11 +868,17 @@ namespace {
                 }
             }
 
-            bool rawBytes(uint64_t count, std::string *out) {
+            // Text arrives as a std::string and a byte string as a std::vector<uint8_t>, which is
+            // what each of them ends up stored as. Reading into the other one first would cost a
+            // copy of the whole string to convert.
+            template <class Bytes>
+            bool rawBytes(uint64_t count, Bytes *out) {
                 if (count > _d.size() - _pos) {
                     return fail("input ended early");
                 }
-                out->assign(reinterpret_cast<const char *>(_d.data() + _pos), size_t(count));
+                const auto *first =
+                    reinterpret_cast<const typename Bytes::value_type *>(_d.data() + _pos);
+                out->assign(first, first + size_t(count));
                 _pos += size_t(count);
                 return true;
             }
@@ -894,7 +900,8 @@ namespace {
             /// Each piece is a definite-length string of the same major type, and a text piece has
             /// to be well formed on its own -- a split through the middle of a code point is not
             /// something the concatenation would show.
-            bool chunkedBytes(uint8_t major, std::string *out) {
+            template <class Bytes>
+            bool chunkedBytes(uint8_t major, Bytes *out) {
                 for (;;) {
                     bool broke = false;
                     if (!atBreak(&broke)) {
@@ -919,14 +926,16 @@ namespace {
                     if (!argument(initial, &count)) {
                         return false;
                     }
-                    std::string chunk;
+                    Bytes chunk;
                     if (!rawBytes(count, &chunk)) {
                         return false;
                     }
-                    if (major == 3 && !stdc::utf::is_valid_utf8(chunk)) {
+                    if (major == 3 &&
+                        !stdc::utf::is_valid_utf8(std::string_view(
+                            reinterpret_cast<const char *>(chunk.data()), chunk.size()))) {
                         return fail("text string is not valid UTF-8");
                     }
-                    *out += chunk;
+                    out->insert(out->end(), chunk.begin(), chunk.end());
                 }
             }
 
@@ -963,12 +972,11 @@ namespace {
                         if (!argument(initial, &arg, &indefinite)) {
                             return false;
                         }
-                        std::string raw;
+                        std::vector<uint8_t> raw;
                         if (indefinite ? !chunkedBytes(2, &raw) : !rawBytes(arg, &raw)) {
                             return false;
                         }
-                        *out = JsonValue(stdc::array_view<uint8_t>(
-                            reinterpret_cast<const uint8_t *>(raw.data()), raw.size()));
+                        *out = JsonValue(std::move(raw));
                         return true;
                     }
                     case 3: {
@@ -1186,6 +1194,10 @@ namespace stdc {
 
     JsonValue::JsonValue(stdc::array_view<uint8_t> bytes) : _type(Binary) {
         _p.bin = new std::vector<uint8_t>(bytes.begin(), bytes.end());
+    }
+
+    JsonValue::JsonValue(std::vector<uint8_t> bytes) : _type(Binary) {
+        _p.bin = new std::vector<uint8_t>(std::move(bytes));
     }
 
     JsonValue::JsonValue(const JsonArray &a) : _type(Array) {
