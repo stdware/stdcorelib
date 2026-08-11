@@ -66,8 +66,8 @@ namespace {
 
         out += '"';
         for (size_t i = 0; i < s.size();) {
-            // Most text needs no escaping. Copy its ordinary bytes as one range instead of
-            // repeatedly growing out through operator+= one character at a time.
+            // Most text needs no escaping, so it goes out one range at a time. A byte above
+            // 0x7F is ordinary here, which is what keeps the text UTF-8 rather than escapes.
             const size_t start = i;
             while (i < s.size() && s[i] != '"' && s[i] != '\\' && uint8_t(s[i]) >= 0x20) {
                 ++i;
@@ -102,16 +102,11 @@ namespace {
                 default:
                     break;
             }
-            auto uc = uint8_t(c);
-            if (uc < 0x20) {
-                char buf[8];
-                std::snprintf(buf, sizeof(buf), "\\u%04x", unsigned(uc));
-                out += buf;
-            } else {
-                // Everything else goes out as it stands, so text stays UTF-8 rather than becoming
-                // a wall of escapes.
-                out += c;
-            }
+            // A control character with no name of its own, and nothing else: the run stops only
+            // at a quote, a backslash or a byte below 0x20, and the switch took the rest.
+            char buf[8];
+            std::snprintf(buf, sizeof(buf), "\\u%04x", unsigned(uint8_t(c)));
+            out += buf;
         }
         out += '"';
     }
