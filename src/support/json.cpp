@@ -1204,7 +1204,7 @@ namespace stdc {
         _p.arr = new JsonArray(a);
     }
 
-    JsonValue::JsonValue(JsonArray &&a) noexcept : _type(Array) {
+    JsonValue::JsonValue(JsonArray &&a) : _type(Array) {
         _p.arr = new JsonArray(std::move(a));
     }
 
@@ -1212,7 +1212,7 @@ namespace stdc {
         _p.obj = new JsonObject(o);
     }
 
-    JsonValue::JsonValue(JsonObject &&o) noexcept : _type(Object) {
+    JsonValue::JsonValue(JsonObject &&o) : _type(Object) {
         _p.obj = new JsonObject(std::move(o));
     }
 

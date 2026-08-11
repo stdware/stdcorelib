@@ -75,9 +75,9 @@ namespace stdc {
             : JsonValue(array_view<uint8_t>(data, size)) {
         }
         JsonValue(const JsonArray &a);
-        JsonValue(JsonArray &&a) noexcept;
+        JsonValue(JsonArray &&a);
         JsonValue(const JsonObject &o);
-        JsonValue(JsonObject &&o) noexcept;
+        JsonValue(JsonObject &&o);
         ~JsonValue();
 
         JsonValue(const JsonValue &RHS);
