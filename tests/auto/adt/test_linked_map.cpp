@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+#include <map>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -16,6 +19,12 @@ BOOST_AUTO_TEST_SUITE(test_linked_map)
 namespace {
 
     using Map = linked_map<std::string, int>;
+    using OrderedMap = linked_map<std::string, int, std::map>;
+
+    static_assert(detail::has_reserve<Map::map_type>::value);
+    static_assert(!detail::has_capacity<Map::map_type>::value);
+    static_assert(!detail::has_reserve<OrderedMap::map_type>::value);
+    static_assert(!detail::has_capacity<OrderedMap::map_type>::value);
 
     // Reads the map front to back, which is the insertion order it is supposed to preserve.
     std::vector<std::pair<std::string, int>> to_vector(const Map &map) {
@@ -51,6 +60,76 @@ namespace {
         std::reverse(reversed.begin(), reversed.end());
         BOOST_CHECK(to_vector_reversed(map) == reversed);
     }
+
+    struct CountedValue {
+        static int defaultConstructions;
+
+        CountedValue() {
+            ++defaultConstructions;
+        }
+
+        explicit CountedValue(int value) : value(value) {
+        }
+
+        int value = 0;
+    };
+
+    int CountedValue::defaultConstructions = 0;
+
+    struct AllocatorState {
+        size_t allocations = 0;
+    };
+
+    template <class T>
+    class TrackingAllocator {
+    public:
+        using value_type = T;
+
+        TrackingAllocator() : state(std::make_shared<AllocatorState>()) {
+        }
+
+        explicit TrackingAllocator(std::shared_ptr<AllocatorState> state)
+            : state(std::move(state)) {
+        }
+
+        template <class U>
+        TrackingAllocator(const TrackingAllocator<U> &other) noexcept : state(other.state) {
+        }
+
+        T *allocate(size_t count) {
+            state->allocations += count;
+            return std::allocator<T>().allocate(count);
+        }
+
+        void deallocate(T *data, size_t count) noexcept {
+            std::allocator<T>().deallocate(data, count);
+        }
+
+        template <class U>
+        bool operator==(const TrackingAllocator<U> &other) const noexcept {
+            return state == other.state;
+        }
+
+        template <class U>
+        bool operator!=(const TrackingAllocator<U> &other) const noexcept {
+            return !(*this == other);
+        }
+
+        std::shared_ptr<AllocatorState> state;
+
+        template <class>
+        friend class TrackingAllocator;
+    };
+
+#ifdef STDC_HAS_EXCEPTIONS
+    struct ThrowingValue {
+        ThrowingValue() = default;
+        ThrowingValue(const ThrowingValue &) {
+            throw std::runtime_error("copy failed");
+        }
+        ThrowingValue(ThrowingValue &&) noexcept = default;
+    };
+#endif
 
 }
 
@@ -271,8 +350,8 @@ BOOST_AUTO_TEST_CASE(test_lookup) {
 
     auto it = map.find("2");
     BOOST_REQUIRE(it != map.end());
-    BOOST_CHECK_EQUAL(it.key(), "2");
-    BOOST_CHECK_EQUAL(it.value(), 2);
+    BOOST_CHECK_EQUAL(it->first, "2");
+    BOOST_CHECK_EQUAL(it->second, 2);
     BOOST_CHECK_EQUAL(it->second, 2);
     BOOST_CHECK(map.find("9") == map.end());
 
@@ -285,12 +364,12 @@ BOOST_AUTO_TEST_CASE(test_lookup) {
     const auto &cmap = map;
     auto cit = cmap.find("3");
     BOOST_REQUIRE(cit != cmap.end());
-    BOOST_CHECK_EQUAL(cit.key(), "3");
-    BOOST_CHECK_EQUAL(cit.value(), 3);
+    BOOST_CHECK_EQUAL(cit->first, "3");
+    BOOST_CHECK_EQUAL(cit->second, 3);
     BOOST_CHECK(cmap.find("9") == cmap.cend());
 
     // writing through a non-const iterator is visible in the map
-    map.find("1").value() = 11;
+    map.find("1")->second = 11;
     BOOST_CHECK_EQUAL(map.value("1"), 11);
 }
 
@@ -323,7 +402,7 @@ BOOST_AUTO_TEST_CASE(test_erase) {
         auto map = make_map();
         auto next = map.erase(map.find("2"));
         BOOST_REQUIRE(next != map.end());
-        BOOST_CHECK_EQUAL(next.key(), "3");
+        BOOST_CHECK_EQUAL(next->first, "3");
         check_order(map, {
                              {"1", 1},
                              {"3", 3},
@@ -458,7 +537,7 @@ BOOST_AUTO_TEST_CASE(test_iterators) {
     {
         std::vector<std::string> keys;
         for (auto it = map.begin(); it != map.end(); ++it) {
-            keys.push_back(it.key());
+            keys.push_back(it->first);
         }
         std::vector<std::string> expect = {"1", "2", "3"};
         BOOST_CHECK(keys == expect);
@@ -468,8 +547,8 @@ BOOST_AUTO_TEST_CASE(test_iterators) {
     {
         auto it = map.begin();
         auto old = it++;
-        BOOST_CHECK_EQUAL(old.key(), "1");
-        BOOST_CHECK_EQUAL(it.key(), "2");
+        BOOST_CHECK_EQUAL(old->first, "1");
+        BOOST_CHECK_EQUAL(it->first, "2");
     }
 
     // bidirectional
@@ -477,32 +556,32 @@ BOOST_AUTO_TEST_CASE(test_iterators) {
         auto it = map.begin();
         ++it;
         ++it;
-        BOOST_CHECK_EQUAL(it.key(), "3");
+        BOOST_CHECK_EQUAL(it->first, "3");
         --it;
-        BOOST_CHECK_EQUAL(it.key(), "2");
+        BOOST_CHECK_EQUAL(it->first, "2");
         auto old = it--;
-        BOOST_CHECK_EQUAL(old.key(), "2");
-        BOOST_CHECK_EQUAL(it.key(), "1");
+        BOOST_CHECK_EQUAL(old->first, "2");
+        BOOST_CHECK_EQUAL(it->first, "1");
     }
 
     // an iterator converts to a const_iterator
     {
         Map::const_iterator cit = map.begin();
-        BOOST_CHECK_EQUAL(cit.key(), "1");
+        BOOST_CHECK_EQUAL(cit->first, "1");
         BOOST_CHECK(cit == map.cbegin());
     }
 
     // a const_iterator walks both ways, prefix and postfix
     {
         auto cit = map.cbegin();
-        BOOST_CHECK_EQUAL((++cit).key(), "2");
+        BOOST_CHECK_EQUAL((++cit)->first, "2");
         auto old = cit++;
-        BOOST_CHECK_EQUAL(old.key(), "2");
-        BOOST_CHECK_EQUAL(cit.key(), "3");
-        BOOST_CHECK_EQUAL((--cit).key(), "2");
+        BOOST_CHECK_EQUAL(old->first, "2");
+        BOOST_CHECK_EQUAL(cit->first, "3");
+        BOOST_CHECK_EQUAL((--cit)->first, "2");
         auto old2 = cit--;
-        BOOST_CHECK_EQUAL(old2.key(), "2");
-        BOOST_CHECK_EQUAL(cit.key(), "1");
+        BOOST_CHECK_EQUAL(old2->first, "2");
+        BOOST_CHECK_EQUAL(cit->first, "1");
         BOOST_CHECK(cit == map.cbegin());
     }
 
@@ -533,8 +612,8 @@ BOOST_AUTO_TEST_CASE(test_iterators) {
         Map::const_iterator cit;
         it = map.find("2");
         cit = map.cbegin();
-        BOOST_CHECK_EQUAL(it.key(), "2");
-        BOOST_CHECK_EQUAL(cit.key(), "1");
+        BOOST_CHECK_EQUAL(it->first, "2");
+        BOOST_CHECK_EQUAL(cit->first, "1");
     }
 }
 
@@ -553,6 +632,108 @@ BOOST_AUTO_TEST_CASE(test_reserve) {
     BOOST_CHECK_EQUAL(keys.front(), "0");
     BOOST_CHECK_EQUAL(keys.back(), "99");
 }
+
+BOOST_AUTO_TEST_CASE(test_ordered_index) {
+    OrderedMap map;
+    map.append("b", 2);
+    map.prepend("a", 1);
+    map.append("c", 3);
+
+    std::vector<std::pair<std::string, int>> values;
+    for (const auto &item : map) {
+        values.emplace_back(item.first, item.second);
+    }
+    BOOST_CHECK(values == (std::vector<std::pair<std::string, int>>{
+                              {"a", 1},
+                              {"b", 2},
+                              {"c", 3},
+    }));
+    BOOST_CHECK_EQUAL(map.find("b")->second, 2);
+    BOOST_CHECK_EQUAL(map.erase("b"), 1u);
+    BOOST_CHECK(!map.contains("b"));
+
+    OrderedMap copy = map;
+    BOOST_CHECK(copy == map);
+    OrderedMap moved = std::move(copy);
+    BOOST_CHECK(moved == map);
+}
+
+BOOST_AUTO_TEST_CASE(test_list_and_index_share_the_allocator) {
+    using Pair = std::pair<const std::string, int>;
+    using Allocator = TrackingAllocator<Pair>;
+    using HashedMap = linked_map<std::string, int, std::unordered_map, std::hash<std::string>,
+                                 std::equal_to<std::string>, Allocator>;
+    using TreeMap = linked_map<std::string, int, std::map, std::less<std::string>, Allocator>;
+
+    auto firstState = std::make_shared<AllocatorState>();
+    HashedMap source{Allocator(firstState)};
+    source.append("one", 1);
+    BOOST_CHECK(source.get_allocator().state == firstState);
+    BOOST_CHECK(firstState->allocations >= 3u); // list node, index node, and hash buckets
+
+    auto secondState = std::make_shared<AllocatorState>();
+    HashedMap target{Allocator(secondState)};
+    target.append("old", 0);
+    target = source;
+    BOOST_CHECK(target.get_allocator().state == secondState);
+    BOOST_CHECK_EQUAL(target.value("one"), 1);
+    BOOST_CHECK(!target.contains("old"));
+
+    auto thirdState = std::make_shared<AllocatorState>();
+    HashedMap moved{Allocator(thirdState)};
+    moved = std::move(source);
+    BOOST_CHECK(moved.get_allocator().state == thirdState);
+    BOOST_CHECK_EQUAL(moved.value("one"), 1);
+    BOOST_CHECK(source.empty());
+
+    HashedMap equalSource{Allocator(thirdState)};
+    equalSource.append("two", 2);
+    moved = std::move(equalSource);
+    BOOST_CHECK(moved.get_allocator().state == thirdState);
+    BOOST_CHECK_EQUAL(moved.value("two"), 2);
+    BOOST_CHECK(equalSource.empty());
+
+    auto treeState = std::make_shared<AllocatorState>();
+    TreeMap tree{Allocator(treeState)};
+    tree.append("one", 1);
+    BOOST_CHECK(tree.get_allocator().state == treeState);
+    BOOST_CHECK(treeState->allocations >= 2u); // one list node and one tree node
+}
+
+BOOST_AUTO_TEST_CASE(test_existing_subscript_does_not_construct_a_value) {
+    linked_map<int, CountedValue> map;
+    map.append(1, CountedValue(7));
+
+    CountedValue::defaultConstructions = 0;
+    BOOST_CHECK_EQUAL(map[1].value, 7);
+    BOOST_CHECK_EQUAL(CountedValue::defaultConstructions, 0);
+
+    BOOST_CHECK_EQUAL(map[2].value, 0);
+    BOOST_CHECK_EQUAL(CountedValue::defaultConstructions, 1);
+
+    auto inserted = map.try_emplace(3, 9);
+    BOOST_CHECK(inserted.second);
+    BOOST_CHECK_EQUAL(inserted.first->second.value, 9);
+    auto duplicate = map.try_emplace(3, 10);
+    BOOST_CHECK(!duplicate.second);
+    BOOST_CHECK_EQUAL(duplicate.first->second.value, 9);
+}
+
+#ifdef STDC_HAS_EXCEPTIONS
+BOOST_AUTO_TEST_CASE(test_failed_insertion_rolls_back_the_index) {
+    linked_map<int, ThrowingValue> map;
+    ThrowingValue value;
+
+    BOOST_CHECK_THROW(map.append(1, value), std::runtime_error);
+    BOOST_CHECK(map.empty());
+    BOOST_CHECK(!map.contains(1));
+    BOOST_CHECK(map.find(1) == map.end());
+
+    BOOST_CHECK(map.append(2, ThrowingValue()).second);
+    BOOST_CHECK_EQUAL(map.size(), 1u);
+    BOOST_CHECK(map.contains(2));
+}
+#endif
 
 // The value type does not have to be default constructible for the map to work, as long as
 // operator[] is left alone.
