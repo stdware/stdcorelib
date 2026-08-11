@@ -80,32 +80,32 @@ namespace stdc {
     // two concurrent calls would fight over.
     //
     // \note Reads go straight to the descriptor. Anything a caller already pulled out through
-    //       stdin_(), stdout_() or stderr_() into the stream's own buffer is theirs and is not
-    //       seen here, which was true of the thread version as well.
+    //       standardInput(), standardOutput() or standardError() into the stream's own buffer
+    //       is theirs and is not seen here, which was true of the thread version as well.
     std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
                                                                        int timeout) {
-        error_code.clear();
+        errorCode.clear();
 
         // Same answer as the other five, rather than the no_such_process the check below would
         // give. A detached child exists, it is just not ours to talk to.
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return {};
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return {};
         }
 
         // Whatever the caller wrote through the stream goes out ahead of the input given here,
         // in the order they wrote it.
-        if (stdin_stream.is_open()) {
+        if (stdin_stream.isOpen()) {
             stdin_stream.flush();
         }
 
-        int in_fd = stdin_stream.is_open() ? ::fileno(stdin_stream.file()) : -1;
-        int out_fd = stdout_stream.is_open() ? ::fileno(stdout_stream.file()) : -1;
-        int err_fd = stderr_stream.is_open() ? ::fileno(stderr_stream.file()) : -1;
+        int in_fd = stdin_stream.isOpen() ? ::fileno(stdin_stream.file()) : -1;
+        int out_fd = stdout_stream.isOpen() ? ::fileno(stdout_stream.file()) : -1;
+        int err_fd = stderr_stream.isOpen() ? ::fileno(stderr_stream.file()) : -1;
 
         // Non-blocking, so that neither a full pipe nor an empty one can hold the loop still
         // while another stream has something to say.
@@ -188,7 +188,7 @@ namespace stdc {
                 if (errno == EINTR) {
                     continue;
                 }
-                error_code = std::error_code(errno, std::generic_category());
+                errorCode = std::error_code(errno, std::generic_category());
                 error_api = "poll";
                 break;
             }
@@ -229,10 +229,10 @@ namespace stdc {
 
         // A timeout kills the child rather than leaving it behind.
         if (timed_out || !_wait(remaining())) {
-            auto wait_error = error_code;
+            auto wait_error = errorCode;
             std::ignore = kill_impl();
             std::ignore = _wait();
-            error_code =
+            errorCode =
                 wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
         }
 
@@ -285,7 +285,7 @@ namespace stdc {
     bool Popen::Impl::_get_devnull() {
         int devnull = open("/dev/null", O_RDWR | O_CLOEXEC);
         if (devnull == -1) {
-            error_code = make_last_error_code();
+            errorCode = make_last_error_code();
             error_api = "open";
             return false;
         }
@@ -321,7 +321,7 @@ namespace stdc {
         // create a pipe
         const auto &create_pipe = [this](int &read_fd, int &write_fd) {
             if (!make_pipe(read_fd, write_fd)) {
-                error_code = make_last_error_code();
+                errorCode = make_last_error_code();
                 error_api = "pipe";
                 return false;
             }
@@ -340,7 +340,7 @@ namespace stdc {
         // take a descriptor from the caller, which stays theirs to close
         const auto &convert_from_fd = [this](int &target, int fd) {
             if (fd == -1) {
-                error_code = std::make_error_code(std::errc::bad_file_descriptor);
+                errorCode = std::make_error_code(std::errc::bad_file_descriptor);
                 error_api = "fileno";
                 return false;
             }
@@ -358,27 +358,27 @@ namespace stdc {
                 break;
             case IODev::Builtin: {
                 switch (stdin_dev.data.builtin) {
-                    case PIPE: {
+                    case Pipe: {
                         if (!create_pipe(p2cread, p2cwrite)) {
                             return false;
                         }
                         push_err_close_fd(p2cread);
                         push_err_close_fd(p2cwrite);
 #ifdef F_SETPIPE_SZ
-                        if (pipesize > 0) {
-                            fcntl(p2cwrite, F_SETPIPE_SZ, pipesize);
+                        if (pipeSize > 0) {
+                            fcntl(p2cwrite, F_SETPIPE_SZ, pipeSize);
                         }
 #endif
                         break;
                     };
-                    case DEVNULL: {
+                    case DeviceNull: {
                         if (!open_devnull(p2cread)) {
                             return false;
                         }
                         break;
                     };
                     default: {
-                        error_code = std::make_error_code(std::errc::invalid_argument);
+                        errorCode = std::make_error_code(std::errc::invalid_argument);
                         error_msg = formatN("invalid stdin type: %1", int(stdin_dev.data.builtin));
                         return false;
                     }
@@ -408,27 +408,27 @@ namespace stdc {
             }
             case IODev::Builtin: {
                 switch (stdout_dev.data.builtin) {
-                    case PIPE: {
+                    case Pipe: {
                         if (!create_pipe(c2pread, c2pwrite)) {
                             return false;
                         }
                         push_err_close_fd(c2pread);
                         push_err_close_fd(c2pwrite);
 #ifdef F_SETPIPE_SZ
-                        if (pipesize > 0) {
-                            fcntl(c2pwrite, F_SETPIPE_SZ, pipesize);
+                        if (pipeSize > 0) {
+                            fcntl(c2pwrite, F_SETPIPE_SZ, pipeSize);
                         }
 #endif
                         break;
                     };
-                    case DEVNULL: {
+                    case DeviceNull: {
                         if (!open_devnull(c2pwrite)) {
                             return false;
                         }
                         break;
                     };
                     default: {
-                        error_code = std::make_error_code(std::errc::invalid_argument);
+                        errorCode = std::make_error_code(std::errc::invalid_argument);
                         error_msg =
                             formatN("invalid stdout type: %1", int(stdout_dev.data.builtin));
                         return false;
@@ -459,26 +459,26 @@ namespace stdc {
             }
             case IODev::Builtin: {
                 switch (stderr_dev.data.builtin) {
-                    case PIPE: {
+                    case Pipe: {
                         if (!create_pipe(errread, errwrite)) {
                             return false;
                         }
                         push_err_close_fd(errread);
                         push_err_close_fd(errwrite);
 #ifdef F_SETPIPE_SZ
-                        if (pipesize > 0) {
-                            fcntl(errwrite, F_SETPIPE_SZ, pipesize);
+                        if (pipeSize > 0) {
+                            fcntl(errwrite, F_SETPIPE_SZ, pipeSize);
                         }
 #endif
                         break;
                     };
-                    case DEVNULL: {
+                    case DeviceNull: {
                         if (!open_devnull(errwrite)) {
                             return false;
                         }
                         break;
                     };
-                    case STDOUT: {
+                    case StandardOutput: {
                         if (c2pwrite != -1) {
                             errwrite = c2pwrite;
                         } else if (!convert_from_fd(errwrite, fileno(stdout))) {
@@ -613,7 +613,7 @@ namespace stdc {
     // https://github.com/python/cpython/blob/v3.13.13/Modules/_posixsubprocess.c#L663
     void Popen::Impl::_child_exec(const ChildArgs &ca) {
         // Tells the parent the failure happened before exec, so the message is not a bad path.
-        const char *err_msg = "noexec";
+        const char *errMsg = "noexec";
         int first_exec_errno = 0;
 
         // Returns only on failure, with errno set.
@@ -675,7 +675,7 @@ namespace stdc {
 
             if (ca.cwd) {
                 if (chdir(ca.cwd) == -1) {
-                    err_msg = "noexec:chdir";
+                    errMsg = "noexec:chdir";
                     return;
                 }
             }
@@ -684,16 +684,16 @@ namespace stdc {
                 ::umask(mode_t(umask));
             }
 
-            if (restore_signals) {
+            if (restoreSignals) {
                 // What CPython's _Py_RestoreSignals() undoes.
                 signal(SIGPIPE, SIG_DFL);
                 signal(SIGXFSZ, SIG_DFL);
             }
 
-            if (start_new_session && setsid() == -1) {
+            if (startNewSession && setsid() == -1) {
                 return;
             }
-            if (process_group >= 0 && setpgid(0, process_group) == -1) {
+            if (processGroup >= 0 && setpgid(0, processGroup) == -1) {
                 return;
             }
             if (ca.extra_gids_len > 0 &&
@@ -708,14 +708,14 @@ namespace stdc {
                 return;
             }
 
-            err_msg = "";
-            if (preexec_fn) {
+            errMsg = "";
+            if (preExec) {
                 // This is where the user has asked us to deadlock their program.
-                preexec_fn();
+                preExec();
             }
 
-            // After preexec_fn, which may have opened descriptors of its own.
-            if (close_fds) {
+            // After preExec, which may have opened descriptors of its own.
+            if (closeFds) {
                 close_open_fds(3, ca.fds_to_keep, ca.fds_to_keep_len);
             }
 
@@ -743,7 +743,7 @@ namespace stdc {
             write_str(ca.errpipe_write, "SubprocessError:0:");
         }
         // strerror is not async signal safe. The parent looks the number up instead.
-        write_str(ca.errpipe_write, err_msg);
+        write_str(ca.errpipe_write, errMsg);
     }
 
     int Popen::Impl::_fork_exec(const ChildArgs &ca) {
@@ -959,7 +959,7 @@ namespace stdc {
             }
         }
         if (exec_paths.empty()) {
-            error_code = std::make_error_code(std::errc::no_such_file_or_directory);
+            errorCode = std::make_error_code(std::errc::no_such_file_or_directory);
             error_msg = formatN("cannot find executable: %1", child_executable.string());
             return false;
         }
@@ -982,7 +982,7 @@ namespace stdc {
         if (env) {
             for (const auto &pair : *env) {
                 if (pair.first.find('=') != std::string::npos) {
-                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    errorCode = std::make_error_code(std::errc::invalid_argument);
                     error_msg = formatN("illegal environment variable name: %1", pair.first);
                     return false;
                 }
@@ -1000,7 +1000,7 @@ namespace stdc {
         // Data format: "exception name:hex errno:description"
         int errpipe_read = -1, errpipe_write = -1;
         if (!make_pipe(errpipe_read, errpipe_write)) {
-            error_code = make_last_error_code();
+            errorCode = make_last_error_code();
             error_api = "pipe";
             return false;
         }
@@ -1018,7 +1018,7 @@ namespace stdc {
                 errpipe_write = dup(errpipe_write);
                 if (errpipe_write == -1) {
                     close(errpipe_read);
-                    error_code = make_last_error_code();
+                    errorCode = make_last_error_code();
                     error_api = "dup";
                     return false;
                 }
@@ -1026,7 +1026,7 @@ namespace stdc {
             }
         }
 
-        std::vector<int> fds_to_keep = pass_fds;
+        std::vector<int> fds_to_keep = passFds;
         fds_to_keep.push_back(errpipe_write);
         std::sort(fds_to_keep.begin(), fds_to_keep.end());
         fds_to_keep.erase(std::unique(fds_to_keep.begin(), fds_to_keep.end()), fds_to_keep.end());
@@ -1058,7 +1058,7 @@ namespace stdc {
                 auto err = make_last_error_code();
                 close(errpipe_read);
                 close(errpipe_write);
-                error_code = err;
+                errorCode = err;
                 error_api = "fork";
                 return false;
             }
@@ -1092,7 +1092,7 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1942
         if (errpipe_data.empty() && !_child_created && !_detached_started) {
-            error_code = std::make_error_code(std::errc::io_error);
+            errorCode = std::make_error_code(std::errc::io_error);
             error_msg = "detached launcher exited without reporting a child";
             return false;
         }
@@ -1110,7 +1110,7 @@ namespace stdc {
             if (ret_pid == pid) {
                 _handle_exitstatus(status);
             } else {
-                returncode = std::numeric_limits<int>::max();
+                returnCode = std::numeric_limits<int>::max();
             }
         }
         _child_created = false;
@@ -1121,7 +1121,7 @@ namespace stdc {
         auto first = errpipe_data.find(':');
         auto second = first == std::string::npos ? first : errpipe_data.find(':', first + 1);
         if (second == std::string::npos) {
-            error_code = std::make_error_code(std::errc::bad_message);
+            errorCode = std::make_error_code(std::errc::bad_message);
             error_msg = formatN("bad exception data from child: %1", errpipe_data);
             return false;
         }
@@ -1130,42 +1130,42 @@ namespace stdc {
         auto detail = errpipe_data.substr(second + 1);
         int err_val = int(std::strtol(hex_errno.c_str(), nullptr, 16));
         if (err_val == 0) {
-            error_code = std::make_error_code(std::errc::bad_message);
+            errorCode = std::make_error_code(std::errc::bad_message);
             error_msg = detail.empty() ? "child failed before exec" : detail;
             return false;
         }
 
-        error_code = std::error_code(err_val, std::system_category());
+        errorCode = std::error_code(err_val, std::system_category());
         // "noexec:chdir" names the working directory, anything else names the program.
         error_msg =
             formatN("%1: %2", detail == "noexec:chdir" ? cwd_str : child_executable.string(),
-                    error_code.message());
+                    errorCode.message());
         return false;
     }
 
     void Popen::Impl::_handle_exitstatus(int status) {
         if (WIFSTOPPED(status)) {
-            returncode = -WSTOPSIG(status);
+            returnCode = -WSTOPSIG(status);
         } else if (WIFSIGNALED(status)) {
-            returncode = -WTERMSIG(status);
+            returnCode = -WTERMSIG(status);
         } else {
-            returncode = WEXITSTATUS(status);
+            returnCode = WEXITSTATUS(status);
         }
     }
 
     bool Popen::Impl::_internal_poll() {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
 
@@ -1174,7 +1174,7 @@ namespace stdc {
         if (!lock.owns_lock()) {
             return false;
         }
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
 
@@ -1186,7 +1186,7 @@ namespace stdc {
         }
         if (ret == 0) {
             // Still running, which is not an error. The caller tells the two apart by whether
-            // returncode() is set.
+            // returnCode() is set.
             return false;
         }
         if (errno == EINTR) {
@@ -1195,33 +1195,33 @@ namespace stdc {
         if (errno == ECHILD) {
             // Waiting has been disabled for this process, so the status is gone for good. Python
             // reports 0 rather than leaving the caller with nothing.
-            returncode = 0;
+            returnCode = 0;
             return true;
         }
-        error_code = make_last_error_code();
+        errorCode = make_last_error_code();
         return false;
     }
 
     bool Popen::Impl::_wait(int timeout) {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
 
         if (timeout < 0) {
-            while (!returncode) {
+            while (!returnCode) {
                 std::unique_lock<std::shared_mutex> lock(_waitpid_lock);
-                if (returncode) {
+                if (returnCode) {
                     break;
                 }
                 int status;
@@ -1235,10 +1235,10 @@ namespace stdc {
                         continue;
                     }
                     if (errno == ECHILD) {
-                        returncode = 0;
+                        returnCode = 0;
                         break;
                     }
-                    error_code = make_last_error_code();
+                    errorCode = make_last_error_code();
                     return false;
                 }
                 // waitpid has been known to return 0 without WNOHANG, see bpo-14396.
@@ -1253,7 +1253,7 @@ namespace stdc {
             if (_internal_poll()) {
                 return true;
             }
-            if (error_code.value() != 0) {
+            if (errorCode.value() != 0) {
                 return false;
             }
             auto now = std::chrono::steady_clock::now();
@@ -1276,24 +1276,24 @@ namespace stdc {
 
     // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L2218
     bool Popen::Impl::send_signal_impl(int sig) {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
         // Polling first narrows the window in which the pid has been recycled and the signal
         // would land on somebody else's process.
-        if (!returncode) {
+        if (!returnCode) {
             std::ignore = _internal_poll();
-            error_code.clear();
+            errorCode.clear();
         }
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
 
@@ -1304,7 +1304,7 @@ namespace stdc {
             // It went away between the poll and the kill, which is not a failure.
             return true;
         }
-        error_code = make_last_error_code();
+        errorCode = make_last_error_code();
         return false;
     }
 

@@ -38,7 +38,7 @@ namespace stdc {
             setg(_buf, _buf, _buf);
         }
 
-        bool is_open() const {
+        bool isOpen() const {
             return _file != nullptr;
         }
 
@@ -129,8 +129,8 @@ namespace stdc {
         }
     }
 
-    bool Popen::Stream::is_open() const {
-        return _buf && _buf->is_open();
+    bool Popen::Stream::isOpen() const {
+        return _buf && _buf->isOpen();
     }
 
     FILE *Popen::Stream::file() const {
@@ -140,7 +140,7 @@ namespace stdc {
     Popen::Impl::Impl() = default;
 
     Popen::Impl::~Impl() {
-        if (_child_created && !returncode) {
+        if (_child_created && !returnCode) {
             std::ignore = kill_impl();
             std::ignore = _wait();
         }
@@ -164,7 +164,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::done() {
-        error_code.clear();
+        errorCode.clear();
         error_msg.clear();
         error_api = nullptr;
 
@@ -172,14 +172,14 @@ namespace stdc {
             return true;
         }
         pid = -1;
-        returncode.reset();
+        returnCode.reset();
         _closed_child_pipe_fds = false;
 
         // Nothing downstream can make an argv out of nothing, and both platforms only found out
         // about it inside the child, where the answer was an assertion in a debug build and an
         // out of range read in a release one.
         if (args.empty()) {
-            error_code = std::make_error_code(std::errc::invalid_argument);
+            errorCode = std::make_error_code(std::errc::invalid_argument);
             error_msg = "no program to run: args is empty";
             return false;
         }
@@ -193,7 +193,7 @@ namespace stdc {
         };
         for (const auto &arg : args) {
             if (has_nul(arg)) {
-                error_code = std::make_error_code(std::errc::invalid_argument);
+                errorCode = std::make_error_code(std::errc::invalid_argument);
                 error_msg = "an argument contains a NUL, which no platform can pass on";
                 return false;
             }
@@ -201,12 +201,12 @@ namespace stdc {
         if (env) {
             for (const auto &pair : *env) {
                 if (pair.first.empty()) {
-                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    errorCode = std::make_error_code(std::errc::invalid_argument);
                     error_msg = "an environment variable has no name";
                     return false;
                 }
                 if (has_nul(pair.first) || has_nul(pair.second)) {
-                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    errorCode = std::make_error_code(std::errc::invalid_argument);
                     error_msg =
                         formatN("environment variable \"%1\" contains a NUL", pair.first.c_str());
                     return false;
@@ -214,7 +214,7 @@ namespace stdc {
                 // The name is everything before the first one, so a name carrying its own would
                 // arrive as a different variable.
                 if (pair.first.find('=') != std::string::npos) {
-                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    errorCode = std::make_error_code(std::errc::invalid_argument);
                     error_msg = formatN("illegal environment variable name: %1", pair.first);
                     return false;
                 }
@@ -222,32 +222,32 @@ namespace stdc {
         }
 
         const auto is_pipe = [](const IODev &dev) {
-            return dev.kind == IODev::Builtin && dev.data.builtin == IOType::PIPE;
+            return dev.kind == IODev::Builtin && dev.data.builtin == IOType::Pipe;
         };
         if (detached && (is_pipe(stdin_dev) || is_pipe(stdout_dev) || is_pipe(stderr_dev))) {
-            error_code = std::make_error_code(std::errc::invalid_argument);
-            error_msg = "PIPE is not supported for a detached process";
+            errorCode = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "Pipe is not supported for a detached process";
             return false;
         }
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L847
-        if (stdout_dev.kind == 1 && stdout_dev.data.builtin == IOType::STDOUT) {
-            error_code = std::make_error_code(std::errc::invalid_argument);
-            error_msg = "STDOUT can only be used for stderr";
+        if (stdout_dev.kind == 1 && stdout_dev.data.builtin == IOType::StandardOutput) {
+            errorCode = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "StandardOutput can only be used for stderr";
             return false;
         }
 
         // ###FIXME: do we need to check?
-        if (stdin_dev.kind == 1 && stdin_dev.data.builtin == IOType::STDOUT) {
-            error_code = std::make_error_code(std::errc::invalid_argument);
-            error_msg = "STDOUT can only be used for stderr";
+        if (stdin_dev.kind == 1 && stdin_dev.data.builtin == IOType::StandardOutput) {
+            errorCode = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "StandardOutput can only be used for stderr";
             return false;
         }
 
 #ifndef _WIN32
-        if (!pass_fds.empty() && !close_fds) {
-            fprintf(stderr, "stdc::Popen: %s\n", "pass_fds overriding close_fds.");
-            close_fds = true;
+        if (!passFds.empty() && !closeFds) {
+            fprintf(stderr, "stdc::Popen: %s\n", "passFds overriding closeFds.");
+            closeFds = true;
         }
 #endif
 
@@ -259,15 +259,15 @@ namespace stdc {
         //
         // -1 means "leave it alone", which is also what setregid() and setreuid() take.
         int gid = group;
-        std::vector<int> gids = extra_groups;
+        std::vector<int> gids = extraGroups;
         int uid = -1;
         if (user.has_value) {
             if (user.is_name) {
                 errno = 0;
                 struct passwd *pw = getpwnam(user.str.c_str());
                 if (!pw) {
-                    error_code = errno ? std::error_code(errno, std::system_category())
-                                       : std::make_error_code(std::errc::invalid_argument);
+                    errorCode = errno ? std::error_code(errno, std::system_category())
+                                      : std::make_error_code(std::errc::invalid_argument);
                     error_msg = formatN("no such user: %1", user.str);
                     return false;
                 }
@@ -324,8 +324,8 @@ namespace stdc {
         if ((p2cwrite_h != InvalidHandle && p2cwrite == -1) ||
             (c2pread_h != InvalidHandle && c2pread == -1) ||
             (errread_h != InvalidHandle && errread == -1)) {
-            error_code = errno ? std::error_code(errno, std::generic_category())
-                               : std::make_error_code(std::errc::bad_file_descriptor);
+            errorCode = errno ? std::error_code(errno, std::generic_category())
+                              : std::make_error_code(std::errc::bad_file_descriptor);
             error_api = "_open_osfhandle";
             if (p2cwrite != -1)
                 _close(p2cwrite);
@@ -357,8 +357,8 @@ namespace stdc {
         FILE *stderr_file = errread == -1 ? nullptr : Popen_fdopen(errread, text ? "r" : "rb");
         if ((p2cwrite != -1 && !stdin_file) || (c2pread != -1 && !stdout_file) ||
             (errread != -1 && !stderr_file)) {
-            error_code = errno ? std::error_code(errno, std::generic_category())
-                               : std::make_error_code(std::errc::io_error);
+            errorCode = errno ? std::error_code(errno, std::generic_category())
+                              : std::make_error_code(std::errc::io_error);
             error_api = "fdopen";
             if (stdin_file)
                 std::fclose(stdin_file);
@@ -397,7 +397,7 @@ namespace stdc {
             }
             // A POSIX exec failure briefly created and then reaped a child. Externally start()
             // still failed, so restore the pre-start state and allow a corrected retry.
-            if (returncode) {
+            if (returnCode) {
                 _child_created = false;
             }
         }
@@ -460,19 +460,19 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::stdin_(IODev dev) {
+    Popen &Popen::standardInput(IODev dev) {
         stdc_impl_t;
         impl.stdin_dev = dev;
         return *this;
     }
 
-    Popen &Popen::stdout_(IODev dev) {
+    Popen &Popen::standardOutput(IODev dev) {
         stdc_impl_t;
         impl.stdout_dev = dev;
         return *this;
     }
 
-    Popen &Popen::stderr_(IODev dev) {
+    Popen &Popen::standardError(IODev dev) {
         stdc_impl_t;
         impl.stderr_dev = dev;
         return *this;
@@ -484,9 +484,9 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::close_fds(bool close_fds) {
+    Popen &Popen::closeFds(bool closeFds) {
         stdc_impl_t;
-        impl.close_fds = close_fds;
+        impl.closeFds = closeFds;
         return *this;
     }
 
@@ -497,46 +497,46 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::pipesize(int pipesize) {
+    Popen &Popen::pipeSize(int pipeSize) {
         stdc_impl_t;
-        impl.pipesize = pipesize;
+        impl.pipeSize = pipeSize;
         return *this;
     }
 
 #ifdef _WIN32
-    Popen &Popen::startupinfo(std::optional<StartupInfo> startupinfo) {
+    Popen &Popen::startupInfo(std::optional<StartupInfo> startupInfo) {
         stdc_impl_t;
-        impl.startupinfo = std::move(startupinfo);
+        impl.startupInfo = std::move(startupInfo);
         return *this;
     }
 
-    Popen &Popen::creationflags(int creationflags) {
+    Popen &Popen::creationFlags(int creationFlags) {
         stdc_impl_t;
-        impl.creationflags = creationflags;
+        impl.creationFlags = creationFlags;
         return *this;
     }
 #else
-    Popen &Popen::preexec_fn(std::function<void()> preexec_fn) {
+    Popen &Popen::preExec(std::function<void()> preExec) {
         stdc_impl_t;
-        impl.preexec_fn = std::move(preexec_fn);
+        impl.preExec = std::move(preExec);
         return *this;
     }
 
-    Popen &Popen::restore_signals(bool restore_signals) {
+    Popen &Popen::restoreSignals(bool restoreSignals) {
         stdc_impl_t;
-        impl.restore_signals = restore_signals;
+        impl.restoreSignals = restoreSignals;
         return *this;
     }
 
-    Popen &Popen::start_new_session(bool start_new_session) {
+    Popen &Popen::startNewSession(bool startNewSession) {
         stdc_impl_t;
-        impl.start_new_session = start_new_session;
+        impl.startNewSession = startNewSession;
         return *this;
     }
 
-    Popen &Popen::pass_fds(std::vector<int> pass_fds) {
+    Popen &Popen::passFds(std::vector<int> passFds) {
         stdc_impl_t;
-        impl.pass_fds = std::move(pass_fds);
+        impl.passFds = std::move(passFds);
         return *this;
     }
 
@@ -546,9 +546,9 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::extra_groups(std::vector<int> extra_groups) {
+    Popen &Popen::extraGroups(std::vector<int> extraGroups) {
         stdc_impl_t;
-        impl.extra_groups = std::move(extra_groups);
+        impl.extraGroups = std::move(extraGroups);
         return *this;
     }
 
@@ -576,14 +576,14 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::process_group(int process_group) {
+    Popen &Popen::processGroup(int processGroup) {
         stdc_impl_t;
-        impl.process_group = process_group;
+        impl.processGroup = processGroup;
         return *this;
     }
 #endif
 
-    bool Popen::start(std::string *err_msg) {
+    bool Popen::start(std::string *errMsg) {
         stdc_impl_t;
 
         bool result = impl.done();
@@ -596,35 +596,35 @@ namespace stdc {
         // show up here as the exit status of a process the caller never got, and as a pid.
         // Windows never had either, so this is also what makes the two agree.
         impl.pid = -1;
-        impl.returncode.reset();
+        impl.returnCode.reset();
 
         // system api error
-        if (err_msg) {
+        if (errMsg) {
             if (impl.error_api) {
-                *err_msg = formatN("%1: %2", impl.error_api, impl.error_code.message());
+                *errMsg = formatN("%1: %2", impl.error_api, impl.errorCode.message());
                 return false;
             }
 
             // invalid argument, file no found, etc.
             if (!impl.error_msg.empty()) {
-                *err_msg = impl.error_msg;
+                *errMsg = impl.error_msg;
                 return false;
             }
 
-            if (impl.error_code.value() != 0) {
-                *err_msg = impl.error_code.message();
+            if (impl.errorCode.value() != 0) {
+                *errMsg = impl.errorCode.message();
                 return false;
             }
 
             // unknown error
-            *err_msg = "unknown error";
+            *errMsg = "unknown error";
         }
         return false;
     }
 
-    std::error_code Popen::error_code() const {
+    std::error_code Popen::errorCode() const {
         stdc_impl_t;
-        return impl.error_code;
+        return impl.errorCode;
     }
 
     bool Popen::poll() {
@@ -643,7 +643,7 @@ namespace stdc {
         return impl.communicate_impl(input, timeout);
     }
 
-    bool Popen::send_signal(int sig) {
+    bool Popen::sendSignal(int sig) {
         stdc_impl_t;
         return impl.send_signal_impl(sig);
     }
@@ -668,17 +668,17 @@ namespace stdc {
         return impl.args;
     }
 
-    Popen::Stream &Popen::stdin_() const {
+    Popen::Stream &Popen::standardInput() const {
         stdc_impl_t;
         return impl.stdin_stream;
     }
 
-    Popen::Stream &Popen::stdout_() const {
+    Popen::Stream &Popen::standardOutput() const {
         stdc_impl_t;
         return impl.stdout_stream;
     }
 
-    Popen::Stream &Popen::stderr_() const {
+    Popen::Stream &Popen::standardError() const {
         stdc_impl_t;
         return impl.stderr_stream;
     }
@@ -693,9 +693,9 @@ namespace stdc {
         return impl.detached;
     }
 
-    std::optional<int> Popen::returncode() const {
+    std::optional<int> Popen::returnCode() const {
         stdc_impl_t;
-        return impl.returncode;
+        return impl.returnCode;
     }
 
 }

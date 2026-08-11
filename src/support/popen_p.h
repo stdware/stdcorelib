@@ -49,20 +49,20 @@ namespace stdc {
         mutable Stream stderr_stream;
 
         bool text = false;
-        bool close_fds = true;
+        bool closeFds = true;
         bool detached = false;
-        int pipesize = -1;
+        int pipeSize = -1;
 
 #ifdef _WIN32
-        std::optional<StartupInfo> startupinfo;
-        int creationflags = 0;
+        std::optional<StartupInfo> startupInfo;
+        int creationFlags = 0;
 #else
-        std::function<void()> preexec_fn;
-        bool restore_signals = true;
-        bool start_new_session = false;
-        std::vector<int> pass_fds;
+        std::function<void()> preExec;
+        bool restoreSignals = true;
+        bool startNewSession = false;
+        std::vector<int> passFds;
         int group = -1;
-        std::vector<int> extra_groups;
+        std::vector<int> extraGroups;
 
         // user
         struct user_info {
@@ -74,7 +74,7 @@ namespace stdc {
         user_info user;
 
         int umask = -1;
-        int process_group = -1;
+        int processGroup = -1;
 #endif
 
     public:
@@ -85,7 +85,7 @@ namespace stdc {
         bool _detached_started = false;
 
         int pid = -1;
-        std::optional<int> returncode;
+        std::optional<int> returnCode;
 
         bool _communication_started = false;
 
@@ -105,7 +105,7 @@ namespace stdc {
         // error data during start
         std::string error_msg;
         const char *error_api = nullptr;
-        std::error_code error_code;
+        std::error_code errorCode;
 
     public:
         //

@@ -115,7 +115,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME})
 
 # The same binary again, narrowed to the one case that needs privilege to say anything: user(),
-# group() and extra_groups() do nothing without it. Labeled rather than added to the run above,
+# group() and extraGroups() do nothing without it. Labeled rather than added to the run above,
 # because being root changes what several of the other cases are asking about, the descriptor
 # count and the umask among them. CI runs this entry under sudo and excludes the label from the
 # ordinary run, where the same case is covered anyway by the whole-binary entry.

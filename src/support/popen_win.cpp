@@ -48,17 +48,17 @@ namespace stdc {
     // polls instead on unix, which is what popen_unix.cpp does.
     std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
                                                                        int timeout) {
-        error_code.clear();
+        errorCode.clear();
 
         // Same answer as the other five, rather than the no_such_process the check below would
         // give. A detached child exists, it is just not ours to talk to.
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return {};
         }
 
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return {};
         }
 
@@ -77,18 +77,18 @@ namespace stdc {
         };
 
         const auto &start_workers = [&] {
-            if (stdout_stream.is_open()) {
+            if (stdout_stream.isOpen()) {
                 out_thread =
                     std::thread(read_all, stdout_stream.file(), std::ref(out), std::ref(out_error));
             }
-            if (stderr_stream.is_open()) {
+            if (stderr_stream.isOpen()) {
                 err_thread =
                     std::thread(read_all, stderr_stream.file(), std::ref(err), std::ref(err_error));
             }
 
             // Input has its own worker too. Otherwise a child that never reads can fill the pipe
             // and block this thread before it ever reaches the timeout below.
-            if (stdin_stream.is_open()) {
+            if (stdin_stream.isOpen()) {
                 in_thread = std::thread([&] {
                     run_capturing(in_error, [&] {
                         if (!input.empty()) {
@@ -126,10 +126,10 @@ namespace stdc {
         // A timeout kills the child rather than leaving it behind. Its exit is what closes the
         // write ends, and without that the reader threads below never finish.
         if (!_wait(timeout)) {
-            auto wait_error = error_code;
+            auto wait_error = errorCode;
             std::ignore = kill_impl();
             std::ignore = _wait();
-            error_code =
+            errorCode =
                 wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
         }
 
@@ -189,7 +189,7 @@ namespace stdc {
             CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                         nullptr, OPEN_EXISTING, 0, nullptr);
         if (handle == INVALID_HANDLE_VALUE) {
-            error_code = make_last_error_code();
+            errorCode = make_last_error_code();
             error_api = "CreateFileW";
             return false;
         }
@@ -266,7 +266,7 @@ namespace stdc {
             HANDLE target_handle;
             if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &target_handle,
                                  0, 1, DUPLICATE_SAME_ACCESS)) {
-                error_code = make_last_error_code();
+                errorCode = make_last_error_code();
                 error_api = "DuplicateHandle";
                 return false;
             }
@@ -278,7 +278,7 @@ namespace stdc {
         const auto &convert_from_fd = [this](HANDLE &handle, int fd) {
             auto tmp_handle = (HANDLE) _get_osfhandle(fd);
             if (tmp_handle == INVALID_HANDLE_VALUE) {
-                error_code = std::error_code(ERROR_INVALID_HANDLE, windows_utf8_category());
+                errorCode = std::error_code(ERROR_INVALID_HANDLE, windows_utf8_category());
                 error_api = "_get_osfhandle";
                 return false;
             };
@@ -289,7 +289,7 @@ namespace stdc {
         // create a pipe
         const auto &create_pipe = [this](HANDLE &read_handle, HANDLE &write_handle) {
             if (!CreatePipe(&read_handle, &write_handle, nullptr, 0)) {
-                error_code = make_last_error_code();
+                errorCode = make_last_error_code();
                 error_api = "CreatePipe";
                 return false;
             }
@@ -325,7 +325,7 @@ namespace stdc {
             }
             case IODev::Builtin: {
                 switch (stdin_dev.data.builtin) {
-                    case PIPE: {
+                    case Pipe: {
                         if (!create_pipe(p2cread, p2cwrite)) {
                             return false;
                         }
@@ -333,14 +333,14 @@ namespace stdc {
                         push_err_close_handle(p2cwrite);
                         break;
                     };
-                    case DEVNULL: {
+                    case DeviceNull: {
                         if (!open_devnull(p2cread)) {
                             return false;
                         }
                         break;
                     };
                     default: {
-                        error_code = std::make_error_code(std::errc::invalid_argument);
+                        errorCode = std::make_error_code(std::errc::invalid_argument);
                         error_msg = formatN("invalid stdin type: %1", int(stdin_dev.data.builtin));
                         return false;
                     }
@@ -383,7 +383,7 @@ namespace stdc {
             }
             case IODev::Builtin: {
                 switch (stdout_dev.data.builtin) {
-                    case PIPE: {
+                    case Pipe: {
                         if (!create_pipe(c2pread, c2pwrite)) {
                             return false;
                         }
@@ -391,14 +391,14 @@ namespace stdc {
                         push_dup_close_handle(c2pwrite);
                         break;
                     };
-                    case DEVNULL: {
+                    case DeviceNull: {
                         if (!open_devnull(c2pwrite)) {
                             return false;
                         }
                         break;
                     };
                     default: {
-                        error_code = std::make_error_code(std::errc::invalid_argument);
+                        errorCode = std::make_error_code(std::errc::invalid_argument);
                         error_msg =
                             formatN("invalid stdout type: %1", int(stdout_dev.data.builtin));
                         return false;
@@ -442,7 +442,7 @@ namespace stdc {
             }
             case IODev::Builtin: {
                 switch (stderr_dev.data.builtin) {
-                    case PIPE: {
+                    case Pipe: {
                         if (!create_pipe(errread, errwrite)) {
                             return false;
                         }
@@ -450,13 +450,13 @@ namespace stdc {
                         push_dup_close_handle(errwrite);
                         break;
                     };
-                    case DEVNULL: {
+                    case DeviceNull: {
                         if (!open_devnull(errwrite)) {
                             return false;
                         }
                         break;
                     };
-                    case STDOUT: {
+                    case StandardOutput: {
                         errwrite = c2pwrite;
                         break;
                     };
@@ -518,18 +518,18 @@ namespace stdc {
         }
     }
 
-    static fs::path _get_command_prompt_path(std::string &err_msg) {
+    static fs::path _get_command_prompt_path(std::string &errMsg) {
         auto comspec = kernel32::GetEnvironmentVariableW(L"ComSpec", nullptr);
         fs::path comspec_path;
         if (comspec.empty()) {
             auto system_root = kernel32::GetEnvironmentVariableW(L"SystemRoot", nullptr);
             if (system_root.empty()) {
-                err_msg = "shell not found: neither %ComSpec% nor %SystemRoot% is set";
+                errMsg = "shell not found: neither %ComSpec% nor %SystemRoot% is set";
                 return {};
             }
             comspec_path = fs::path(system_root) / L"System32" / L"cmd.exe";
             if (!comspec_path.is_absolute()) {
-                err_msg = "shell not found: constructed path is not absolute";
+                errMsg = "shell not found: constructed path is not absolute";
                 return {};
             }
         } else {
@@ -727,12 +727,12 @@ namespace stdc {
         ZeroMemory(&siex, sizeof(siex));
         STARTUPINFOW &si = siex.StartupInfo;
         si.cb = sizeof(siex);
-        if (startupinfo) {
-            si.dwFlags = startupinfo->dwFlags;
-            si.hStdInput = startupinfo->hStdInput;
-            si.hStdOutput = startupinfo->hStdOutput;
-            si.hStdError = startupinfo->hStdError;
-            si.wShowWindow = startupinfo->wShowWindow;
+        if (startupInfo) {
+            si.dwFlags = startupInfo->dwFlags;
+            si.hStdInput = startupInfo->hStdInput;
+            si.hStdOutput = startupInfo->hStdOutput;
+            si.hStdError = startupInfo->hStdError;
+            si.wShowWindow = startupInfo->wShowWindow;
         }
 
         bool use_std_handles = false;
@@ -746,9 +746,9 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1499
         vlarray<HANDLE, 10> handle_list;
-        if (startupinfo) {
-            auto it = startupinfo->lpAttributeList.find("handle_list");
-            if (it != startupinfo->lpAttributeList.end()) {
+        if (startupInfo) {
+            auto it = startupInfo->lpAttributeList.find("handle_list");
+            if (it != startupInfo->lpAttributeList.end()) {
                 HANDLE *handles = (HANDLE *) it->second;
                 for (int i = 0; handles[i] != INVALID_HANDLE_VALUE; i++) {
                     handle_list.push_back(handles[i]);
@@ -756,7 +756,7 @@ namespace stdc {
             }
         }
 
-        if (!handle_list.empty() || (use_std_handles && close_fds)) {
+        if (!handle_list.empty() || (use_std_handles && closeFds)) {
             if (use_std_handles) {
                 handle_list.push_back(p2cread);
                 handle_list.push_back(c2pwrite);
@@ -765,15 +765,15 @@ namespace stdc {
 
             handle_list = _filter_handle_list(handle_list);
 
-            if (!handle_list.empty() && !close_fds) {
+            if (!handle_list.empty() && !closeFds) {
                 fprintf(stderr, "stdc::Popen: %s\n", //
-                        "startupinfo.lpAttributeList['handle_list'] overriding close_fds");
+                        "startupInfo.lpAttributeList['handle_list'] overriding closeFds");
             }
 
             // When using the handle_list we always request to inherit
             // handles but the only handles that will be inherited are
             // the ones in the handle_list
-            close_fds = false;
+            closeFds = false;
         }
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1526
@@ -782,11 +782,11 @@ namespace stdc {
             si.dwFlags |= STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE;
             if (child_executable.empty()) {
-                std::string err_msg;
-                child_executable = _get_command_prompt_path(err_msg);
-                if (!err_msg.empty()) {
-                    error_code = std::make_error_code(std::errc::no_such_file_or_directory);
-                    error_msg = err_msg;
+                std::string errMsg;
+                child_executable = _get_command_prompt_path(errMsg);
+                if (!errMsg.empty()) {
+                    errorCode = std::make_error_code(std::errc::no_such_file_or_directory);
+                    error_msg = errMsg;
                     return false;
                 }
             }
@@ -806,7 +806,7 @@ namespace stdc {
                 if (item.first.empty() || item.first.find('=') != std::string::npos ||
                     item.first.find('\0') != std::string::npos ||
                     item.second.find('\0') != std::string::npos) {
-                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    errorCode = std::make_error_code(std::errc::invalid_argument);
                     error_msg = formatN("illegal environment variable: %1", item.first);
                     return false;
                 }
@@ -836,26 +836,26 @@ namespace stdc {
         AttributeList attribute_list = {0};
         if (auto [ec, err_api] = _get_attribute_list(handle_list, &attribute_list);
             ec.value() != 0) {
-            error_code = ec;
+            errorCode = ec;
             error_api = err_api;
             goto _cleanup;
         }
 
-        dwCreationFlags = creationflags | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
+        dwCreationFlags = creationFlags | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1554
         if (!CreateProcessW(application_name.empty() ? NULL : application_name.data(), //
                             command_line.data(),                                       //
                             nullptr,                                                   //
                             nullptr,                                                   //
-                            !close_fds,                                                //
+                            !closeFds,                                                 //
                             dwCreationFlags,                                           //
                             env ? env_str.data() : NULL,                               //
                             cwd.empty() ? NULL : cwd.c_str(),
                             (LPSTARTUPINFOW) &siex, //
                             &pi                     //
                             )) {
-            error_code = make_last_error_code();
+            errorCode = make_last_error_code();
             error_api = "CreateProcessW";
             goto _cleanup;
         }
@@ -883,22 +883,22 @@ namespace stdc {
         // ReadFile will hang.
         _close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
 
-        return error_code.value() == 0;
+        return errorCode.value() == 0;
     }
 
     bool Popen::Impl::_internal_poll() {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
         DWORD result = WaitForSingleObject(_handle, 0);
@@ -906,38 +906,38 @@ namespace stdc {
             case WAIT_OBJECT_0: {
                 DWORD exitCode;
                 if (!GetExitCodeProcess(_handle, &exitCode)) {
-                    error_code = make_last_error_code();
+                    errorCode = make_last_error_code();
                     return false;
                 }
-                returncode = exitCode;
+                returnCode = exitCode;
                 _reap();
                 return true;
             }
             case WAIT_FAILED: {
-                error_code = make_last_error_code();
+                errorCode = make_last_error_code();
                 return false;
             }
             default:
                 break;
         }
         // Still running, which is not an error. The caller tells the two apart by whether
-        // returncode() is set.
+        // returnCode() is set.
         return false;
     }
 
     bool Popen::Impl::_wait(int timeout) {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
         if (timeout < 0) {
@@ -950,7 +950,7 @@ namespace stdc {
                 return false;
             }
             case WAIT_FAILED: {
-                error_code = make_last_error_code();
+                errorCode = make_last_error_code();
                 return false;
             }
             default:
@@ -959,23 +959,23 @@ namespace stdc {
 
         DWORD exitCode;
         if (!GetExitCodeProcess(_handle, &exitCode)) {
-            error_code = make_last_error_code();
+            errorCode = make_last_error_code();
             return false;
         }
-        returncode = exitCode;
+        returnCode = exitCode;
         _reap();
         return true;
     }
 
     bool Popen::Impl::kill_impl() {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         // Before the handle is used for anything. Where nothing was started it is
@@ -983,7 +983,7 @@ namespace stdc {
         // calling process: TerminateProcess on it killed the program that asked, with the exit
         // code meant for the child.
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
         if (TerminateProcess(_handle, KillProcessExitCode)) {
@@ -996,14 +996,14 @@ namespace stdc {
 
             std::ignore = GetExitCodeProcess(_handle, &exitCode);
             if (exitCode == STILL_ACTIVE) {
-                error_code.assign(err, windows_utf8_category());
+                errorCode.assign(err, windows_utf8_category());
                 return false;
             }
-            returncode = exitCode;
+            returnCode = exitCode;
             _reap();
             return true;
         }
-        error_code.assign(err, windows_utf8_category());
+        errorCode.assign(err, windows_utf8_category());
         return false;
     }
 
@@ -1017,18 +1017,18 @@ namespace stdc {
 
     // https://github.com/qt/qtbase/blob/v6.8.0/src/corelib/io/qprocess_win.cpp#L641
     bool Popen::Impl::terminate_impl() {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created || tid < 0) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
         // Both calls are a request, not a guarantee. A process with no windows and no message
@@ -1040,18 +1040,18 @@ namespace stdc {
     }
 
     bool Popen::Impl::send_signal_impl(int sig) {
-        error_code.clear();
+        errorCode.clear();
 
         if (_detached_started) {
-            error_code = std::make_error_code(std::errc::operation_not_supported);
+            errorCode = std::make_error_code(std::errc::operation_not_supported);
             return false;
         }
 
-        if (returncode) {
+        if (returnCode) {
             return true;
         }
         if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
+            errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
 
@@ -1059,10 +1059,10 @@ namespace stdc {
             if (GenerateConsoleCtrlEvent(sig, pid)) {
                 return true;
             }
-            error_code = make_last_error_code();
+            errorCode = make_last_error_code();
             return false;
         }
-        error_code = std::error_code(ERROR_NOT_SUPPORTED, windows_utf8_category());
+        errorCode = std::error_code(ERROR_NOT_SUPPORTED, windows_utf8_category());
         return false;
     }
 
