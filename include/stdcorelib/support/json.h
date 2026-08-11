@@ -4,9 +4,10 @@
 #define STDCORELIB_JSON_H
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <string>
 #include <string_view>
-#include <map>
 #include <vector>
 
 #include <stdcorelib/stdc_global.h>
@@ -25,7 +26,7 @@ namespace stdc {
 
     using JsonArray = std::vector<JsonValue>;
 
-    using JsonObject = std::map<std::string, JsonValue>;
+    using JsonObject = std::map<std::string, JsonValue, std::less<>>;
 
     /// JsonValue - An immutable JSON value, shaped after Qt's.
     ///

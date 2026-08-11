@@ -2,15 +2,16 @@
 
 #include "json.h"
 
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <charconv>
 #include <string>
 #include <utility>
 
 #include "utf.h"
+#include "vlarray.h"
 
 namespace {
 
@@ -64,7 +65,18 @@ namespace {
         }
 
         out += '"';
-        for (char c : s) {
+        for (size_t i = 0; i < s.size();) {
+            // Most text needs no escaping. Copy its ordinary bytes as one range instead of
+            // repeatedly growing out through operator+= one character at a time.
+            const size_t start = i;
+            while (i < s.size() && s[i] != '"' && s[i] != '\\' && uint8_t(s[i]) >= 0x20) {
+                ++i;
+            }
+            out.append(s.data() + start, i - start);
+            if (i == s.size()) {
+                break;
+            }
+            const char c = s[i++];
             switch (c) {
                 case '"':
                     out += "\\\"";
@@ -138,6 +150,13 @@ namespace {
         }
     }
 
+    template <class T>
+    void appendInteger(std::string &out, T value) {
+        char buf[32];
+        const auto result = std::to_chars(buf, buf + sizeof(buf), value);
+        out.append(buf, result.ptr);
+    }
+
     void dumpTo(std::string &out, const JsonValue &v, int indent, int depth) {
         const bool pretty = indent > 0;
 
@@ -156,7 +175,7 @@ namespace {
                 out += v.toBool() ? "true" : "false";
                 return;
             case JsonValue::Int:
-                out += std::to_string(v.toInt());
+                appendInteger(out, v.toInt());
                 return;
             case JsonValue::Double:
                 formatDouble(out, v.toDouble());
@@ -173,7 +192,7 @@ namespace {
                     if (i) {
                         out += ',';
                     }
-                    out += std::to_string(unsigned(bytes[i]));
+                    appendInteger(out, unsigned(bytes[i]));
                 }
                 out += "],\"subtype\":null}";
                 return;
@@ -384,21 +403,30 @@ namespace {
                 if (!parseValue(&item, depth + 1)) {
                     return false;
                 }
-                arr.push_back(std::move(item));
                 skipSpace();
                 if (atEnd()) {
                     return fail("expected ',' or ']'");
                 }
+                bool hasNext = false;
                 if (peek() == ',') {
                     ++_pos;
-                    continue;
-                }
-                if (peek() == ']') {
+                    hasNext = true;
+                } else if (peek() == ']') {
                     ++_pos;
+                } else {
+                    return fail("expected ',' or ']'");
+                }
+
+                if (arr.empty() && hasNext) {
+                    // The comma proves that the array needs at least two slots. Reserve them before
+                    // the first insertion without overallocating a one-element array.
+                    arr.reserve(2);
+                }
+                arr.push_back(std::move(item));
+                if (!hasNext) {
                     *out = JsonValue(std::move(arr));
                     return true;
                 }
-                return fail("expected ',' or ']'");
             }
         }
 
@@ -475,7 +503,16 @@ namespace {
         bool parseString(std::string *out) {
             ++_pos; // '"'
             std::string res;
+            bool hasNonAscii = false;
             for (;;) {
+                // Ordinary bytes dominate real documents. Append each uninterrupted range once,
+                // leaving the switch below only the escapes and errors it actually has to decode.
+                const size_t start = _pos;
+                while (!atEnd() && peek() != '"' && peek() != '\\' && uint8_t(peek()) >= 0x20) {
+                    hasNonAscii |= uint8_t(peek()) >= 0x80;
+                    ++_pos;
+                }
+                res.append(_s.data() + start, _pos - start);
                 if (atEnd()) {
                     return fail("unterminated string");
                 }
@@ -486,11 +523,6 @@ namespace {
                 }
                 if (uint8_t(c) < 0x20) {
                     return fail("control character in string");
-                }
-                if (c != '\\') {
-                    res += c;
-                    ++_pos;
-                    continue;
                 }
 
                 ++_pos;
@@ -554,7 +586,9 @@ namespace {
                 }
             }
 
-            if (!stdc::utf::is_valid_utf8(res)) {
+            // ASCII was checked for controls above and is UTF-8 already. Only strings containing
+            // raw high bytes need the full validator; \u escapes were validated while decoded.
+            if (hasNonAscii && !stdc::utf::is_valid_utf8(res)) {
                 return fail("string is not valid UTF-8");
             }
             *out = std::move(res);
@@ -627,12 +661,22 @@ namespace {
                 }
             }
 
-            // std::from_chars for floating point is not everywhere yet, and strtod wants a
-            // terminator the input does not have.
-            std::string text(first, size_t(last - first));
+            // Floating-point from_chars is not everywhere yet. Where it is available, it avoids
+            // copying every number merely to give strtod a terminator.
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+            double parsed;
+            const auto result = std::from_chars(first, last, parsed, std::chars_format::general);
+            if (result.ec == std::errc() && result.ptr == last) {
+                *out = JsonValue(parsed);
+                return true;
+            }
+#endif
+
+            vlarray<char, 64> text(first, last);
+            text.push_back('\0');
             char *end = nullptr;
-            double d = std::strtod(text.c_str(), &end);
-            if (end != text.c_str() + text.size()) {
+            double d = std::strtod(text.data(), &end);
+            if (end != text.data() + text.size() - 1) {
                 return fail("malformed number");
             }
             *out = JsonValue(d);
@@ -958,6 +1002,14 @@ namespace {
                             return false;
                         }
                         JsonArray arr;
+                        if (!indefinite) {
+                            // Every value occupies at least one byte, so this also rejects an
+                            // impossible count before reserve can trust untrusted input.
+                            if (arg > _d.size() - _pos) {
+                                return fail("input ended early");
+                            }
+                            arr.reserve(size_t(arg));
+                        }
                         for (uint64_t i = 0; indefinite || i < arg; ++i) {
                             if (indefinite) {
                                 bool broke = false;
@@ -1319,7 +1371,7 @@ namespace stdc {
 
     const JsonValue &JsonValue::operator[](std::string_view key) const {
         if (_type == Object) {
-            auto it = _p.obj->find(std::string(key));
+            auto it = _p.obj->find(key);
             if (it != _p.obj->end()) {
                 return it->second;
             }

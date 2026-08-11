@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <cmath>
+#include <type_traits>
 
 #include <stdcorelib/support/json.h>
 
@@ -11,6 +12,8 @@ using stdc::JsonObject;
 using stdc::JsonValue;
 
 BOOST_AUTO_TEST_SUITE(test_json)
+
+static_assert(std::is_same_v<JsonObject::key_compare, std::less<>>);
 
 BOOST_AUTO_TEST_CASE(test_JsonValue_Types) {
     BOOST_CHECK(JsonValue().type() == JsonValue::Null);
@@ -196,6 +199,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Subscript) {
     BOOST_CHECK(v["a"]["b"].isNull());           // subscripting a number by key
     BOOST_CHECK(v["a"][size_t(0)].isNull());     // subscripting a number by index
     BOOST_CHECK(v["absent"]["deeper"].isNull()); // chaining off a missing key
+
+    const std::string storage = "_nested_";
+    BOOST_CHECK(v[std::string_view(storage.data() + 1, 6)]["b"][1].toInt() == 20);
 }
 
 BOOST_AUTO_TEST_CASE(test_JsonValue_Equality) {
@@ -349,6 +355,16 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Cbor) {
         const uint8_t garbage[] = {0xFF, 0xFF, 0xFF};
         std::string error;
         JsonValue back = JsonValue::fromCbor(stdc::array_view<uint8_t>(garbage, 3), &error);
+        BOOST_CHECK(back.isNull());
+        BOOST_CHECK(!error.empty());
+    }
+    // A declared container count cannot exceed the bytes that remain. Reject it before using the
+    // untrusted count to reserve storage.
+    {
+        const uint8_t impossibleArray[] = {0x9B, 0xFF, 0xFF, 0xFF, 0xFF,
+                                           0xFF, 0xFF, 0xFF, 0xFF};
+        std::string error;
+        JsonValue back = JsonValue::fromCbor(impossibleArray, &error);
         BOOST_CHECK(back.isNull());
         BOOST_CHECK(!error.empty());
     }
