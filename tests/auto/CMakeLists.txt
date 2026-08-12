@@ -114,6 +114,10 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 # --no-tests=error, or it is back to a green run of nothing.
 add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME})
 
+# The default is 1500 seconds, long enough for a hang to pass for slowness. Two seconds here and
+# twenty four at the worst measured on CI, so anything still running at two minutes is stuck.
+set_tests_properties(${PROJECT_NAME} PROPERTIES TIMEOUT 120)
+
 # The same binary again, narrowed to the one case that needs privilege to say anything: user(),
 # group() and extraGroups() do nothing without it. Labeled rather than added to the run above,
 # because being root changes what several of the other cases are asking about, the descriptor
@@ -125,5 +129,5 @@ add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_test(NAME ${PROJECT_NAME}_root
         COMMAND ${PROJECT_NAME} --run_test=test_popen/test_user_and_groups)
-    set_tests_properties(${PROJECT_NAME}_root PROPERTIES LABELS root)
+    set_tests_properties(${PROJECT_NAME}_root PROPERTIES LABELS root TIMEOUT 60)
 endif()
