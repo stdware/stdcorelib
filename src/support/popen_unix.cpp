@@ -31,7 +31,7 @@
 
 namespace stdc {
 
-    /// Ignores SIGPIPE for its lifetime.
+    /// Keeps a broken pipe from ending the process, for as long as it lives.
     ///
     /// The poll loop below asks whether the child is still reading before writing anything, so
     /// almost every broken pipe is answered by not writing at all. What is left is the gap
@@ -39,31 +39,63 @@ namespace stdc {
     /// exit in there, and then write raises SIGPIPE and ends the process. Nothing about poll
     /// closes that gap, so it is closed here.
     ///
-    /// Measured on macOS by interposing write() and delaying it until the child closed its pipe.
-    /// The guarded call survived EPIPE. The same write without the guard ended on SIGPIPE. What
-    /// it costs to be sure is two system calls per communicate() call.
+    /// The signal is blocked for this thread rather than ignored for the process. A disposition
+    /// is process wide, and two threads saving and restoring one race: the first to leave puts
+    /// back what it found and takes the protection away from the second, which is still writing,
+    /// and the last to leave installs what the first had already installed. Measured, both
+    /// halves. A mask is this thread's own, so neither happens, and a program that wanted
+    /// SIGPIPE to end it still gets that everywhere else.
     ///
-    /// \note The disposition belongs to the process, not to this thread, so a program that
-    ///       wanted SIGPIPE to end it does not get that while communicate() runs. Children are
-    ///       unaffected, since this is only ever entered after the fork.
+    /// Blocking leaves the signal pending instead of delivering it, so it has to be taken off
+    /// again before the mask goes back. One that was already pending on the way in is left
+    /// alone: it was not ours to swallow.
+    ///
+    /// \note Apple has no sigtimedwait to take it off with, so that platform ignores the signal
+    ///       for the process and lives with the race above. \c F_SETNOSIGPIPE is the answer
+    ///       there and is not written yet.
     class sigpipe_guard {
     public:
         sigpipe_guard() {
+            sigemptyset(&_pipe_only);
+            sigaddset(&_pipe_only, SIGPIPE);
+#ifdef __APPLE__
             struct sigaction ignore{};
             ignore.sa_handler = SIG_IGN;
             sigemptyset(&ignore.sa_mask);
             _installed = sigaction(SIGPIPE, &ignore, &_old) == 0;
+#else
+            sigset_t pending;
+            sigemptyset(&pending);
+            _was_pending = sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE) == 1;
+            _installed = pthread_sigmask(SIG_BLOCK, &_pipe_only, &_old_mask) == 0;
+#endif
         }
 
         ~sigpipe_guard() {
-            if (_installed) {
-                sigaction(SIGPIPE, &_old, nullptr);
+            if (!_installed) {
+                return;
             }
+#ifdef __APPLE__
+            sigaction(SIGPIPE, &_old, nullptr);
+#else
+            if (!_was_pending) {
+                const timespec no_wait{};
+                while (sigtimedwait(&_pipe_only, nullptr, &no_wait) == -1 && errno == EINTR) {
+                }
+            }
+            pthread_sigmask(SIG_SETMASK, &_old_mask, nullptr);
+#endif
         }
 
     private:
-        struct sigaction _old{};
+        sigset_t _pipe_only{};
         bool _installed = false;
+#ifdef __APPLE__
+        struct sigaction _old{};
+#else
+        sigset_t _old_mask{};
+        bool _was_pending = false;
+#endif
 
         STDC_DISABLE_COPY_MOVE(sigpipe_guard)
     };
