@@ -102,7 +102,9 @@ namespace stdc {
         std::shared_mutex _waitpid_lock;
 #endif
 
-        // error data during start
+        // What the last operation, whichever one it was, failed at. The three are set together
+        // and read together: error_api names the system call where there was one, error_msg says
+        // what was wrong where the fault was in the request rather than in a call.
         std::string error_msg;
         const char *error_api = nullptr;
         std::error_code errorCode;
@@ -111,6 +113,13 @@ namespace stdc {
         //
         // Methods
         //
+
+        /// Forgets the last failure. Every operation starts with this.
+        void clear_error();
+
+        /// The last failure in words, empty where there was none.
+        std::string message() const;
+
         bool done();
         void close_std_files();
 

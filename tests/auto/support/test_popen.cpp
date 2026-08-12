@@ -405,6 +405,36 @@ BOOST_AUTO_TEST_CASE(test_nothing_started_means_no_such_process) {
     BOOST_CHECK_EQUAL(*p.returnCode(), 3);
 }
 
+BOOST_AUTO_TEST_CASE(test_lastError_answers_for_every_operation) {
+    // Every operation records what it failed at. Only start() used to be able to say it.
+    {
+        Popen p;
+        p.args({ChildPath, "exit", "0"});
+        bool answered = p.wait(1000);
+        const std::string message = p.lastError();
+        BOOST_CHECK(!answered);
+        BOOST_CHECK_MESSAGE(!message.empty(), "wait failed without saying why");
+    }
+
+    // A request turned down before any system call was reached has no errno to describe it, so
+    // these words are the only account of it there is. The start that follows has to clear them:
+    // a message left over from an earlier failure would read as a current one.
+    {
+        Popen p;
+        p.args({ChildPath, "exit", "0"}).standardInput(Popen::StandardOutput);
+        BOOST_REQUIRE(!p.start());
+        const std::string refused = p.lastError();
+        BOOST_CHECK(!refused.empty());
+        BOOST_CHECK(refused != p.errorCode().message());
+
+        p.standardInput(Popen::DeviceNull);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
+        BOOST_CHECK_EQUAL(p.lastError(), std::string());
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(p.lastError(), std::string());
+    }
+}
+
 // A bare name is looked up along PATH, the same way a shell would find it.
 BOOST_AUTO_TEST_CASE(test_path_lookup) {
     Popen p;

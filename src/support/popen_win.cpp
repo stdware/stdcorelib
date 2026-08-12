@@ -48,7 +48,7 @@ namespace stdc {
     // polls instead on unix, which is what popen_unix.cpp does.
     std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
                                                                        int timeout) {
-        errorCode.clear();
+        clear_error();
 
         // Same answer as the other five, rather than the no_such_process the check below would
         // give. A detached child exists, it is just not ours to talk to.
@@ -887,7 +887,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::_internal_poll() {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -926,7 +926,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::_wait(int timeout) {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -968,7 +968,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::kill_impl() {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -1017,7 +1017,7 @@ namespace stdc {
 
     // https://github.com/qt/qtbase/blob/v6.8.0/src/corelib/io/qprocess_win.cpp#L641
     bool Popen::Impl::terminate_impl() {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -1040,7 +1040,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::send_signal_impl(int sig) {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);

@@ -163,10 +163,29 @@ namespace stdc {
 #endif
     }
 
-    bool Popen::Impl::done() {
+    void Popen::Impl::clear_error() {
         errorCode.clear();
         error_msg.clear();
         error_api = nullptr;
+    }
+
+    std::string Popen::Impl::message() const {
+        // The system call first: knowing that a start failed at "fork" rather than at "open"
+        // says more than the errno does on its own.
+        if (error_api) {
+            return formatN("%1: %2", error_api, errorCode.message());
+        }
+        if (!error_msg.empty()) {
+            return error_msg;
+        }
+        if (errorCode) {
+            return errorCode.message();
+        }
+        return {};
+    }
+
+    bool Popen::Impl::done() {
+        clear_error();
 
         if (_child_created || _detached_started) {
             return true;
@@ -597,26 +616,13 @@ namespace stdc {
         impl.pid = -1;
         impl.returnCode.reset();
 
-        // system api error
+        // A failure that named nothing would leave lastError() empty and read as success. There
+        // should be none, so this is a backstop rather than an expected path.
+        if (impl.message().empty()) {
+            impl.error_msg = "unknown error";
+        }
         if (errMsg) {
-            if (impl.error_api) {
-                *errMsg = formatN("%1: %2", impl.error_api, impl.errorCode.message());
-                return false;
-            }
-
-            // invalid argument, file no found, etc.
-            if (!impl.error_msg.empty()) {
-                *errMsg = impl.error_msg;
-                return false;
-            }
-
-            if (impl.errorCode.value() != 0) {
-                *errMsg = impl.errorCode.message();
-                return false;
-            }
-
-            // unknown error
-            *errMsg = "unknown error";
+            *errMsg = impl.message();
         }
         return false;
     }
@@ -624,6 +630,11 @@ namespace stdc {
     std::error_code Popen::errorCode() const {
         stdc_impl_t;
         return impl.errorCode;
+    }
+
+    std::string Popen::lastError() const {
+        stdc_impl_t;
+        return impl.message();
     }
 
     bool Popen::poll() {

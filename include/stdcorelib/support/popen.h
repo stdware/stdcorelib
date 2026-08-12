@@ -363,6 +363,13 @@ namespace stdc {
         /// The error from the last operation, cleared at the start of each one.
         std::error_code errorCode() const;
 
+        /// The same failure in words, empty where the last operation did not fail.
+        ///
+        /// \note Says more than errorCode().message() alone where the failure was in a system
+        ///       call, since it names the call, and where the request was refused before any
+        ///       call was made, which no \c errno describes.
+        std::string lastError() const;
+
         /// @}
 
     public:

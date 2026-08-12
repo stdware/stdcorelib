@@ -84,7 +84,7 @@ namespace stdc {
     //       is theirs and is not seen here, which was true of the thread version as well.
     std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
                                                                        int timeout) {
-        errorCode.clear();
+        clear_error();
 
         // Same answer as the other five, rather than the no_such_process the check below would
         // give. A detached child exists, it is just not ours to talk to.
@@ -1154,7 +1154,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::_internal_poll() {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -1203,7 +1203,7 @@ namespace stdc {
     }
 
     bool Popen::Impl::_wait(int timeout) {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -1276,7 +1276,7 @@ namespace stdc {
 
     // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L2218
     bool Popen::Impl::send_signal_impl(int sig) {
-        errorCode.clear();
+        clear_error();
 
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
@@ -1287,7 +1287,7 @@ namespace stdc {
         // would land on somebody else's process.
         if (!returnCode) {
             std::ignore = _internal_poll();
-            errorCode.clear();
+            clear_error();
         }
         if (returnCode) {
             return true;
