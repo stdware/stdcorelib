@@ -601,7 +601,7 @@ namespace stdc {
     }
 #endif
 
-    bool Popen::start(std::string *errMsg) {
+    bool Popen::start() {
         stdc_impl_t;
 
         bool result = impl.done();
@@ -620,9 +620,6 @@ namespace stdc {
         // should be none, so this is a backstop rather than an expected path.
         if (impl.message().empty()) {
             impl.error_msg = "unknown error";
-        }
-        if (errMsg) {
-            *errMsg = impl.message();
         }
         return false;
     }

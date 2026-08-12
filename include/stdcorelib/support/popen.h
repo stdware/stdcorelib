@@ -32,9 +32,8 @@
 ///         .standardOutput(Popen::Pipe)
 ///         .standardError(Popen::StandardOutput);
 ///
-///     std::string err;
-///     if (!proc.start(&err)) {
-///         return err;
+///     if (!proc.start()) {
+///         return proc.lastError();
 ///     }
 ///     auto [out, _] = proc.communicate({}, 5000);
 ///     int code = proc.returnCode().value_or(-1);
@@ -71,9 +70,8 @@ namespace stdc {
     ///       .standardOutput(Popen::Pipe)
     ///       .standardError(Popen::StandardOutput); // fold stderr into the stdout pipe
     ///
-    ///   std::string err;
-    ///   if (!proc.start(&err)) {
-    ///       return err;
+    ///   if (!proc.start()) {
+    ///       return proc.lastError();
     ///   }
     ///   auto [out, _] = proc.communicate();
     ///   int code = proc.returnCode().value_or(-1);
@@ -353,12 +351,16 @@ namespace stdc {
 
         /// Starts the process.
         ///
-        /// \param errMsg filled in with a readable description when this fails, if not null
         /// \retval true the child is running, and any \c Pipe stream is open
-        /// \retval false nothing was started, with the reason in errorCode()
+        /// \retval false nothing was started, with the reason in lastError()
+        /// \note Read lastError() rather than errorCode() here. This is the one operation that
+        ///       fails over the request itself as often as over a system call -- an argument
+        ///       with a NUL in it, an environment variable with no name, \c Pipe on a detached
+        ///       child -- and none of those have an error code to be reported as. Where a system
+        ///       call did fail, lastError() also names which one.
         /// \note One Popen runs one child. Calling this again after a child has been started is
         ///       not supported. Use another Popen.
-        bool start(std::string *errMsg = nullptr);
+        bool start();
 
         /// The error from the last operation, cleared at the start of each one.
         std::error_code errorCode() const;

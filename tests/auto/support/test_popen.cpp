@@ -190,9 +190,8 @@ namespace {
 BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     {
         Popen p;
-        std::string err;
         p.args(shell_args(ExitZero));
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_CHECK(p.pid() > 0);
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_REQUIRE(p.returnCode());
@@ -202,9 +201,8 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     // a non-zero exit status comes back as-is
     {
         Popen p;
-        std::string err;
         p.args(shell_args(ExitThree));
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_REQUIRE(p.returnCode());
         BOOST_CHECK_EQUAL(*p.returnCode(), 3);
@@ -213,10 +211,9 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     // starting something that does not exist fails, with a message
     {
         Popen p;
-        std::string err;
         p.args({"no_such_program_9f3a"});
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 }
 
@@ -225,14 +222,12 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
 BOOST_AUTO_TEST_CASE(test_start_retry) {
     {
         Popen p;
-        std::string err;
         p.args(shell_args(ExitZero)).standardInput(Popen::StandardOutput);
-        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!p.start());
         BOOST_CHECK(p.errorCode());
 
-        err.clear();
         p.standardInput(Popen::DeviceNull);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returnCode(), 0);
     }
@@ -241,14 +236,12 @@ BOOST_AUTO_TEST_CASE(test_start_retry) {
     // child have already been created.
     {
         Popen p;
-        std::string err;
         p.args({"no_such_executable_9f3a"}).standardOutput(Popen::Pipe);
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
 
-        err.clear();
         p.args(shell_args(ExitZero));
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         std::ignore = p.communicate({}, Timeout);
         BOOST_REQUIRE(p.returnCode());
         BOOST_CHECK_EQUAL(*p.returnCode(), 0);
@@ -259,12 +252,11 @@ BOOST_AUTO_TEST_CASE(test_start_retry) {
 BOOST_AUTO_TEST_CASE(test_shell) {
     {
         Popen p;
-        std::string err;
         p.args({ChildPath, "argv", "two words", "quote\"here", "single'here", "a&b", "a|b",
                 "a<b", "a>b", "a(b)", "a^b", "$HOME", "%PATH%", "!PATH!", ""})
             .shell(true)
             .standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(out,
                           "two words\nquote\"here\nsingle'here\na&b\na|b\na<b\na>b\na(b)\na^b\n"
@@ -274,7 +266,6 @@ BOOST_AUTO_TEST_CASE(test_shell) {
     // Choosing the shell explicitly keeps the same command construction.
     {
         Popen p;
-        std::string err;
         std::filesystem::path shell_executable = ShellExe;
 #ifdef _WIN32
         const char *comspec = std::getenv("ComSpec");
@@ -285,7 +276,7 @@ BOOST_AUTO_TEST_CASE(test_shell) {
             .shell(true)
             .executable(std::move(shell_executable))
             .standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(out, "custom shell\n");
     }
@@ -293,11 +284,10 @@ BOOST_AUTO_TEST_CASE(test_shell) {
     // Empty args still cannot name anything to run.
     {
         Popen p;
-        std::string err;
         p.args({}).shell(true);
-        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!p.start());
         BOOST_CHECK(p.errorCode() == std::errc::invalid_argument);
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.lastError().empty());
         BOOST_CHECK_EQUAL(p.pid(), -1);
         BOOST_CHECK(!p.returnCode());
     }
@@ -309,10 +299,9 @@ BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused
     const std::string embedded("a\0b", 3);
 
     const auto &refused = [](Popen &p) {
-        std::string err;
-        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!p.start());
         BOOST_CHECK(p.errorCode() == std::errc::invalid_argument);
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.lastError().empty());
         // Nothing was created, so there is nothing to wait for and nothing to reap.
         BOOST_CHECK(!p.returnCode().has_value());
     };
@@ -346,10 +335,9 @@ BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused
     // Corrected, the same object starts, so the refusal changed nothing.
     Popen p;
     p.args({ChildPath, "argv", embedded}).standardOutput(Popen::Pipe);
-    std::string err;
-    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(!p.start());
     p.args({ChildPath, "argv", "ab"});
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, ignored] = p.communicate({}, Timeout);
     BOOST_CHECK(out.find("ab") != std::string::npos);
 }
@@ -399,8 +387,7 @@ BOOST_AUTO_TEST_CASE(test_nothing_started_means_no_such_process) {
     p.args({ChildPath, "exit", "3"});
     BOOST_CHECK(!p.poll());
     BOOST_CHECK(!p.kill());
-    std::string err;
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returnCode(), 3);
 }
@@ -438,13 +425,12 @@ BOOST_AUTO_TEST_CASE(test_lastError_answers_for_every_operation) {
 // A bare name is looked up along PATH, the same way a shell would find it.
 BOOST_AUTO_TEST_CASE(test_path_lookup) {
     Popen p;
-    std::string err;
 #ifdef _WIN32
     p.args({"cmd", "/c", "exit 0"});
 #else
     p.args({"echo", "found"}).standardOutput(Popen::Pipe);
 #endif
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
 }
@@ -455,9 +441,8 @@ BOOST_AUTO_TEST_CASE(test_path_lookup) {
 // does not, because it has not been let run.
 BOOST_AUTO_TEST_CASE(test_creation_flags_reach_create_process) {
     Popen p;
-    std::string err;
     p.args(child_args({"exit", "0"})).creationFlags(CREATE_SUSPENDED);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_CHECK(p.pid() > 0);
 
     // Started and suspended, so there is nothing to report and nothing to wait for.
@@ -498,9 +483,8 @@ BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
     // Without it the two are the same, since args[0] does both jobs.
     {
         Popen p;
-        std::string err;
         p.args(child_args({"arg0"})).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, _] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), ChildPath);
     }
@@ -508,11 +492,10 @@ BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
     // With it they part: the loaded file is the helper, and what it reads back is the name.
     {
         Popen p;
-        std::string err;
         p.executable(ChildPath)
             .args({"a-name-of-its-own", "arg0"})
             .standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, _] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "a-name-of-its-own");
         BOOST_REQUIRE(p.wait(Timeout));
@@ -524,9 +507,8 @@ BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
 // before anyone could read it.
 BOOST_AUTO_TEST_CASE(test_output_survives_wait) {
     Popen p;
-    std::string err;
     p.args(shell_args(EchoHello)).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
 
     auto &out = p.standardOutput();
@@ -544,9 +526,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // stdout only
     {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoHello)).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "hello");
         BOOST_CHECK(errout.empty());
@@ -557,9 +538,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // stdout and stderr kept apart
     {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoOutErr)).standardOutput(Popen::Pipe).standardError(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "out");
         BOOST_CHECK_EQUAL(first_line(errout), "err");
@@ -568,11 +548,10 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // stderr folded into stdout
     {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoErr))
             .standardOutput(Popen::Pipe)
             .standardError(Popen::StandardOutput);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "err");
         BOOST_CHECK(errout.empty());
@@ -581,9 +560,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // input is written and the pipe closed, so a filter can finish
     {
         Popen p;
-        std::string err;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate("abc\nxyz\ndef\n", Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "xyz");
         BOOST_REQUIRE(p.returnCode());
@@ -593,9 +571,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // more output than a pipe buffer holds, which is the case a single-threaded reader deadlocks
     {
         Popen p;
-        std::string err;
         p.args(shell_args(BigOutput)).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_GT(out.size(), 100000u);
         BOOST_REQUIRE(p.returnCode());
@@ -605,9 +582,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // a child that outlives the timeout is killed rather than left behind
     {
         Popen p;
-        std::string err;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         // no input, so the filter would wait forever
         auto [out, errout] = p.communicate("no match here\n", 500);
         BOOST_REQUIRE(p.returnCode());
@@ -617,9 +593,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     // would fill the pipe and hang before reaching wait().
     {
         Popen p;
-        std::string err;
         p.args(SleepArgs).standardInput(Popen::Pipe).standardOutput(Popen::DeviceNull);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         std::string input(1 << 20, 'x');
         auto started = std::chrono::steady_clock::now();
         std::ignore = p.communicate(input, 300);
@@ -634,9 +609,8 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
 // action would take the whole test runner with it.
 BOOST_AUTO_TEST_CASE(test_write_to_dead_child) {
     Popen p;
-    std::string err;
     p.args(shell_args(ExitZero)).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
 
     std::string big(1 << 20, 'x');
@@ -648,9 +622,8 @@ BOOST_AUTO_TEST_CASE(test_write_to_dead_child) {
 // Without a way to close this side of the pipe, a child reading to end of input never returns.
 BOOST_AUTO_TEST_CASE(test_close_stdin_ends_input) {
     Popen p;
-    std::string err;
     p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     auto &in = p.standardInput();
     BOOST_REQUIRE(in.isOpen());
@@ -672,9 +645,8 @@ BOOST_AUTO_TEST_CASE(test_close_stdin_ends_input) {
 // whatever the last failed system call happened to leave behind.
 BOOST_AUTO_TEST_CASE(test_poll) {
     Popen p;
-    std::string err;
     p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     BOOST_CHECK(!p.poll());
     BOOST_CHECK(!p.returnCode());
@@ -696,14 +668,13 @@ BOOST_AUTO_TEST_CASE(test_poll) {
 
 BOOST_AUTO_TEST_CASE(test_cwd) {
     Popen p;
-    std::string err;
 #ifdef _WIN32
     const char *dir = "C:\\Windows";
 #else
     const char *dir = "/usr";
 #endif
     p.args(shell_args(PrintCwd)).cwd(dir).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(first_line(out), dir);
 }
@@ -711,10 +682,9 @@ BOOST_AUTO_TEST_CASE(test_cwd) {
 // A working directory that does not exist fails at start, and says which one.
 BOOST_AUTO_TEST_CASE(test_bad_cwd) {
     Popen p;
-    std::string err;
     p.args(shell_args(ExitZero)).cwd("no_such_dir_9f3a");
-    BOOST_CHECK(!p.start(&err));
-    BOOST_CHECK(!err.empty());
+    BOOST_CHECK(!p.start());
+    BOOST_CHECK(!p.lastError().empty());
 }
 
 #ifdef _WIN32
@@ -730,13 +700,12 @@ BOOST_AUTO_TEST_CASE(test_unicode_environment) {
     }
 
     Popen p;
-    std::string err;
     p.args({
                system::application_path().string(),
                "--run_test=test_popen/test_unicode_environment", "--log_level=nothing"
     })
         .env({{"STDC_POPEN_UNICODE_CHILD", "1"}, {"\u53d8\u91cf", "\u503c\u6d4b\u8bd5"}});
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
 }
@@ -748,25 +717,23 @@ BOOST_AUTO_TEST_CASE(test_unicode_environment) {
 // The child's environment is replaced, not merged.
 BOOST_AUTO_TEST_CASE(test_env) {
     Popen p;
-    std::string err;
     p.args({
                "/bin/sh", "-c", "echo $FOO"
     })
         .env({{"FOO", "bar"}, {"PATH", "/bin:/usr/bin"}})
         .standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(first_line(out), "bar");
 }
 
 BOOST_AUTO_TEST_CASE(test_replaced_env_does_not_use_parent_path) {
     Popen p;
-    std::string err;
     p.args({
                "sh", "-c", "exit 0"
     })
         .env({{"FOO", "bar"}});
-    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(!p.start());
     BOOST_CHECK(p.errorCode() == std::make_error_code(std::errc::no_such_file_or_directory));
 }
 
@@ -775,11 +742,10 @@ BOOST_AUTO_TEST_CASE(test_user_name_is_owned) {
     BOOST_REQUIRE(pw != nullptr);
 
     Popen p;
-    std::string err;
     std::string name = pw->pw_name;
     p.args(shell_args(ExitZero)).user(name.c_str());
     name.assign(name.size(), 'x');
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
 }
@@ -795,13 +761,12 @@ BOOST_AUTO_TEST_CASE(test_a_failed_shell_start_leaves_the_arguments_alone) {
     Popen p;
     p.args(wanted).shell(true).cwd("no_such_directory_9f3a").standardOutput(Popen::Pipe);
 
-    std::string err;
-    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(!p.start());
     // Item by item, since the defect was an insert at the front rather than a change of one.
     BOOST_CHECK(p.args() == wanted);
 
     p.cwd({});
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, unused] = p.communicate({}, Timeout);
     BOOST_CHECK(p.args() == wanted);
     BOOST_CHECK_EQUAL(first_line(out), "retry-ok");
@@ -809,7 +774,7 @@ BOOST_AUTO_TEST_CASE(test_a_failed_shell_start_leaves_the_arguments_alone) {
     // And what the retry ran is what a new object with the same configuration runs.
     Popen fresh;
     fresh.args(wanted).shell(true).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(fresh.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(fresh.start(), fresh.lastError());
     auto [fresh_out, ignored] = fresh.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(first_line(fresh_out), first_line(out));
 }
@@ -821,12 +786,11 @@ BOOST_AUTO_TEST_CASE(test_a_shell_start_that_fails_at_exec_leaves_them_alone_too
 
     Popen p;
     p.args(wanted).shell(true).executable("no_such_shell_9f3a").standardOutput(Popen::Pipe);
-    std::string err;
-    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(!p.start());
     BOOST_CHECK(p.args() == wanted);
 
     p.executable({});
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, ignored] = p.communicate({}, Timeout);
     BOOST_CHECK(p.args() == wanted);
     BOOST_CHECK_EQUAL(first_line(out), "retry-ok");
@@ -841,9 +805,8 @@ BOOST_AUTO_TEST_CASE(test_a_shell_start_that_fails_at_exec_leaves_them_alone_too
 BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
     {
         Popen p;
-        std::string err;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 #ifdef _WIN32
         // Only the two console control events, and anything else is refused rather than
         // approximated.
@@ -861,9 +824,8 @@ BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
     // since the alternative is a race every caller would have to write around.
     {
         Popen p;
-        std::string err;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_CHECK(p.kill());
         BOOST_REQUIRE(p.wait(Timeout));
 
@@ -880,18 +842,16 @@ BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
 BOOST_AUTO_TEST_CASE(test_signal_returncode) {
     {
         Popen p;
-        std::string err;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_CHECK(p.kill());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returnCode(), -SIGKILL);
     }
     {
         Popen p;
-        std::string err;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_CHECK(p.terminate());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returnCode(), -SIGTERM);
@@ -924,12 +884,11 @@ BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
     // The first run warms up whatever the library allocates once.
     for (int i = 0; i < 2; i++) {
         Popen p;
-        std::string err;
         p.args(FilterX)
             .standardInput(Popen::Pipe)
             .standardOutput(Popen::Pipe)
             .standardError(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         std::ignore = p.communicate("xyz\n", Timeout);
     }
 
@@ -937,12 +896,11 @@ BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
     BOOST_REQUIRE(before > 0);
     for (int i = 0; i < 20; i++) {
         Popen p;
-        std::string err;
         p.args(FilterX)
             .standardInput(Popen::Pipe)
             .standardOutput(Popen::Pipe)
             .standardError(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         std::ignore = p.communicate("xyz\n", Timeout);
     }
     BOOST_CHECK_EQUAL(open_fd_count(), before);
@@ -962,9 +920,8 @@ BOOST_AUTO_TEST_CASE(test_close_fds) {
         std::string script = "ls /proc/self/fd | wc -l";
 #endif
         Popen p;
-        std::string err;
         p.args({"/bin/sh", "-c", script}).standardOutput(Popen::Pipe).closeFds(closeFds);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         auto line = first_line(out);
         // A blank answer is the directory not being there, which would make the check below
@@ -999,9 +956,8 @@ BOOST_AUTO_TEST_CASE(test_close_fds) {
 // preExec runs in the child, after the pipes are in place and before exec.
 BOOST_AUTO_TEST_CASE(test_preexec_fn) {
     Popen p;
-    std::string err;
     p.args({"pwd"}).standardOutput(Popen::Pipe).preExec([] { std::ignore = chdir("/usr"); });
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(first_line(out), "/usr");
 }
@@ -1023,9 +979,8 @@ BOOST_AUTO_TEST_CASE(test_pass_fds) {
         std::snprintf(script, sizeof(script), "cat <&%d", fds[0]);
 
         Popen p;
-        std::string err;
         p.args({"/bin/sh", "-c", script}).passFds({fds[0]}).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         close(fds[0]);
         BOOST_CHECK_EQUAL(first_line(out), "kept");
@@ -1038,9 +993,8 @@ BOOST_AUTO_TEST_CASE(test_pass_fds) {
         std::snprintf(script, sizeof(script), "cat <&%d", fds[0]);
 
         Popen p;
-        std::string err;
         p.args({"/bin/sh", "-c", script}).standardOutput(Popen::Pipe).standardError(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         close(fds[0]);
         BOOST_CHECK(out.empty());
@@ -1055,9 +1009,8 @@ BOOST_AUTO_TEST_CASE(test_pass_fds) {
         std::snprintf(script, sizeof(script), "cat <&%d", fds[0]);
 
         Popen p;
-        std::string err;
         p.args({"/bin/sh", "-c", script}).closeFds(false).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         close(fds[0]);
         BOOST_CHECK_EQUAL(first_line(out), "kept");
@@ -1066,9 +1019,8 @@ BOOST_AUTO_TEST_CASE(test_pass_fds) {
 
 BOOST_AUTO_TEST_CASE(test_umask) {
     Popen p;
-    std::string err;
     p.args({"/bin/sh", "-c", "umask"}).umask(0077).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(first_line(out), "0077");
 }
@@ -1077,18 +1029,16 @@ BOOST_AUTO_TEST_CASE(test_umask) {
 BOOST_AUTO_TEST_CASE(test_session_and_process_group) {
     {
         Popen p;
-        std::string err;
         p.args({"cat"}).standardInput(Popen::Pipe).startNewSession(true);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_CHECK_EQUAL(getsid(p.pid()), p.pid());
         p.standardInput().close();
         BOOST_REQUIRE(p.wait(Timeout));
     }
     {
         Popen p;
-        std::string err;
         p.args({"cat"}).standardInput(Popen::Pipe).processGroup(0);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_CHECK_EQUAL(getpgid(p.pid()), p.pid());
         p.standardInput().close();
         BOOST_REQUIRE(p.wait(Timeout));
@@ -1098,9 +1048,8 @@ BOOST_AUTO_TEST_CASE(test_session_and_process_group) {
 #  ifdef F_GETPIPE_SZ
 BOOST_AUTO_TEST_CASE(test_pipesize) {
     Popen p;
-    std::string err;
     p.args({"cat"}).standardInput(Popen::Pipe).pipeSize(1 << 17);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     // The kernel may round up, so this is a floor rather than the exact figure.
     BOOST_CHECK_GE(fcntl(fileno(p.standardInput().file()), F_GETPIPE_SZ), 1 << 17);
     p.standardInput().close();
@@ -1124,9 +1073,8 @@ BOOST_AUTO_TEST_CASE(test_restore_signals) {
 
     {
         Popen p;
-        std::string err;
         p.args({"/bin/sh", "-c", script}).restoreSignals(true).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK(out.empty());
         BOOST_REQUIRE(p.returnCode());
@@ -1135,9 +1083,8 @@ BOOST_AUTO_TEST_CASE(test_restore_signals) {
 
     {
         Popen p;
-        std::string err;
         p.args({"/bin/sh", "-c", script}).restoreSignals(false).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "survived");
         BOOST_REQUIRE(p.returnCode());
@@ -1163,10 +1110,9 @@ BOOST_AUTO_TEST_CASE(test_sigpipe_is_ignored_for_the_length_of_a_communicate) {
     auto before = disposition();
 
     Popen p;
-    std::string err;
     // Enough output that the loop is running for long enough to be caught at it.
     p.args(child_args({"fill", "8000000", "out"})).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     std::atomic<bool> running{true};
     std::atomic<int> seen_ignored{0};
@@ -1201,10 +1147,9 @@ BOOST_AUTO_TEST_CASE(test_sigpipe_is_ignored_for_the_length_of_a_communicate) {
 // A name that no passwd entry matches fails before anything is forked.
 BOOST_AUTO_TEST_CASE(test_unknown_user_name) {
     Popen p;
-    std::string err;
     p.args(shell_args(ExitZero)).user("no_such_user_9f3a");
-    BOOST_CHECK(!p.start(&err));
-    BOOST_CHECK(!err.empty());
+    BOOST_CHECK(!p.start());
+    BOOST_CHECK(!p.lastError().empty());
     BOOST_CHECK_EQUAL(p.pid(), -1);
 }
 
@@ -1215,11 +1160,10 @@ BOOST_AUTO_TEST_CASE(test_user_and_groups) {
     const bool privileged = geteuid() == 0;
 
     const auto &check = [&](Popen &p, const char *expected) {
-        std::string err;
-        bool started = p.start(&err);
+        bool started = p.start();
         BOOST_REQUIRE_EQUAL(started, privileged);
         if (!started) {
-            BOOST_CHECK(!err.empty());
+            BOOST_CHECK(!p.lastError().empty());
 
             // A start that failed reports no process, since there is none to report.
             BOOST_CHECK_EQUAL(p.pid(), -1);
@@ -1305,9 +1249,8 @@ BOOST_AUTO_TEST_CASE(test_startupinfo_names_the_handles_the_child_starts_with) {
     info.lpAttributeList["handle_list"] = handles;
 
     Popen p;
-    std::string err;
     p.args(child_args({"argv", "through-startupInfo"})).startupInfo(info);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
 
@@ -1343,9 +1286,8 @@ BOOST_AUTO_TEST_CASE(test_the_longest_accepted_command_line_really_starts) {
     args.back() = std::string(199, 'x') + "z";
 
     Popen p;
-    std::string err;
     p.args(args).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), "the longest accepted line did not start: " + err);
+    BOOST_REQUIRE_MESSAGE(p.start(), "the longest accepted line did not start: " + p.lastError());
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(p.returnCode().value_or(-1), 0);
     BOOST_CHECK_MESSAGE(out.find(std::string(199, 'x') + "z\n") != std::string::npos,
@@ -1357,9 +1299,8 @@ BOOST_AUTO_TEST_CASE(test_the_longest_accepted_command_line_really_starts) {
 // waiting for. \sa llvm's TestExecuteNoWaitTimeoutPolling
 BOOST_AUTO_TEST_CASE(test_polling_neither_kills_the_child_nor_misses_its_exit) {
     Popen p;
-    std::string err;
     p.args(child_args({"cat"})).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     // It is reading its input and has been given none, so it is still there however often it
     // is asked, and asking is what could have killed it.
@@ -1407,9 +1348,8 @@ BOOST_AUTO_TEST_CASE(test_argument_quoting) {
 
     for (const auto &arg : tricky) {
         Popen p;
-        std::string err;
         p.args(child_args({"argv", arg, "after"})).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), "start failed for [" + arg + "]: " + err);
+        BOOST_REQUIRE_MESSAGE(p.start(), "start failed for [" + arg + "]: " + p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_REQUIRE(p.returnCode());
 
@@ -1427,9 +1367,8 @@ BOOST_AUTO_TEST_CASE(test_argument_quoting) {
     // An empty argument still occupies a place in the vector.
     {
         Popen p;
-        std::string err;
         p.args(child_args({"argv", "", "after"})).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(out, "\nafter\n");
     }
@@ -1439,9 +1378,8 @@ BOOST_AUTO_TEST_CASE(test_devnull_and_inherit) {
     // DeviceNull swallows the output
     {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoHello)).standardOutput(Popen::DeviceNull);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK(!p.standardOutput().isOpen());
         BOOST_REQUIRE(p.returnCode());
@@ -1451,9 +1389,8 @@ BOOST_AUTO_TEST_CASE(test_devnull_and_inherit) {
     // no redirection at all: the child inherits ours
     {
         Popen p;
-        std::string err;
         p.args(shell_args(ExitZero));
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returnCode(), 0);
     }
@@ -1469,9 +1406,8 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     // reading with getline
     {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoThree)).standardOutput(Popen::Pipe).text(true);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
         std::vector<std::string> lines;
         std::string line;
@@ -1487,9 +1423,8 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     // writing with operator<<, then closing to release the child
     {
         Popen p;
-        std::string err;
         p.args({"sort"}).standardInput(Popen::Pipe).standardOutput(Popen::Pipe).text(true);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
         p.standardInput() << "banana\ncherry\napple\n" << std::flush;
         p.standardInput().close();
@@ -1512,9 +1447,8 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     // close() is idempotent, and a stream that was never opened is simply not open
     {
         Popen p;
-        std::string err;
         p.args(shell_args(ExitZero)).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
         BOOST_CHECK(p.standardOutput().isOpen());
         BOOST_CHECK(!p.standardInput().isOpen());
@@ -1532,9 +1466,8 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     // file() hands the same pipe to the C interfaces that only take a FILE *
     {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoHello)).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
         FILE *raw = p.standardOutput().file();
         BOOST_REQUIRE(raw != nullptr);
@@ -1553,11 +1486,10 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
 // what makes reading one after the other safe here. A larger one is what communicate() is for.
 BOOST_AUTO_TEST_CASE(test_the_error_stream_is_read_like_any_other) {
     Popen p;
-    std::string err;
     p.args(child_args({"fill", "128", "both"}))
         .standardOutput(Popen::Pipe)
         .standardError(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     BOOST_CHECK(p.standardError().isOpen());
     BOOST_CHECK(p.standardError().file() != nullptr);
@@ -1578,9 +1510,8 @@ BOOST_AUTO_TEST_CASE(test_the_error_stream_is_read_like_any_other) {
 // stream has no put area, so sputc() goes to overflow() where sputn() goes to xsputn().
 BOOST_AUTO_TEST_CASE(test_writing_one_character_at_a_time) {
     Popen p;
-    std::string err;
     p.args(child_args({"cat"})).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     for (char c : std::string("one\n")) {
         p.standardInput().put(c);
@@ -1602,9 +1533,8 @@ BOOST_AUTO_TEST_CASE(test_writing_one_character_at_a_time) {
 // one that was read, since fflush is for output and for input only where the stream can seek.
 BOOST_AUTO_TEST_CASE(test_closing_delivers_what_was_written_without_a_flush) {
     Popen p;
-    std::string err;
     p.args(child_args({"cat"})).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     p.standardInput() << "no flush here\n";
     p.standardInput().close();
@@ -1621,9 +1551,8 @@ BOOST_AUTO_TEST_CASE(test_closing_delivers_what_was_written_without_a_flush) {
 // And closing one that was only read is closing, not flushing.
 BOOST_AUTO_TEST_CASE(test_closing_a_stream_that_was_read_takes_nothing_with_it) {
     Popen p;
-    std::string err;
     p.args(shell_args(EchoThree)).standardOutput(Popen::Pipe).text(true);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
 
     std::string line;
     BOOST_REQUIRE(std::getline(p.standardOutput(), line));
@@ -1642,9 +1571,8 @@ BOOST_AUTO_TEST_CASE(test_closing_a_stream_that_was_read_takes_nothing_with_it) 
 
 BOOST_AUTO_TEST_CASE(test_kill) {
     Popen p;
-    std::string err;
     p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
     BOOST_CHECK(!p.poll());
 
     BOOST_CHECK(p.kill());
@@ -1664,9 +1592,8 @@ BOOST_AUTO_TEST_CASE(test_detached) {
         int pid = -1;
         {
             Popen p;
-            std::string err;
             p.args(shell_args(SleepLong));
-            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
             pid = p.pid();
             BOOST_REQUIRE(pid > 0);
             BOOST_CHECK(process_alive(pid));
@@ -1680,9 +1607,8 @@ BOOST_AUTO_TEST_CASE(test_detached) {
         int pid = -1;
         {
             Popen p;
-            std::string err;
             p.args(shell_args(SleepLong)).detached(true);
-            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
             BOOST_CHECK(p.detached());
             pid = p.pid();
             BOOST_REQUIRE(pid > 0);
@@ -1696,9 +1622,8 @@ BOOST_AUTO_TEST_CASE(test_detached) {
         int pid = -1;
         {
             Popen p;
-            std::string err;
             p.args(shell_args(SleepLong));
-            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
             pid = p.pid();
             p.detached(true);
             BOOST_CHECK(!p.detached());
@@ -1709,9 +1634,8 @@ BOOST_AUTO_TEST_CASE(test_detached) {
     // The final detached process is deliberately no longer controllable by Popen.
     {
         Popen p;
-        std::string err;
         p.args(shell_args(SleepLong)).detached(true);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         int pid = p.pid();
         BOOST_REQUIRE(pid > 0);
         BOOST_CHECK(!p.wait(0));
@@ -1732,9 +1656,8 @@ BOOST_AUTO_TEST_CASE(test_detached) {
     // Pipes need an owner to drain/close them, so detached mode rejects them.
     {
         Popen p;
-        std::string err;
         p.args(shell_args(ExitZero)).standardOutput(Popen::Pipe).detached(true);
-        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!p.start());
         BOOST_CHECK(p.errorCode() == std::make_error_code(std::errc::invalid_argument));
     }
 }
@@ -1758,9 +1681,8 @@ BOOST_AUTO_TEST_CASE(test_threads) {
         for (unsigned i = 0; i < count; i++) {
             threads.emplace_back([&succeeded, &started, i] {
                 Popen p;
-                std::string err;
                 p.args(child_args({"cat"})).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-                if (!p.start(&err)) {
+                if (!p.start()) {
                     return;
                 }
                 started++;
@@ -1785,11 +1707,10 @@ BOOST_AUTO_TEST_CASE(test_threads) {
         std::thread t([&completed] {
             for (int i = 0; i < 10; i++) {
                 Popen p;
-                std::string err;
                 p.args(child_args({"exit", "0"}))
                     .standardInput(Popen::Pipe)
                     .standardOutput(Popen::Pipe);
-                if (!p.start(&err) || !p.wait(Timeout)) {
+                if (!p.start() || !p.wait(Timeout)) {
                     return;
                 }
                 std::ignore = p.communicate(std::string(1 << 20, 'x'), Timeout);
@@ -1806,9 +1727,8 @@ BOOST_AUTO_TEST_CASE(test_threads) {
         std::atomic<int> done{0};
         const auto &run = [&done](int code) {
             Popen p;
-            std::string err;
             p.args(child_args({"exit", std::to_string(code)}));
-            if (!p.start(&err) || !p.wait(Timeout)) {
+            if (!p.start() || !p.wait(Timeout)) {
                 return;
             }
             if (p.returnCode() && *p.returnCode() == code) {
@@ -1834,11 +1754,10 @@ BOOST_AUTO_TEST_CASE(test_both_pipes_fill) {
 
     {
         Popen p;
-        std::string err;
         p.args(child_args({"fill", std::to_string(bytes), "both"}))
             .standardOutput(Popen::Pipe)
             .standardError(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(out.size(), size_t(bytes));
         BOOST_CHECK_EQUAL(errout.size(), size_t(bytes));
@@ -1849,12 +1768,11 @@ BOOST_AUTO_TEST_CASE(test_both_pipes_fill) {
     // The same, with input to write as well, so all three directions are moving at once.
     {
         Popen p;
-        std::string err;
         p.args(child_args({"fill", std::to_string(bytes), "both"}))
             .standardInput(Popen::Pipe)
             .standardOutput(Popen::Pipe)
             .standardError(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate(std::string(256 * 1024, 'i'), Timeout);
         BOOST_CHECK_EQUAL(out.size(), size_t(bytes));
         BOOST_CHECK_EQUAL(errout.size(), size_t(bytes));
@@ -1864,11 +1782,10 @@ BOOST_AUTO_TEST_CASE(test_both_pipes_fill) {
     // Folded together, the two counts land in one stream.
     {
         Popen p;
-        std::string err;
         p.args(child_args({"fill", std::to_string(bytes), "both"}))
             .standardOutput(Popen::Pipe)
             .standardError(Popen::StandardOutput);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(out.size(), size_t(bytes) * 2);
         BOOST_CHECK(errout.empty());
@@ -1880,9 +1797,8 @@ BOOST_AUTO_TEST_CASE(test_move) {
     // Move construction takes the running child, its pipes and its pid across.
     {
         Popen a;
-        std::string err;
         a.args(child_args({"cat"})).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(a.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(a.start(), a.lastError());
         int pid = a.pid();
         BOOST_REQUIRE(pid > 0);
         auto *stream_before = &a.standardOutput();
@@ -1905,15 +1821,14 @@ BOOST_AUTO_TEST_CASE(test_move) {
     // that object lasts and giving the caller no way to say when it died.
     {
         Popen victim;
-        std::string err;
         victim.args(shell_args(SleepLong));
-        BOOST_REQUIRE_MESSAGE(victim.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(victim.start(), victim.lastError());
         int victim_pid = victim.pid();
         BOOST_REQUIRE(process_alive(victim_pid));
 
         Popen fresh;
         fresh.args(child_args({"exit", "5"}));
-        BOOST_REQUIRE_MESSAGE(fresh.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(fresh.start(), fresh.lastError());
         int fresh_pid = fresh.pid();
 
         victim = std::move(fresh);
@@ -1932,8 +1847,7 @@ BOOST_AUTO_TEST_CASE(test_move) {
             return p;
         };
         Popen p = make();
-        std::string err;
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate("returned\n", Timeout);
         BOOST_CHECK_EQUAL(out, "returned\n");
     }
@@ -1943,9 +1857,8 @@ BOOST_AUTO_TEST_CASE(test_move) {
         std::vector<Popen> procs;
         for (int i = 0; i < 4; i++) {
             Popen p;
-            std::string err;
             p.args(child_args({"exit", std::to_string(i)}));
-            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
             procs.push_back(std::move(p));
         }
         for (int i = 0; i < 4; i++) {
@@ -1961,66 +1874,59 @@ BOOST_AUTO_TEST_CASE(test_start_failures) {
     // nothing to run
     {
         Popen p;
-        std::string err;
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 
     // an empty argument vector, which is not the same as never having set one
     {
         Popen p;
-        std::string err;
         p.args({});
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 
     // an empty program name
     {
         Popen p;
-        std::string err;
         p.args({"", "arg"});
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 
     // a name that is nothing but blanks
     {
         Popen p;
-        std::string err;
         p.args({"   "});
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 
     // a directory, which exists and is not a program
     {
         Popen p;
-        std::string err;
         p.args({std::filesystem::temp_directory_path().string()});
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 
     // executable() naming something that is not there, whatever args[0] says
     {
         Popen p;
-        std::string err;
         p.executable("no_such_executable_4b71").args({"cat"});
-        BOOST_CHECK(!p.start(&err));
-        BOOST_CHECK(!err.empty());
+        BOOST_CHECK(!p.start());
+        BOOST_CHECK(!p.lastError().empty());
     }
 
     // A failure leaves nothing behind: no exit status, and the next start still works.
     {
         Popen p;
-        std::string err;
         p.args({"no_such_program_4b71"});
-        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!p.start());
         BOOST_CHECK(!p.returnCode());
 
         p.args(child_args({"exit", "0"}));
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returnCode(), 0);
     }
@@ -2040,9 +1946,8 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
         BOOST_REQUIRE(f != nullptr);
 
         Popen p;
-        std::string err;
         p.args(child_args({"argv", "written", "twice"})).standardOutput(f);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returnCode(), 0);
 
@@ -2067,9 +1972,8 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
         BOOST_REQUIRE(fd >= 0);
 
         Popen p;
-        std::string err;
         p.args(child_args({"argv", "by-descriptor"})).standardOutput(fd);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         std::fclose(f);
         BOOST_CHECK_EQUAL(file.read(), "by-descriptor\n");
@@ -2085,9 +1989,8 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
         BOOST_REQUIRE(ferr != nullptr);
 
         Popen p;
-        std::string err;
         p.args(child_args({"fill", "1024", "both"})).standardOutput(fout).standardError(ferr);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         BOOST_REQUIRE(p.wait(Timeout));
         std::fclose(fout);
         std::fclose(ferr);
@@ -2106,9 +2009,8 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
         BOOST_REQUIRE(f != nullptr);
 
         Popen p;
-        std::string err;
         p.args(child_args({"cat"})).standardInput(f).standardOutput(Popen::Pipe);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         std::fclose(f);
         BOOST_CHECK_EQUAL(out, "from a file\n");
@@ -2123,7 +2025,6 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
 
         Popen writer;
         Popen reader;
-        std::string err;
         writer.args(child_args({"argv", "through", "a", "pipe"}))
             .standardOutput(fds[1])
             .passFds({fds[1]});
@@ -2132,8 +2033,8 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
             .standardOutput(Popen::Pipe)
             .passFds({fds[0]});
 
-        BOOST_REQUIRE_MESSAGE(writer.start(&err), err);
-        BOOST_REQUIRE_MESSAGE(reader.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(writer.start(), writer.lastError());
+        BOOST_REQUIRE_MESSAGE(reader.start(), reader.lastError());
 
         // Both ends belong to the children now. Holding either one open here would keep the
         // reader waiting for input that is never coming.
@@ -2152,9 +2053,8 @@ BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
 BOOST_AUTO_TEST_CASE(test_text_mode) {
     const auto &collect = [](bool text) {
         Popen p;
-        std::string err;
         p.args(shell_args(EchoThree)).standardOutput(Popen::Pipe).text(text);
-        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(p.start(), p.lastError());
         auto [out, errout] = p.communicate({}, Timeout);
         return out;
     };
