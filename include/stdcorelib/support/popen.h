@@ -367,6 +367,9 @@ namespace stdc {
 
     public:
         /// \name Waiting
+        ///
+        /// None of these work on a detached child, which this process no longer owns. They fail
+        /// with \c operation_not_supported rather than guess.
         /// @{
 
         /// Whether the child has exited, without waiting for it.
@@ -401,6 +404,14 @@ namespace stdc {
 
         /// Sends \a sig to the child. On Windows only \c WS_CTRL_C_EVENT and
         /// \c WS_CTRL_BREAK_EVENT are accepted.
+        ///
+        /// \note A detached child is refused even though pid() names it, and this one is worth
+        ///       the explanation. Signalling by number is safe only while the process is known
+        ///       to be running, since the system may have given that number to something else
+        ///       the moment the old owner exited. For a child of ours the number is held until
+        ///       it is waited for, and this checks first. A detached child cannot be waited
+        ///       for, so there is nothing to check against. Send the signal yourself through
+        ///       pid() where you have other grounds to believe it is still running.
         bool sendSignal(int sig);
 
         /// Requests the process to close, like \c QProcess::terminate. Posts \c WM_CLOSE to its
@@ -409,11 +420,13 @@ namespace stdc {
         /// \note This is a request. The process may ignore it, and a console program has no
         ///       message loop to see it in the first place.
         /// \sa kill(), to force it
+        /// \sa sendSignal(), for why a detached child is refused
         bool terminate();
 
         /// Ends the process outright, which it cannot refuse.
         ///
         /// \warning Anything the child was part way through writing is lost.
+        /// \sa sendSignal(), for why a detached child is refused
         bool kill();
 
         /// @}
@@ -438,8 +451,17 @@ namespace stdc {
         Stream &standardOutput() const;
         Stream &standardError() const;
 
+        /// The child's process id, or -1 before start() and after one that failed.
+        ///
+        /// \note For a detached child this is the process that runs the program, not the
+        ///       intermediate one that forked it, which is gone before start() returns.
+        /// \note The number stays behind after the child exits, and the system is free to give
+        ///       it to something else once the child has been waited for, so it names a process
+        ///       of ours only while returnCode() is empty.
         int pid() const;
 
+        /// What detached(bool) was set to, which is what start() acted on: changing it after
+        /// that does nothing.
         bool detached() const;
 
         /// The exit status, or nothing while the child is still running.

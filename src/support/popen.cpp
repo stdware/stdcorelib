@@ -410,7 +410,6 @@ namespace stdc {
         stdin_stream.close();
     }
 
-
 }
 
 namespace stdc {
