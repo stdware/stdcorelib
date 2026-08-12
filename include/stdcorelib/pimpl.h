@@ -78,6 +78,9 @@ namespace stdc::pimpl::detail {
 #define stdc_impl(T) auto &STDC_PIMPL_IMPL_LOCAL_VAR_NAME = *stdc_impl_get(T)
 #define stdc_decl(T) auto &STDC_PIMPL_DECL_LOCAL_VAR_NAME = *stdc_decl_get(T)
 
+/// \addtogroup utility
+/// @{
+
 /// Declares an \c impl reference to the current object's nested \c Impl object.
 ///
 /// The class stores its implementation in an \c _impl raw pointer, \c std::unique_ptr, or
@@ -137,5 +140,7 @@ namespace stdc::pimpl::detail {
 ///     };
 /// \endcode
 #define stdc_decl_t stdc_decl(::stdc::pimpl::detail::get_decl_trait<decltype(this)>::type)
+
+/// @}
 
 #endif // STDCORELIB_PIMPL_H

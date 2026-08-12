@@ -24,17 +24,7 @@
 /// \li Header-only where it can be, compiled where it has to be. Nothing outside the standard
 ///     library is required.
 ///
-/// \section main_components Components
+/// \section main_organization Organization
 ///
-/// \li \ref cli "Command line" for declaring what a program takes and reading back what it was
-///     given
-/// \li \ref process "Processes and libraries" for starting a child and loading a shared object
-/// \li \ref text "Text" for strings, formatting, the console and UTF conversion
-/// \li \ref containers "Containers and views"
-/// \li \ref types "Type identity and registries"
-/// \li \ref logging "Logging"
-/// \li \ref json "JSON and CBOR"
-/// \li \ref platform "Platform and system"
-/// \li \ref utility "Utilities"
-///
-/// Building it and linking against it are in the README.
+/// Components lists every part of the library, each with a description and an example, and each
+/// defined by the header that owns it. Building it and linking against it are in the README.

@@ -55,8 +55,8 @@ namespace stdc {
             return std::filesystem::canonical(path, ec);
         }
 
-        /// Resolves \c . and \c .. lexically, without reading the file system, so it works on a
-        /// path that does not exist.
+        /// Resolves <tt>\.</tt> and <tt>\.\.</tt> lexically, without reading the file system, so
+        /// it works on a path that does not exist.
         ///
         /// \warning A symlink followed by \c .. therefore lands somewhere canonical() would not,
         ///          since the lexical answer ignores where the link actually pointed.
