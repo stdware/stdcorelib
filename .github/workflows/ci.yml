@@ -185,9 +185,8 @@ jobs:
           cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_DOCS=ON
           cmake --build build --target stdcorelib_docs
 
-  # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
-  # undertaking, and what is worth knowing here is that the Windows sources compile and link
-  # against something other than the Microsoft toolchain.
+  # The Windows sources against something other than the Microsoft toolchain. This is where a
+  # header that MinGW spells differently shows up, which is how the strcasecmp macro was found.
   mingw:
     name: windows-mingw ${{ matrix.config }}
     runs-on: windows-latest
@@ -206,6 +205,7 @@ jobs:
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-boost
 
       - name: Build
         shell: msys2 {0}
@@ -214,5 +214,9 @@ jobs:
             shared) flags="-DSTDC_BUILD_SHARED=ON" ;;
             static) flags="-DSTDC_BUILD_STATIC=ON" ;;
           esac
-          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=OFF $flags
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=ON $flags
           cmake --build build
+
+      - name: Test
+        shell: msys2 {0}
+        run: ctest --test-dir build --output-on-failure --no-tests=error
