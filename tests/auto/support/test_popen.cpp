@@ -9,6 +9,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <map>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -16,6 +17,7 @@
 #include <vector>
 
 #include <stdcorelib/scope_guard.h>
+#include <stdcorelib/str.h>
 #include <stdcorelib/support/popen.h>
 #include <stdcorelib/system.h>
 
@@ -699,12 +701,27 @@ BOOST_AUTO_TEST_CASE(test_unicode_environment) {
         return;
     }
 
+    // A replaced environment is the point of the case, but the child is this binary again and
+    // has to be able to load before it can check anything. Where the runtime sits outside the
+    // application directory, which is every MinGW build, PATH is what finds it. Measured: a
+    // MinGW binary started with an empty environment fails at 0xC0000135 before main().
+    std::map<std::string, std::string> childEnv{
+        {"STDC_POPEN_UNICODE_CHILD", "1"},
+        {"\u53d8\u91cf", "\u503c\u6d4b\u8bd5"},
+    };
+    for (const auto &item : system::environment()) {
+        if (str::ascii_casecmp(item.first, "PATH") == 0) {
+            childEnv.insert(item);
+            break;
+        }
+    }
+
     Popen p;
     p.args({
                system::application_path().string(),
                "--run_test=test_popen/test_unicode_environment", "--log_level=nothing"
     })
-        .env({{"STDC_POPEN_UNICODE_CHILD", "1"}, {"\u53d8\u91cf", "\u503c\u6d4b\u8bd5"}});
+        .env(childEnv);
     BOOST_REQUIRE_MESSAGE(p.start(), p.errorMessage());
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
