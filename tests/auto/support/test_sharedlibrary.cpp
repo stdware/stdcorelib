@@ -24,7 +24,7 @@ namespace fs = std::filesystem;
 
 using namespace stdc;
 
-BOOST_AUTO_TEST_SUITE(test_library)
+BOOST_AUTO_TEST_SUITE(test_sharedlibrary)
 
 namespace {
 
