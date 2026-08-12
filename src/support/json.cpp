@@ -395,7 +395,7 @@ namespace {
             for (;;) {
                 skipSpace();
                 // The slot has to exist before the value can be parsed into it, so the count is
-                // guessed here rather than deduced from a comma later. Two is the guess; a
+                // guessed here rather than deduced from a comma later. Two is the guess. A
                 // one-element array pays one unused slot, not another allocation.
                 if (arr.empty()) {
                     arr.reserve(2);
@@ -583,7 +583,8 @@ namespace {
             }
 
             // ASCII was checked for controls above and is UTF-8 already. Only strings containing
-            // raw high bytes need the full validator; \u escapes were validated while decoded.
+            // raw high bytes need the full validator. A \u escape was validated as it was
+            // decoded.
             if (hasNonAscii && !stdc::utf::is_valid_utf8(res)) {
                 return fail("string is not valid UTF-8");
             }

@@ -86,8 +86,8 @@ namespace stdc {
     /// \note The shape of this class is Python's, the spelling is this library's. What
     ///       \c subprocess writes \c preexec_fn is preExec(), \c returncode is returnCode(),
     ///       \c stdin is standardInput(), \c DEVNULL is \c DeviceNull, and so on down the list.
-    ///       Reach for the Python documentation to learn what a setting does; reach for camel
-    ///       case to write it.
+    ///       Reach for the Python documentation to learn what a setting does. Write it in
+    ///       camel case.
     ///
     /// \warning Reading a pipe by hand rather than through communicate() works for one pipe,
     ///          not for two. A pipe blocks its writer once full, so a child filling stderr while
@@ -354,10 +354,10 @@ namespace stdc {
         /// \retval true the child is running, and any \c Pipe stream is open
         /// \retval false nothing was started, with the reason in lastError()
         /// \note Read lastError() rather than errorCode() here. This is the one operation that
-        ///       fails over the request itself as often as over a system call -- an argument
-        ///       with a NUL in it, an environment variable with no name, \c Pipe on a detached
-        ///       child -- and none of those have an error code to be reported as. Where a system
-        ///       call did fail, lastError() also names which one.
+        ///       fails over the request itself as often as over a system call. An argument with
+        ///       a NUL in it, an environment variable with no name, \c Pipe on a detached child:
+        ///       none of those have an error code to be reported as. Where a system call did
+        ///       fail, lastError() also names which one.
         /// \note One Popen runs one child. Calling this again after a child has been started is
         ///       not supported. Use another Popen.
         bool start();
