@@ -2,7 +2,9 @@
 
 #include <stdcorelib/adt/vlarray.h>
 
+#include <functional>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -57,6 +59,48 @@ namespace {
         ThrowingMove &operator=(const ThrowingMove &) = default;
         ThrowingMove &operator=(ThrowingMove &&) noexcept(false) {
             return *this;
+        }
+    };
+
+    // A throwing move and a working copy, which is the pair move_if_noexcept answers by copying,
+    // so a reallocation copies these and the copy is where the throw is arranged.
+    struct Fragile {
+        static constexpr unsigned Alive = 0xA11FE;
+
+        static inline int live = 0;
+        static inline int copies = 0;
+        static inline int throwAt = -1;
+        static inline int doubleDestroys = 0;
+
+        int v;
+        unsigned magic = 0;
+
+        explicit Fragile(int value = 0) : v(value), magic(Alive) {
+            ++live;
+        }
+        Fragile(const Fragile &other) : v(other.v) {
+            if (++copies == throwAt) {
+                throw std::runtime_error("fragile");
+            }
+            magic = Alive;
+            ++live;
+        }
+        Fragile(Fragile &&other) noexcept(false) : v(other.v), magic(Alive) {
+            ++live;
+        }
+        ~Fragile() {
+            if (magic != Alive) {
+                ++doubleDestroys;
+            }
+            magic = 0;
+            --live;
+        }
+
+        static void reset() {
+            live = 0;
+            copies = 0;
+            throwAt = -1;
+            doubleDestroys = 0;
         }
     };
 
@@ -539,5 +583,63 @@ BOOST_AUTO_TEST_CASE(test_swap_does_not_trade_buffers_between_unequal_allocators
     BOOST_CHECK(AllocAudit<false>::owners.empty());
     BOOST_CHECK(AllocAudit<false>::objects.empty());
 }
+
+#ifdef STDC_HAS_EXCEPTIONS
+
+BOOST_AUTO_TEST_CASE(test_a_throw_while_growing_leaves_the_array_as_it_was) {
+    using FragileAlloc = TrackingAllocator<Fragile, false>;
+    using FragileArray = vlarray<Fragile, 2, FragileAlloc>;
+
+    const auto &grownBy = [](const char *what, const std::function<void(FragileArray &)> &grow) {
+        AllocAudit<false>::owners.clear();
+        AllocAudit<false>::objects.clear();
+        AllocAudit<false>::wrongOwner = false;
+        Fragile::reset();
+
+        {
+            FragileArray a{FragileAlloc(1)};
+            a.emplace_back(10);
+            a.emplace_back(20);
+            a.reserve(4); // onto the heap, so what leaks below would be a heap block
+            while (a.size() < a.capacity()) {
+                a.emplace_back(int(a.size()) * 10 + 10); // and full, so push_back has to grow
+            }
+
+            const size_t blocks = AllocAudit<false>::owners.size();
+            const size_t capacity = a.capacity();
+            const size_t size = a.size();
+            Fragile::copies = 0;
+            Fragile::throwAt = 2; // partway through, with one already built in the new buffer
+
+            bool threw = false;
+            try {
+                grow(a);
+            } catch (const std::runtime_error &) {
+                threw = true;
+            }
+            Fragile::throwAt = -1;
+
+            BOOST_CHECK_MESSAGE(threw, std::string(what) + " did not throw");
+            BOOST_CHECK_MESSAGE(AllocAudit<false>::owners.size() == blocks,
+                                std::string(what) + " leaked a buffer");
+            BOOST_CHECK_EQUAL(a.size(), size);
+            BOOST_CHECK_EQUAL(a.capacity(), capacity);
+            BOOST_CHECK_EQUAL(a[0].v, 10);
+            BOOST_CHECK_EQUAL(a[1].v, 20);
+        }
+
+        BOOST_CHECK_MESSAGE(Fragile::doubleDestroys == 0,
+                            std::string(what) + " destroyed an object twice");
+        BOOST_CHECK(!AllocAudit<false>::wrongOwner);
+        BOOST_CHECK_EQUAL(Fragile::live, 0);
+        BOOST_CHECK(AllocAudit<false>::owners.empty());
+        BOOST_CHECK(AllocAudit<false>::objects.empty());
+    };
+
+    grownBy("reserve", [](FragileArray &a) { a.reserve(64); });
+    grownBy("push_back", [](FragileArray &a) { a.emplace_back(30); });
+}
+
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()

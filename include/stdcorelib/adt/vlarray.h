@@ -383,19 +383,43 @@ namespace stdc {
             return c;
         }
 
-        // Move-relocates [0, m_size) into dst and destroys the originals.
-        void relocate_to(T *dst) {
-            for (size_type i = 0; i < m_size; ++i) {
-                AT::construct(m_alloc, dst + i, std::move_if_noexcept(m_begin[i]));
-                AT::destroy(m_alloc, m_begin + i);
+        // Builds [0, m_size) in dst and destroys nothing, so a throw partway can take back what
+        // it built and leave the array as it was. The caller frees dst. Strong for a type that
+        // can be copied, since move_if_noexcept then copies; a move-only type is left as
+        // std::vector leaves it, destructible and nothing more.
+        void construct_range_at(T *dst) {
+            size_type built = 0;
+#ifdef STDC_HAS_EXCEPTIONS
+            try {
+#endif
+                for (; built < m_size; ++built) {
+                    AT::construct(m_alloc, dst + built, std::move_if_noexcept(m_begin[built]));
+                }
+#ifdef STDC_HAS_EXCEPTIONS
+            } catch (...) {
+                while (built > 0) {
+                    AT::destroy(m_alloc, dst + --built);
+                }
+                throw;
             }
+#endif
         }
 
         // Grows for reserve(): no new element, the elements just move to a bigger buffer.
         void grow(size_type min_capacity) {
             size_type new_capacity = compute_new_capacity(min_capacity);
             T *new_buffer = AT::allocate(m_alloc, new_capacity);
-            relocate_to(new_buffer);
+#ifdef STDC_HAS_EXCEPTIONS
+            try {
+#endif
+                construct_range_at(new_buffer);
+#ifdef STDC_HAS_EXCEPTIONS
+            } catch (...) {
+                AT::deallocate(m_alloc, new_buffer, new_capacity);
+                throw;
+            }
+#endif
+            destroy_range(0, m_size);
             if (!is_inline())
                 AT::deallocate(m_alloc, m_begin, m_capacity);
             m_begin = new_buffer;
@@ -408,8 +432,26 @@ namespace stdc {
         void grow_and_emplace_back(Args &&...args) {
             size_type new_capacity = compute_new_capacity(m_size + 1);
             T *new_buffer = AT::allocate(m_alloc, new_capacity);
-            AT::construct(m_alloc, new_buffer + m_size, std::forward<Args>(args)...);
-            relocate_to(new_buffer);
+#ifdef STDC_HAS_EXCEPTIONS
+            try {
+#endif
+                AT::construct(m_alloc, new_buffer + m_size, std::forward<Args>(args)...);
+#ifdef STDC_HAS_EXCEPTIONS
+            } catch (...) {
+                AT::deallocate(m_alloc, new_buffer, new_capacity);
+                throw;
+            }
+            try {
+#endif
+                construct_range_at(new_buffer);
+#ifdef STDC_HAS_EXCEPTIONS
+            } catch (...) {
+                AT::destroy(m_alloc, new_buffer + m_size);
+                AT::deallocate(m_alloc, new_buffer, new_capacity);
+                throw;
+            }
+#endif
+            destroy_range(0, m_size);
             if (!is_inline())
                 AT::deallocate(m_alloc, m_begin, m_capacity);
             m_begin = new_buffer;
