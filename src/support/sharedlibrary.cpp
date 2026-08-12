@@ -111,6 +111,36 @@ namespace stdc {
 #endif
     }
 
+#ifdef _WIN32
+    /// Turns a failure to load into an error code for the duration of one call.
+    ///
+    /// LoadLibraryW answers a file that is not a PE image with a modal dialog rather than with a
+    /// return value, and a program with nobody at the keyboard waits on it forever. Measured: a
+    /// CI job sat on one for sixteen minutes before it was cancelled.
+    ///
+    /// \note The mode belongs to this thread only, so nothing else in the process is affected
+    ///       while a library is being loaded.
+    class ImageDialogGuard {
+    public:
+        ImageDialogGuard() {
+            _restore = ::SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX,
+                                            &_previous) != 0;
+        }
+
+        ~ImageDialogGuard() {
+            if (_restore) {
+                std::ignore = ::SetThreadErrorMode(_previous, nullptr);
+            }
+        }
+
+    private:
+        DWORD _previous = 0;
+        bool _restore = false;
+
+        STDC_DISABLE_COPY_MOVE(ImageDialogGuard)
+    };
+#endif
+
     // Run before a call whose failure we want to report, so that what captureSysError() reads
     // afterwards belongs to that call. dlerror() holds whatever the last dl call left and hands
     // it to whoever asks first, and GetLastError() is not cleared on success.
@@ -165,6 +195,9 @@ namespace stdc {
         }
         clearSysError();
 
+#ifdef _WIN32
+        ImageDialogGuard noDialog;
+#endif
         auto handle =
 #ifdef _WIN32
             ::LoadLibraryW(absPath.c_str())
