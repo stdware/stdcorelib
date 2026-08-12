@@ -281,6 +281,32 @@ namespace stdc {
         return false;
     }
 
+    void *SharedLibrary::resolve(const char *name) const {
+        stdc_impl_t;
+        impl.clearError();
+        if (!impl.hDll) {
+            impl.error = "library not open";
+            impl.errorCode = std::make_error_code(std::errc::operation_not_permitted);
+            return nullptr;
+        }
+        return impl.resolve(name);
+    }
+
+    void SharedLibrary::release() {
+        stdc_impl_t;
+        impl.released = true;
+    }
+
+    std::string SharedLibrary::errorMessage() const {
+        stdc_impl_t;
+        return impl.error;
+    }
+
+    std::error_code SharedLibrary::errorCode() const {
+        stdc_impl_t;
+        return impl.errorCode;
+    }
+
     bool SharedLibrary::isOpen() const {
         stdc_impl_t;
         return impl.hDll != nullptr;
@@ -294,32 +320,6 @@ namespace stdc {
     void *SharedLibrary::handle() const {
         stdc_impl_t;
         return impl.hDll;
-    }
-
-    void *SharedLibrary::resolve(const char *name) const {
-        stdc_impl_t;
-        impl.clearError();
-        if (!impl.hDll) {
-            impl.error = "library not open";
-            impl.errorCode = std::make_error_code(std::errc::operation_not_permitted);
-            return nullptr;
-        }
-        return impl.resolve(name);
-    }
-
-    std::string SharedLibrary::errorMessage() const {
-        stdc_impl_t;
-        return impl.error;
-    }
-
-    std::error_code SharedLibrary::errorCode() const {
-        stdc_impl_t;
-        return impl.errorCode;
-    }
-
-    void SharedLibrary::release() {
-        stdc_impl_t;
-        impl.released = true;
     }
 
 #if !defined(_WIN32) && !defined(__APPLE__)

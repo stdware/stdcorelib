@@ -624,16 +624,6 @@ namespace stdc {
         return false;
     }
 
-    std::error_code Popen::errorCode() const {
-        stdc_impl_t;
-        return impl.errorCode;
-    }
-
-    std::string Popen::errorMessage() const {
-        stdc_impl_t;
-        return impl.message();
-    }
-
     bool Popen::poll() {
         stdc_impl_t;
         return impl._internal_poll();
@@ -663,6 +653,16 @@ namespace stdc {
     bool Popen::kill() {
         stdc_impl_t;
         return impl.kill_impl();
+    }
+
+    std::error_code Popen::errorCode() const {
+        stdc_impl_t;
+        return impl.errorCode;
+    }
+
+    std::string Popen::errorMessage() const {
+        stdc_impl_t;
+        return impl.message();
     }
 
     const std::filesystem::path &Popen::executable() const {

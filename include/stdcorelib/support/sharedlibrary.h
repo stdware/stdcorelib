@@ -58,6 +58,10 @@ namespace stdc {
         };
         STDC_DECLARE_FLAGS(LoadHints, LoadHint)
 
+    public:
+        /// \name Loading
+        /// @{
+
         /// Loads \a path.
         ///
         /// \param path the library to load
@@ -73,6 +77,46 @@ namespace stdc {
         ///       statics from it may well still be mapped afterwards.
         bool close();
 
+        /// The address exported under \a name.
+        ///
+        /// \return the symbol's address, or null with the reason in errorMessage()
+        /// \pre The library is open.
+        void *resolve(const char *name) const;
+
+        /// Gives up ownership, so the destructor will not unload.
+        ///
+        /// \note The handle stays valid and nobody will close it, which is the point and also
+        ///       the leak if that was not intended.
+        void release();
+
+        /// @}
+
+    public:
+        /// \name Failures
+        ///
+        /// Both answer for whichever operation ran last, and both are cleared as the next one
+        /// begins.
+        /// @{
+
+        /// The reason the last operation on this object failed, or empty if it succeeded.
+        ///
+        /// Captured where the failure happened rather than read from the system on demand, so
+        /// nothing that ran in between can have overwritten it.
+        std::string errorMessage() const;
+
+        /// The same failure as a code.
+        ///
+        /// \note The \c dl functions report no code, so a failed open() is answered from the
+        ///       path instead. A symbol that is not there has no path to ask, and is reported
+        ///       in words alone.
+        std::error_code errorCode() const;
+
+        /// @}
+
+    public:
+        /// \name Properties
+        /// @{
+
         bool isOpen() const;
 
         /// The path this was opened with, empty if it is not open.
@@ -82,30 +126,13 @@ namespace stdc {
         /// not wrap.
         void *handle() const;
 
-        /// The address exported under \a name.
-        ///
-        /// \return the symbol's address, or null with the reason in errorMessage()
-        /// \pre The library is open.
-        void *resolve(const char *name) const;
+        /// @}
 
-        /// The reason the last operation on this object failed, or empty if it succeeded.
+    public:
+        /// \name Paths
         ///
-        /// Captured where the failure happened rather than read from the system on demand, so
-        /// nothing that ran in between can have overwritten it.
-        std::string errorMessage() const;
-
-        /// The same failure as a code, or a cleared one where the last operation succeeded.
-        ///
-        /// \note The \c dl functions report no code, so a failed open() is answered from the
-        ///       path instead. A symbol that is not there has no path to ask, and is reported
-        ///       in words alone.
-        std::error_code errorCode() const;
-
-        /// Gives up ownership, so the destructor will not unload.
-        ///
-        /// \note The handle stays valid and nobody will close it, which is the point and also
-        ///       the leak if that was not intended.
-        void release();
+        /// What can be asked or said about where a library is, without one being open.
+        /// @{
 
         /// Whether \a path has a suffix this platform can load: \c .dll on Windows, \c .dylib on
         /// macOS, and \c .so with an optional numeric version behind it elsewhere.
@@ -146,6 +173,8 @@ namespace stdc {
         ///
         /// \sa resolve()
         static std::filesystem::path locateLibraryPath(const void *addr);
+
+        /// @}
 
     protected:
         class Impl;

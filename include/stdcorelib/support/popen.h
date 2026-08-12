@@ -360,16 +360,6 @@ namespace stdc {
         ///       not supported. Use another Popen.
         bool start();
 
-        /// The error from the last operation, cleared at the start of each one.
-        std::error_code errorCode() const;
-
-        /// The same failure in words, empty where the last operation did not fail.
-        ///
-        /// \note Says more than errorCode().message() alone where the failure was in a system
-        ///       call, since it names the call, and where the request was refused before any
-        ///       call was made, which no \c errno describes.
-        std::string errorMessage() const;
-
         /// @}
 
     public:
@@ -435,6 +425,25 @@ namespace stdc {
         /// \warning Anything the child was part way through writing is lost.
         /// \sa sendSignal(), for why a detached child is refused
         bool kill();
+
+        /// @}
+
+    public:
+        /// \name Failures
+        ///
+        /// Both answer for whichever operation ran last, and both are cleared as the next one
+        /// begins.
+        /// @{
+
+        /// The failure as a code.
+        std::error_code errorCode() const;
+
+        /// The same failure in words, empty where the last operation did not fail.
+        ///
+        /// \note Says more than errorCode().message() alone where the failure was in a system
+        ///       call, since it names the call, and where the request was refused before any
+        ///       call was made, which no \c errno describes.
+        std::string errorMessage() const;
 
         /// @}
 
