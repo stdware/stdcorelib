@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <filesystem>
+#include <system_error>
 
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/flags.h>
@@ -92,6 +93,13 @@ namespace stdc {
         /// Captured where the failure happened rather than read from the system on demand, so
         /// nothing that ran in between can have overwritten it.
         std::string errorMessage() const;
+
+        /// The same failure as a code, or a cleared one where the last operation succeeded.
+        ///
+        /// \note The \c dl functions report no code, so a failed open() is answered from the
+        ///       path instead. A symbol that is not there has no path to ask, and is reported
+        ///       in words alone.
+        std::error_code errorCode() const;
 
         /// Gives up ownership, so the destructor will not unload.
         ///

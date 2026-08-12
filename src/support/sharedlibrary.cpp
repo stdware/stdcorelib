@@ -47,12 +47,18 @@ namespace stdc {
         // GetLastError() is thread global and any call in between overwrites it, and dlerror()
         // clears itself as soon as it is read.
         mutable std::string error;
+        mutable std::error_code errorCode;
 
         ~Impl();
 
         static inline int nativeLoadHints(LoadHints loadHints);
         static void clearSysError();
-        static std::string sysErrorMessage();
+
+        void clearError() const {
+            error.clear();
+            errorCode.clear();
+        }
+        void captureSysError(const fs::path *file) const;
 
         /// Loads \a file and, only where that worked, records what was loaded.
         bool open(const fs::path &file, LoadHints hints);
@@ -105,7 +111,7 @@ namespace stdc {
 #endif
     }
 
-    // Run before a call whose failure we want to report, so that what sysErrorMessage() reads
+    // Run before a call whose failure we want to report, so that what captureSysError() reads
     // afterwards belongs to that call. dlerror() holds whatever the last dl call left and hands
     // it to whoever asks first, and GetLastError() is not cleared on success.
     void SharedLibrary::Impl::clearSysError() {
@@ -116,15 +122,36 @@ namespace stdc {
 #endif
     }
 
-    std::string SharedLibrary::Impl::sysErrorMessage() {
+    // The code and the sentence for one failure, taken together so they describe the same call.
+    //
+    // Windows reports a code. The dl functions report a sentence and leave errno alone, measured
+    // rather than assumed, so a code has to come from the file itself. One stat on a path that
+    // already failed answers three of the four cases. A symbol has no file to ask about.
+    void SharedLibrary::Impl::captureSysError(const fs::path *file) const {
 #ifdef _WIN32
-        return wstring_conv::to_utf8(windows::SystemError(::GetLastError(), 0));
+        (void) file;
+        // Not system_category, whose message() goes through FormatMessageA and arrives in the
+        // machine's code page. This one is UTF-8 and defers every comparison to it anyway.
+        errorCode = std::error_code(int(::GetLastError()), windows_utf8_category());
+        error = errorCode.message();
 #else
-        auto err = dlerror();
-        if (err) {
-            return err;
+        auto reported = dlerror();
+        error = reported ? reported : std::string();
+        errorCode = {};
+        if (!file) {
+            return;
         }
-        return {};
+        std::error_code ec;
+        auto status = fs::status(*file, ec);
+        if (ec || !fs::exists(status)) {
+            errorCode = std::make_error_code(std::errc::no_such_file_or_directory);
+        } else if (fs::is_directory(status)) {
+            errorCode = std::make_error_code(std::errc::is_a_directory);
+        } else if ((status.permissions() & fs::perms::owner_read) == fs::perms::none) {
+            errorCode = std::make_error_code(std::errc::permission_denied);
+        } else {
+            errorCode = std::make_error_code(std::errc::executable_format_error);
+        }
 #endif
     }
 
@@ -133,6 +160,7 @@ namespace stdc {
         auto absPath = fs::absolute(file, ec);
         if (ec) {
             error = ec.message();
+            errorCode = ec;
             return false;
         }
         clearSysError();
@@ -145,7 +173,7 @@ namespace stdc {
 #endif
             ;
         if (!handle) {
-            error = sysErrorMessage();
+            captureSysError(&absPath);
             return false;
         }
 
@@ -181,7 +209,7 @@ namespace stdc {
             (dlclose(hDll) == 0)
 #endif
         ) {
-            error = sysErrorMessage();
+            captureSysError(nullptr);
             return false;
         }
 
@@ -203,7 +231,7 @@ namespace stdc {
 #endif
             ;
         if (!addr) {
-            error = sysErrorMessage();
+            captureSysError(nullptr);
         }
         return reinterpret_cast<void *>(addr);
     }
@@ -219,9 +247,10 @@ namespace stdc {
 
     bool SharedLibrary::open(const fs::path &path, LoadHints hints) {
         stdc_impl_t;
-        impl.error.clear();
+        impl.clearError();
         if (impl.hDll) {
             impl.error = "library already open";
+            impl.errorCode = std::make_error_code(std::errc::device_or_resource_busy);
             return false;
         }
         if (!impl.open(path, hints)) {
@@ -238,7 +267,7 @@ namespace stdc {
 
     bool SharedLibrary::close() {
         stdc_impl_t;
-        impl.error.clear();
+        impl.clearError();
         if (impl.released) {
             impl.released = false;
             impl.hDll = nullptr;
@@ -269,9 +298,10 @@ namespace stdc {
 
     void *SharedLibrary::resolve(const char *name) const {
         stdc_impl_t;
-        impl.error.clear();
+        impl.clearError();
         if (!impl.hDll) {
             impl.error = "library not open";
+            impl.errorCode = std::make_error_code(std::errc::operation_not_permitted);
             return nullptr;
         }
         return impl.resolve(name);
@@ -280,6 +310,11 @@ namespace stdc {
     std::string SharedLibrary::errorMessage() const {
         stdc_impl_t;
         return impl.error;
+    }
+
+    std::error_code SharedLibrary::errorCode() const {
+        stdc_impl_t;
+        return impl.errorCode;
     }
 
     void SharedLibrary::release() {

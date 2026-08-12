@@ -116,8 +116,29 @@ BOOST_AUTO_TEST_CASE(test_open_failure) {
     BOOST_CHECK(lib.path().empty()); // a failed open leaves no path behind
     BOOST_CHECK(!lib.errorMessage().empty());
 
-    // resolving on a closed library yields nothing instead of crashing
+    // Each platform says it in its own vocabulary. Windows names the loader failure, and the dl
+    // platforms have none to give, so that side is answered from the path.
+    BOOST_CHECK(lib.errorCode());
+#ifndef _WIN32
+    BOOST_CHECK(lib.errorCode() == std::errc::no_such_file_or_directory);
+#endif
+
+    // A file that is there and is not a library reads differently from one that is not there,
+    // which is the point of having a code at all.
+    {
+        SharedLibrary notALibrary;
+        const auto self = std::filesystem::path(__FILE__);
+        BOOST_REQUIRE(std::filesystem::exists(self));
+        BOOST_CHECK(!notALibrary.open(self));
+        BOOST_CHECK(!notALibrary.errorMessage().empty());
+        BOOST_CHECK(notALibrary.errorCode());
+        BOOST_CHECK(notALibrary.errorCode() != lib.errorCode());
+    }
+
+    // Resolving on a library that was never opened is refused by this class rather than by the
+    // platform, so both answer the same way.
     BOOST_CHECK(lib.resolve("anything") == nullptr);
+    BOOST_CHECK(lib.errorCode() == std::errc::operation_not_permitted);
 }
 
 BOOST_AUTO_TEST_CASE(test_system_library) {
