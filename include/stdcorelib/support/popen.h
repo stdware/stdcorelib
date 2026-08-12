@@ -33,7 +33,7 @@
 ///         .standardError(Popen::StandardOutput);
 ///
 ///     if (!proc.start()) {
-///         return proc.lastError();
+///         return proc.errorMessage();
 ///     }
 ///     auto [out, _] = proc.communicate({}, 5000);
 ///     int code = proc.returnCode().value_or(-1);
@@ -47,7 +47,7 @@
 /// \code
 ///     SharedLibrary lib;
 ///     if (!lib.open(plugin_path)) {
-///         return lib.lastError();
+///         return lib.errorMessage();
 ///     }
 ///     auto entry = reinterpret_cast<int (*)()>(lib.resolve("plugin_init"));
 /// \endcode
@@ -71,7 +71,7 @@ namespace stdc {
     ///       .standardError(Popen::StandardOutput); // fold stderr into the stdout pipe
     ///
     ///   if (!proc.start()) {
-    ///       return proc.lastError();
+    ///       return proc.errorMessage();
     ///   }
     ///   auto [out, _] = proc.communicate();
     ///   int code = proc.returnCode().value_or(-1);
@@ -352,12 +352,10 @@ namespace stdc {
         /// Starts the process.
         ///
         /// \retval true the child is running, and any \c Pipe stream is open
-        /// \retval false nothing was started, with the reason in lastError()
-        /// \note Read lastError() rather than errorCode() here. This is the one operation that
-        ///       fails over the request itself as often as over a system call. An argument with
-        ///       a NUL in it, an environment variable with no name, \c Pipe on a detached child:
-        ///       none of those have an error code to be reported as. Where a system call did
-        ///       fail, lastError() also names which one.
+        /// \retval false nothing was started, with the reason in errorMessage()
+        /// \note Read errorMessage() rather than errorCode() here. Many of the ways a start can
+        ///       fail are about the request rather than a system call, and no code stands for
+        ///       those.
         /// \note One Popen runs one child. Calling this again after a child has been started is
         ///       not supported. Use another Popen.
         bool start();
@@ -370,7 +368,7 @@ namespace stdc {
         /// \note Says more than errorCode().message() alone where the failure was in a system
         ///       call, since it names the call, and where the request was refused before any
         ///       call was made, which no \c errno describes.
-        std::string lastError() const;
+        std::string errorMessage() const;
 
         /// @}
 

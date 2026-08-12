@@ -307,7 +307,7 @@ BOOST_AUTO_TEST_CASE(test_swap_across_both_kinds_of_storage) {
 // can pass by accident of the loader having merged a symbol.
 BOOST_AUTO_TEST_CASE(test_identity_across_a_module_boundary) {
     SharedLibrary plugin;
-    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_ANY_PLUGIN_PATH), plugin.lastError());
+    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_ANY_PLUGIN_PATH), plugin.errorMessage());
 
     auto fill = reinterpret_cast<void (*)(any *, int)>(plugin.resolve("any_plugin_fill"));
     auto read = reinterpret_cast<bool (*)(const any *, int *)>(plugin.resolve("any_plugin_read"));

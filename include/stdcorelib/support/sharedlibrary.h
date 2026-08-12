@@ -23,7 +23,7 @@ namespace stdc {
     /// \code
     ///   SharedLibrary lib;
     ///   if (!lib.open("/usr/lib/x86_64-linux-gnu/libc.so.6")) {
-    ///       return lib.lastError();
+    ///       return lib.errorMessage();
     ///   }
     ///   auto fn = reinterpret_cast<void *(*) (size_t)>(lib.resolve("malloc"));
     /// \endcode
@@ -61,7 +61,7 @@ namespace stdc {
         ///
         /// \param path the library to load
         /// \param hints what to ask the loader for
-        /// \retval false nothing was loaded, with the reason in lastError()
+        /// \retval false nothing was loaded, with the reason in errorMessage()
         /// \note An object that is already open is left alone and this fails, so close() first
         ///       to swap one library for another.
         bool open(const std::filesystem::path &path, LoadHints hints = {});
@@ -83,7 +83,7 @@ namespace stdc {
 
         /// The address exported under \a name.
         ///
-        /// \return the symbol's address, or null with the reason in lastError()
+        /// \return the symbol's address, or null with the reason in errorMessage()
         /// \pre The library is open.
         void *resolve(const char *name) const;
 
@@ -91,7 +91,7 @@ namespace stdc {
         ///
         /// Captured where the failure happened rather than read from the system on demand, so
         /// nothing that ran in between can have overwritten it.
-        std::string lastError() const;
+        std::string errorMessage() const;
 
         /// Gives up ownership, so the destructor will not unload.
         ///

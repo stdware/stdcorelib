@@ -114,7 +114,7 @@ BOOST_AUTO_TEST_CASE(test_open_failure) {
     BOOST_CHECK(!lib.open("no_such_library_9f3a.dll"));
     BOOST_CHECK(!lib.isOpen());
     BOOST_CHECK(lib.path().empty()); // a failed open leaves no path behind
-    BOOST_CHECK(!lib.lastError().empty());
+    BOOST_CHECK(!lib.errorMessage().empty());
 
     // resolving on a closed library yields nothing instead of crashing
     BOOST_CHECK(lib.resolve("anything") == nullptr);
@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE(test_reopen) {
     BOOST_REQUIRE(lib.open(candidate.path));
     auto first = lib.handle();
     BOOST_CHECK(!lib.open("no_such_library_9f3a.dll"));
-    BOOST_CHECK(!lib.lastError().empty());
+    BOOST_CHECK(!lib.errorMessage().empty());
     BOOST_CHECK(lib.isOpen());
     BOOST_CHECK_EQUAL(lib.handle(), first);
     BOOST_CHECK(lib.resolve(candidate.symbol) != nullptr);
@@ -172,15 +172,15 @@ BOOST_AUTO_TEST_CASE(test_reopen) {
     // resolving on a closed object says so rather than leaving the last system error to speak
     SharedLibrary shut;
     BOOST_CHECK(shut.resolve(candidate.symbol) == nullptr);
-    BOOST_CHECK(!shut.lastError().empty());
+    BOOST_CHECK(!shut.errorMessage().empty());
 
     // a call that succeeded leaves nothing behind, so an empty message means no failure
     BOOST_CHECK(lib.resolve(candidate.symbol) != nullptr);
-    BOOST_CHECK(lib.lastError().empty());
+    BOOST_CHECK(lib.errorMessage().empty());
 
     // and a missing symbol is reported by the system rather than by us
     BOOST_CHECK(lib.resolve("no_such_symbol_9f3a") == nullptr);
-    BOOST_CHECK(!lib.lastError().empty());
+    BOOST_CHECK(!lib.errorMessage().empty());
 
     // opening the same library from two objects is fine, and both resolve
     SharedLibrary other;
@@ -335,7 +335,7 @@ BOOST_AUTO_TEST_CASE(test_the_path_that_comes_back_is_absolute) {
     BOOST_REQUIRE(relative.is_relative());
 
     SharedLibrary lib;
-    BOOST_REQUIRE_MESSAGE(lib.open(relative), lib.lastError());
+    BOOST_REQUIRE_MESSAGE(lib.open(relative), lib.errorMessage());
     BOOST_CHECK(lib.path().is_absolute());
     BOOST_CHECK(fs::equivalent(lib.path(), unloadable()));
     BOOST_CHECK(lib.resolve("test_unloadable_answer") != nullptr);

@@ -616,7 +616,7 @@ namespace stdc {
         impl.pid = -1;
         impl.returnCode.reset();
 
-        // A failure that named nothing would leave lastError() empty and read as success. There
+        // A failure that named nothing would leave errorMessage() empty and read as success. There
         // should be none, so this is a backstop rather than an expected path.
         if (impl.message().empty()) {
             impl.error_msg = "unknown error";
@@ -629,7 +629,7 @@ namespace stdc {
         return impl.errorCode;
     }
 
-    std::string Popen::lastError() const {
+    std::string Popen::errorMessage() const {
         stdc_impl_t;
         return impl.message();
     }

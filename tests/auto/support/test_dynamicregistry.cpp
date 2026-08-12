@@ -207,7 +207,7 @@ BOOST_AUTO_TEST_CASE(test_is_thread_safe) {
 // the host never looked and said nothing about it.
 BOOST_AUTO_TEST_CASE(test_a_plugin_registers_where_the_host_looks) {
     SharedLibrary plugin;
-    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_DYNAMICREGISTRY_PLUGIN_PATH), plugin.lastError());
+    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_DYNAMICREGISTRY_PLUGIN_PATH), plugin.errorMessage());
 
     auto add = reinterpret_cast<bool (*)(const char *, int)>(plugin.resolve("registry_plugin_add"));
     auto count = reinterpret_cast<size_t (*)()>(plugin.resolve("registry_plugin_size"));

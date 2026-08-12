@@ -277,7 +277,7 @@ namespace stdc {
         return impl.resolve(name);
     }
 
-    std::string SharedLibrary::lastError() const {
+    std::string SharedLibrary::errorMessage() const {
         stdc_impl_t;
         return impl.error;
     }
