@@ -31,6 +31,7 @@
 
 namespace stdc {
 
+#ifndef __APPLE__
     /// Keeps a broken pipe from ending the process, for as long as it lives.
     ///
     /// The poll loop below asks whether the child is still reading before writing anything, so
@@ -43,62 +44,47 @@ namespace stdc {
     /// is process wide, and two threads saving and restoring one race: the first to leave puts
     /// back what it found and takes the protection away from the second, which is still writing,
     /// and the last to leave installs what the first had already installed. Measured, both
-    /// halves. A mask is this thread's own, so neither happens, and a program that wanted
-    /// SIGPIPE to end it still gets that everywhere else.
+    /// halves. A mask is this thread's own, so neither happens.
     ///
     /// Blocking leaves the signal pending instead of delivering it, so it has to be taken off
     /// again before the mask goes back. One that was already pending on the way in is left
     /// alone: it was not ours to swallow.
     ///
-    /// \note Apple has no sigtimedwait to take it off with, so that platform ignores the signal
-    ///       for the process and lives with the race above. \c F_SETNOSIGPIPE is the answer
-    ///       there and is not written yet.
+    /// \note Apple has no sigtimedwait to take it off with, and so does none of this. It sets
+    ///       \c F_SETNOSIGPIPE on the descriptor instead, which is better still.
     class sigpipe_guard {
     public:
         sigpipe_guard() {
             sigemptyset(&_pipe_only);
             sigaddset(&_pipe_only, SIGPIPE);
-#ifdef __APPLE__
-            struct sigaction ignore{};
-            ignore.sa_handler = SIG_IGN;
-            sigemptyset(&ignore.sa_mask);
-            _installed = sigaction(SIGPIPE, &ignore, &_old) == 0;
-#else
+
             sigset_t pending;
             sigemptyset(&pending);
             _was_pending = sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE) == 1;
             _installed = pthread_sigmask(SIG_BLOCK, &_pipe_only, &_old_mask) == 0;
-#endif
         }
 
         ~sigpipe_guard() {
             if (!_installed) {
                 return;
             }
-#ifdef __APPLE__
-            sigaction(SIGPIPE, &_old, nullptr);
-#else
             if (!_was_pending) {
                 const timespec no_wait{};
                 while (sigtimedwait(&_pipe_only, nullptr, &no_wait) == -1 && errno == EINTR) {
                 }
             }
             pthread_sigmask(SIG_SETMASK, &_old_mask, nullptr);
-#endif
         }
 
     private:
         sigset_t _pipe_only{};
-        bool _installed = false;
-#ifdef __APPLE__
-        struct sigaction _old{};
-#else
         sigset_t _old_mask{};
+        bool _installed = false;
         bool _was_pending = false;
-#endif
 
         STDC_DISABLE_COPY_MOVE(sigpipe_guard)
     };
+#endif
 
     // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L2094
     //
@@ -151,6 +137,16 @@ namespace stdc {
             }
         }
 
+#ifdef __APPLE__
+        // A broken pipe answers with EPIPE and raises nothing, for this descriptor alone. Better
+        // than the signal mask the other platforms use, since not even this thread changes, and
+        // the descriptor is one of ours: where a caller handed in its own, the stream is not
+        // open and there is nothing here to write to.
+        if (in_fd >= 0) {
+            std::ignore = ::fcntl(in_fd, F_SETNOSIGPIPE, 1);
+        }
+#endif
+
         std::string out, err;
         size_t written = 0;
         bool timed_out = false;
@@ -194,9 +190,11 @@ namespace stdc {
 
         _communication_started = true;
 
+#ifndef __APPLE__
         // Held across the whole loop rather than taken and put back around each write, which
         // would be two system calls per turn of it.
         sigpipe_guard guard;
+#endif
 
         while (in_fd >= 0 || out_fd >= 0 || err_fd >= 0) {
             struct pollfd fds[3] {};

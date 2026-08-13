@@ -15,13 +15,6 @@ Released as v1.1.0.0, and used by qmsetup's `qmcorecmd`. What the version promis
 - Mutually exclusive option groups for `cli`, so that `--json` and `--xml` can rule each other out. SysCmdLine's version of this interacts with its option priority ladder, so decide what the semantics should be rather than copying its shape.
 - `communicate()` on **Windows** starts one worker thread per open pipe, and with a single pipe there is nothing to interleave with, so the thread is only there to make a timeout interruptible. CPython skips it in that case (`Lib/subprocess.py:1199`, at most one pipe and no timeout). POSIX here has nothing to fix: it is one `poll()` loop and no threads, which is what CPython does on that side too. Probably not worth doing at all, since a thread costs tens of microseconds against the milliseconds of `CreateProcessW` beside it, and it buys a second path through the one function in this library whose deadlock reasoning is subtle. Measure before writing it.
 
-- `communicate()` on **macOS** still ignores SIGPIPE for the whole process while it runs, which is
-  what every platform used to do and what two concurrent calls race over. Everywhere else it now
-  blocks the signal for its own thread and takes any pending one off with `sigtimedwait`, which
-  Apple does not have. `fcntl(fd, F_SETNOSIGPIPE, 1)` is the answer there and needs a machine to
-  try it on. Note that blocking without the drain was tried on macOS once and cost five red CI
-  jobs, so this one is not to be reasoned out from a keyboard.
-
 ## Unverified
 
 - `console::width()` reading a Windows console is checked against the console the suite is attached to, and skipped where there is none. That it reads the visible window rather than the scrollback buffer is not: Windows Terminal gives the buffer the same width as the window, so reading `dwSize.X` instead passes, measured. It would fail on a console whose buffer somebody widened, which is the case the code is written for.
