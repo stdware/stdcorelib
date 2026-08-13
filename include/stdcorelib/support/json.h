@@ -41,8 +41,10 @@ namespace stdc {
     ///       An integer is exact, up to the range of \c int64_t. Anything outside it, including an
     ///       unsigned value above \c INT64_MAX, becomes a \c Double and is exact only up to 2^53.
     ///
-    /// \warning Accessors returning a reference or view borrow this value. Calling one on a
-    ///          temporary leaves the result dangling at the end of the statement.
+    /// \warning Accessors returning a reference or view borrow this value, or the \a defaultValue
+    ///          they were handed. Calling one on a temporary, or giving a temporary container to
+    ///          toStringView() or toBinaryView(), leaves the result dangling at the end of the
+    ///          statement.
     class STDC_EXPORT JsonValue {
     public:
         enum Type {

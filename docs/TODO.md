@@ -4,7 +4,7 @@ Released as v1.1.0.0, and used by qmsetup's `qmcorecmd`. What the version promis
 
 ## Known gaps
 
-- The unchecked findings in `.cache/codex/2026-08-10-lifetime-review.md`: `JsonValue::toStringView()` still accepts a temporary owning fallback, and borrowed property getters do not yet follow one rvalue policy across the library. Preserve each original finding and append its resolution before checking it off.
+- `vlarray::get_allocator()` returns a `const` reference to the allocator it holds. A standard container answers by value, and there is nothing about an allocator that wants borrowing.
 - The registry code assumes a little-endian host
 - `support/commandline.h` is over a thousand lines of inline code, paid for by every translation unit that includes it
 - `DynamicRegistry::remove_listener()` waits for every notification in flight, not only the ones that reach the listener being removed. It is safe and it is conservative: with other threads registering steadily the count may not be seen at zero, and there is no timeout, so a caller can be made to wait far longer than the callbacks it actually has to outlive. A per-listener count, or a generation number, would bound it.
