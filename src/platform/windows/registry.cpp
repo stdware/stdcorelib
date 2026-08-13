@@ -7,46 +7,68 @@
 #include <cstdint>
 #include <cstring>
 
-#include "winapi.h"
-#include "str.h"
-#include "console.h"
-
-#include "vlarray.h"
-
 #ifdef _MSC_VER
 #  include <intrin.h>
 #endif
 
+#include "winapi.h"
+#include "str.h"
+#include "vlarray.h"
+
 namespace stdc::windows {
 
-    // TODO: support when the host system is not little-endian
+    // Which way round this machine is. GCC and Clang say so directly, and MSVC says only which
+    // processor it is building for, which is how Qt works it out as well. Anything else is an
+    // error rather than a guess, since guessing wrong is read silently as wrong numbers.
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__)
+    constexpr bool little_endian_host = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
+#elif defined(_M_IX86) || defined(_M_X64) || defined(_M_ARM) || defined(_M_ARM64) ||               \
+    defined(_M_ARM64EC)
+    constexpr bool little_endian_host = true;
+#else
+#  error "cannot tell which way round this machine is"
+#endif
+
+    template <class T>
+    static T byteswap(T value) {
+        static_assert(sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, "no swap for this size");
+#ifdef _MSC_VER
+        if constexpr (sizeof(T) == 2)
+            return (T) _byteswap_ushort((unsigned short) value);
+        else if constexpr (sizeof(T) == 4)
+            return (T) _byteswap_ulong((unsigned long) value);
+        else
+            return (T) _byteswap_uint64((unsigned long long) value);
+#else
+        if constexpr (sizeof(T) == 2)
+            return (T) __builtin_bswap16((uint16_t) value);
+        else if constexpr (sizeof(T) == 4)
+            return (T) __builtin_bswap32((uint32_t) value);
+        else
+            return (T) __builtin_bswap64((uint64_t) value);
+#endif
+    }
+
     template <class T>
     static T qFromLittleEndian(const void *data) {
         T value;
         std::memcpy(&value, data, sizeof(value));
-        return value;
+        if constexpr (little_endian_host) {
+            return value;
+        } else {
+            return byteswap(value);
+        }
     }
 
     template <class T>
     static T qFromBigEndian(const void *data) {
         T value;
         std::memcpy(&value, data, sizeof(value));
-#ifdef _MSC_VER
-        if constexpr (sizeof(T) == sizeof(short))
-            return (T) _byteswap_ushort(value);
-        else if constexpr (sizeof(T) == sizeof(int))
-            return (T) _byteswap_ulong(value);
-        else if constexpr (sizeof(T) == sizeof(int64_t))
-            return (T) _byteswap_uint64(value);
-#else
-        if constexpr (sizeof(T) == sizeof(short))
-            return (T) __builtin_bswap16(value);
-        else if constexpr (sizeof(T) == sizeof(int))
-            return (T) __builtin_bswap32(value);
-        else if constexpr (sizeof(T) == sizeof(int64_t))
-            return (T) __builtin_bswap64(value);
-#endif
-        return {};
+        if constexpr (little_endian_host) {
+            return byteswap(value);
+        } else {
+            return value;
+        }
     }
 
     static inline std::error_code make_status_error_code(LSTATUS status) {

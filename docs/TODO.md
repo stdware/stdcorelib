@@ -5,7 +5,6 @@ Released as v1.1.0.0, and used by qmsetup's `qmcorecmd`. What the version promis
 ## Known gaps
 
 - `vlarray::get_allocator()` returns a `const` reference to the allocator it holds. A standard container answers by value, and there is nothing about an allocator that wants borrowing.
-- The registry code assumes a little-endian host
 - `support/commandline.h` is over a thousand lines of inline code, paid for by every translation unit that includes it
 - `DynamicRegistry::remove_listener()` waits for every notification in flight, not only the ones that reach the listener being removed. It is safe and it is conservative: with other threads registering steadily the count may not be seen at zero, and there is no timeout, so a caller can be made to wait far longer than the callbacks it actually has to outlive. A per-listener count, or a generation number, would bound it.
 - `processMemoryUsage()` in `src/system.cpp` has never had a caller. It is `[[maybe_unused]] static`, is declared in no header, and carries `<Psapi.h>` and `<mach/mach.h>` in with it. Either delete it or promote it to `system::` with a comment and a case, since nothing can cover it as it stands.
