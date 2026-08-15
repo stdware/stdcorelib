@@ -7,7 +7,9 @@
 
 #include <boost/test/unit_test.hpp>
 
+using stdc::CborDecodeError;
 using stdc::JsonArray;
+using stdc::JsonParseError;
 using stdc::JsonObject;
 using stdc::JsonValue;
 
@@ -247,10 +249,10 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_RepeatedKey) {
 BOOST_AUTO_TEST_CASE(test_JsonValue_Parse) {
     // A parse failure leaves a null value behind and fills in the message.
     {
-        std::string error;
+        JsonParseError error;
         JsonValue v = JsonValue::fromJson("{not json", false, &error);
         BOOST_CHECK(v.isNull());
-        BOOST_CHECK(!error.empty());
+        BOOST_CHECK(bool(error));
     }
     // The error output is optional.
     {
@@ -258,10 +260,10 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Parse) {
     }
     // A successful parse leaves the message untouched.
     {
-        std::string error;
+        JsonParseError error;
         JsonValue v = JsonValue::fromJson(R"({"a": 1})", false, &error);
         BOOST_CHECK(v.isObject());
-        BOOST_CHECK(error.empty());
+        BOOST_CHECK(!error);
     }
     // Comments are a parse error unless asked for.
     {
@@ -275,21 +277,64 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Parse) {
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_JsonValue_ParseClearsOldErrors) {
-    std::string error = "old error";
-    BOOST_CHECK(JsonValue::fromJson("null", false, &error).isNull());
-    BOOST_CHECK(error.empty());
+BOOST_AUTO_TEST_CASE(test_JsonValue_ParseErrorSaysWhichAndWhere) {
+    const auto &codeOf = [](std::string_view text, bool comments = false) {
+        JsonParseError error;
+        JsonValue::fromJson(text, comments, &error);
+        return error.code;
+    };
 
-    error = "old error";
-    BOOST_CHECK_EQUAL(JsonValue::fromCbor(JsonValue(42).toCbor(), &error).toInt(), 42);
-    BOOST_CHECK(error.empty());
+    BOOST_CHECK(codeOf("") == JsonParseError::UnexpectedEnd);
+    BOOST_CHECK(codeOf("[1,") == JsonParseError::UnexpectedEnd);
+    BOOST_CHECK(codeOf("[1 2]") == JsonParseError::UnexpectedToken);
+    BOOST_CHECK(codeOf("01") == JsonParseError::IllegalNumber);
+
+    // Named for the reason given in test_JsonValue_Escapes.
+    const std::string meaninglessEscape = R"("\q")";
+    BOOST_CHECK(codeOf(meaninglessEscape) == JsonParseError::IllegalEscape);
+
+    BOOST_CHECK(codeOf("\"\t\"") == JsonParseError::IllegalString);
+    BOOST_CHECK(codeOf("1 2") == JsonParseError::TrailingContent);
+
+    // The one a caller can act on: the same text parses with comments asked for.
+    {
+        const std::string_view text = R"({"a": 1 /* note */})";
+        BOOST_CHECK(codeOf(text) == JsonParseError::CommentNotAllowed);
+        BOOST_CHECK(codeOf(text, true) == JsonParseError::NoError);
+    }
+
+    // CBOR keeps its own codes, and an offset with no line to put it on.
+    {
+        CborDecodeError error;
+        const uint8_t truncated[] = {0x82, 0x01};
+        JsonValue::fromCbor(truncated, &error);
+        BOOST_CHECK(error.code == CborDecodeError::UnexpectedEnd);
+        BOOST_CHECK_EQUAL(error.offset, 1u); // the length that cannot be met
+        BOOST_CHECK(error.message().find("byte 1") != std::string::npos);
+
+        const uint8_t tagged[] = {0xC0, 0x01};
+        JsonValue::fromCbor(tagged, &error);
+        BOOST_CHECK(error.code == CborDecodeError::UnsupportedType);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_JsonValue_ParseClearsOldErrors) {
+    JsonParseError error;
+    error.code = JsonParseError::UnexpectedEnd;
+    BOOST_CHECK(JsonValue::fromJson("null", false, &error).isNull());
+    BOOST_CHECK(!error);
+
+    CborDecodeError cborError;
+    cborError.code = CborDecodeError::UnexpectedEnd;
+    BOOST_CHECK_EQUAL(JsonValue::fromCbor(JsonValue(42).toCbor(), &cborError).toInt(), 42);
+    BOOST_CHECK(!cborError);
 
     BOOST_CHECK(JsonValue::fromJson("{not json", false, &error).isNull());
-    BOOST_CHECK(!error.empty());
+    BOOST_CHECK(bool(error));
 
     const uint8_t garbage[] = {0xFF};
-    BOOST_CHECK(JsonValue::fromCbor(garbage, &error).isNull());
-    BOOST_CHECK(!error.empty());
+    BOOST_CHECK(JsonValue::fromCbor(garbage, &cborError).isNull());
+    BOOST_CHECK(bool(cborError));
 }
 
 BOOST_AUTO_TEST_CASE(test_JsonValue_Serialize) {
@@ -380,20 +425,20 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Cbor) {
     // Malformed input reports rather than throws.
     {
         const uint8_t garbage[] = {0xFF, 0xFF, 0xFF};
-        std::string error;
+        CborDecodeError error;
         JsonValue back = JsonValue::fromCbor(stdc::array_view<uint8_t>(garbage, 3), &error);
         BOOST_CHECK(back.isNull());
-        BOOST_CHECK(!error.empty());
+        BOOST_CHECK(bool(error));
     }
     // A declared container count cannot exceed the bytes that remain. Reject it before using the
     // untrusted count to reserve storage.
     {
         const uint8_t impossibleArray[] = {0x9B, 0xFF, 0xFF, 0xFF, 0xFF,
                                            0xFF, 0xFF, 0xFF, 0xFF};
-        std::string error;
+        CborDecodeError error;
         JsonValue back = JsonValue::fromCbor(impossibleArray, &error);
         BOOST_CHECK(back.isNull());
-        BOOST_CHECK(!error.empty());
+        BOOST_CHECK(bool(error));
     }
 }
 
@@ -485,9 +530,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Escapes) {
 // Input a reader has to turn away rather than accept and misread.
 BOOST_AUTO_TEST_CASE(test_JsonValue_Rejects) {
     auto rejected = [](std::string_view text) {
-        std::string error;
+        JsonParseError error;
         JsonValue v = JsonValue::fromJson(text, false, &error);
-        return v.isNull() && !error.empty();
+        return v.isNull() && error;
     };
 
     BOOST_CHECK(rejected(""));
@@ -642,17 +687,17 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_CborShapes) {
         JsonValue v = JsonValue::fromJson(R"({"a":[1,2,3]})", false);
         auto encoded = v.toCbor();
         encoded.resize(encoded.size() - 1);
-        std::string error;
+        CborDecodeError error;
         BOOST_CHECK(JsonValue::fromCbor(encoded, &error).isNull());
-        BOOST_CHECK(!error.empty());
+        BOOST_CHECK(bool(error));
     }
     // Bytes past the end of the value are not silently dropped.
     {
         auto encoded = JsonValue(1).toCbor();
         encoded.push_back(0x02);
-        std::string error;
+        CborDecodeError error;
         BOOST_CHECK(JsonValue::fromCbor(encoded, &error).isNull());
-        BOOST_CHECK(!error.empty());
+        BOOST_CHECK(bool(error));
     }
 }
 
@@ -691,9 +736,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_CborHalfPrecision) {
     // And two bytes are what it takes, so one is a truncated value rather than a zero.
     {
         const std::vector<uint8_t> buffer{0xF9, 0x3C};
-        std::string error;
+        CborDecodeError error;
         BOOST_CHECK(JsonValue::fromCbor(buffer, &error).isNull());
-        BOOST_CHECK(!error.empty());
+        BOOST_CHECK(bool(error));
     }
 }
 
@@ -744,8 +789,8 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_CborIndefiniteLength) {
     // What is ill formed stays ill formed.
     auto rejected = [](std::initializer_list<uint8_t> bytes) {
         const std::vector<uint8_t> buffer(bytes);
-        std::string error;
-        return JsonValue::fromCbor(buffer, &error).isNull() && !error.empty();
+        CborDecodeError error;
+        return JsonValue::fromCbor(buffer, &error).isNull() && error;
     };
 
     // A piece of an indefinite-length string cannot itself be indefinite, which is where the
@@ -819,9 +864,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_InvalidUtf8OnOutput) {
         JsonValue v(bad);
         std::string text = v.toJson();
 
-        std::string error;
+        JsonParseError error;
         JsonValue back = JsonValue::fromJson(text, false, &error);
-        BOOST_CHECK_MESSAGE(error.empty(), error);
+        BOOST_CHECK_MESSAGE(!error, error.message());
         BOOST_CHECK(back.isString());
 
         // The replacement character is there in place of what could not be written.
@@ -851,9 +896,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_StringOwnership) {
 // The rest of the ways a document can be wrong, beyond those already covered.
 BOOST_AUTO_TEST_CASE(test_JsonValue_MoreRejects) {
     auto rejected = [](const std::string &text) {
-        std::string error;
+        JsonParseError error;
         JsonValue v = JsonValue::fromJson(text, false, &error);
-        return v.isNull() && !error.empty();
+        return v.isNull() && error;
     };
 
     BOOST_CHECK(rejected("["));
@@ -875,12 +920,15 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_MoreRejects) {
     BOOST_CHECK(rejected("\"" + std::string(1, char(0xED)) + std::string(1, char(0xA0)) +
                          std::string(1, char(0x80)) + "\""));
 
-    // The message says where, which is the only thing making a large document fixable.
+    // Where, which is the only thing making a large document fixable.
     {
-        std::string error;
+        JsonParseError error;
         JsonValue::fromJson("{\n  \"valid\": 1,\n  invalid: 2\n}", false, &error);
-        BOOST_CHECK(error.find("line 3") != std::string::npos);
-        BOOST_CHECK(error.find("column 3") != std::string::npos);
+        BOOST_CHECK(error.code == JsonParseError::UnexpectedToken);
+        BOOST_CHECK_EQUAL(error.line, 3u);
+        BOOST_CHECK_EQUAL(error.column, 3u);
+        BOOST_CHECK_EQUAL(error.offset, 18u); // the i of invalid
+        BOOST_CHECK(error.message().find("line 3, column 3") != std::string::npos);
     }
 }
 
@@ -896,8 +944,8 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_ByteOrderMark) {
     // Only at the front, and only one. Anywhere else it is a character in the text, and outside a
     // string that is not a document.
     auto rejected = [](const std::string &text) {
-        std::string error;
-        return JsonValue::fromJson(text, false, &error).isNull() && !error.empty();
+        JsonParseError error;
+        return JsonValue::fromJson(text, false, &error).isNull() && error;
     };
     BOOST_CHECK(rejected(bom + bom + "[1]"));
     BOOST_CHECK(rejected("[1]" + bom));
@@ -918,19 +966,19 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_DepthLimit) {
         return std::string(size_t(depth), '[') + std::string(size_t(depth), ']');
     };
 
-    std::string error;
+    JsonParseError error;
     BOOST_CHECK(JsonValue::fromJson(nested(400), false, &error).isArray());
-    BOOST_CHECK(error.empty());
+    BOOST_CHECK(!error);
 
     JsonValue::fromJson(nested(100000), false, &error);
-    BOOST_CHECK(error.find("nested too deeply") != std::string::npos);
+    BOOST_CHECK(error.code == JsonParseError::NestedTooDeeply);
 
     // The limit is the same in the other direction, so a document that decodes cannot be one the
     // parser would have turned away.
-    error.clear();
+    CborDecodeError cborError;
     std::vector<uint8_t> cbor(100000, 0x9F);
-    JsonValue::fromCbor(cbor, &error);
-    BOOST_CHECK(error.find("nested too deeply") != std::string::npos);
+    JsonValue::fromCbor(cbor, &cborError);
+    BOOST_CHECK(cborError.code == CborDecodeError::NestedTooDeeply);
 }
 
 // isBool was the one type predicate nothing asked. It has to say no to the numbers, which is

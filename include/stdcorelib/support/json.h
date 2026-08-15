@@ -28,6 +28,59 @@ namespace stdc {
 
     using JsonObject = std::map<std::string, JsonValue, std::less<>>;
 
+    /// Why a JSON document was turned down, and where.
+    struct STDC_EXPORT JsonParseError {
+        enum Code {
+            NoError = 0,
+            UnexpectedEnd,   ///< the text stopped in the middle of something
+            UnexpectedToken, ///< something was there, and it was not what belongs at that point
+            IllegalNumber,   ///< a leading zero, a missing digit, an exponent with nothing in it
+            IllegalEscape,   ///< an escape nothing answers to, or a broken surrogate pair
+            IllegalString,   ///< a raw control character, or bytes that are not UTF-8
+            NestedTooDeeply,
+            TrailingContent,   ///< a whole value, and then more after it
+            CommentNotAllowed, ///< a comment, where \a ignoreComments was not asked for
+        };
+
+        Code code = NoError;
+        size_t offset = 0; ///< bytes from the start of the text
+        size_t line = 1;   ///< counting from one
+        size_t column = 1; ///< counting from one, in bytes rather than code points
+        std::string what;  ///< what was wrong, without the position in front of it
+
+        /// Whether this says a parse failed.
+        explicit operator bool() const {
+            return code != NoError;
+        }
+
+        /// The failure in words, with the line and column in front of it. Empty for NoError.
+        std::string message() const;
+    };
+
+    /// Why a CBOR document was turned down, and where.
+    struct STDC_EXPORT CborDecodeError {
+        enum Code {
+            NoError = 0,
+            UnexpectedEnd,    ///< the bytes stopped in the middle of an item
+            IllegalEncoding,  ///< a reserved encoding, or one this item is not allowed
+            IllegalString,    ///< a text string that is not UTF-8
+            OutOfRange,       ///< a number CBOR can write and JsonValue cannot hold
+            UnsupportedType,  ///< tags, and map keys that are not text
+            NestedTooDeeply,
+            TrailingContent,  ///< a whole item, and then more after it
+        };
+
+        Code code = NoError;
+        size_t offset = 0; ///< bytes from the start
+        std::string what;  ///< what was wrong, without the position in front of it
+
+        explicit operator bool() const {
+            return code != NoError;
+        }
+
+        std::string message() const;
+    };
+
     /// JsonValue - An immutable JSON value, shaped after Qt's.
     ///
     /// Reading never fails and never throws. An accessor asked for a type the value does not have
@@ -156,7 +209,7 @@ namespace stdc {
         ///        document and the text \c null both come back as a null value, so this tells
         ///        them apart.
         static JsonValue fromJson(std::string_view json, bool ignoreComments,
-                                  std::string *error = nullptr);
+                                  JsonParseError *error = nullptr);
 
         std::vector<uint8_t> toCbor() const;
 
@@ -166,7 +219,7 @@ namespace stdc {
         /// \param error Set to why the bytes were rejected, or cleared on success. A rejected
         ///        document and an encoded null both come back as a null value, so this tells
         ///        them apart.
-        static JsonValue fromCbor(array_view<uint8_t> cbor, std::string *error = nullptr);
+        static JsonValue fromCbor(array_view<uint8_t> cbor, CborDecodeError *error = nullptr);
 
     private:
         // The alternatives, all trivially copyable, so the payload moves as one object rather

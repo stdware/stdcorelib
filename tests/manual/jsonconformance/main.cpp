@@ -246,11 +246,11 @@ namespace {
             }
             text += '"';
 
-            std::string error;
+            stdc::JsonParseError error;
             const auto value = JsonValue::fromJson(text, false, &error);
             report.checked++;
 
-            if (error.empty()) {
+            if (!error) {
                 accepted++;
                 if (!isValidUtf8(line)) {
                     report.fail(path, "accepted a line that is not valid UTF-8");
@@ -261,7 +261,7 @@ namespace {
                     report.fail(path, "wrote text that is not valid UTF-8");
                 }
             } else if (isValidUtf8(line)) {
-                report.fail(path, "rejected a line that is valid UTF-8: " + error);
+                report.fail(path, "rejected a line that is valid UTF-8: " + error.message());
             }
         }
 
@@ -285,16 +285,16 @@ namespace {
         }
 
         const auto bytes = readFile(path);
-        std::string error;
+        stdc::CborDecodeError error;
         JsonValue::fromCbor(stdc::array_view<uint8_t>(
                                 reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()),
                             &error);
         report.checked++;
 
-        const bool asExpected = error.find("indefinite-length string") != std::string::npos;
+        const bool asExpected = error.what.find("indefinite-length string") != std::string::npos;
         if (!asExpected) {
-            report.fail(path, error.empty() ? "ill-formed nesting was accepted"
-                                            : "rejected for an unexpected reason: " + error);
+            report.fail(path, !error ? "ill-formed nesting was accepted"
+                                            : "rejected for an unexpected reason: " + error.message());
         }
         heading("binary_data", "1 document", asExpected ? 0 : 1);
     }
@@ -328,14 +328,14 @@ namespace {
             int count = 0, decoded = 0;
             for (const auto &path : filesIn(dir)) {
                 const auto bytes = readFile(path);
-                std::string error;
+                stdc::CborDecodeError error;
                 const auto value = JsonValue::fromCbor(
                     stdc::array_view<uint8_t>(reinterpret_cast<const uint8_t *>(bytes.data()),
                                               bytes.size()),
                     &error);
                 report.checked++;
                 count++;
-                if (error.empty()) {
+                if (!error) {
                     decoded++;
                     checkValue(path, value);
                 }

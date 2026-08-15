@@ -149,11 +149,11 @@ namespace conformance {
         for (int indent : {-1, 4}) {
             const auto text = indent < 0 ? compact : value.toJson(indent);
 
-            std::string error;
+            stdc::JsonParseError error;
             const auto reparsed = JsonValue::fromJson(text, false, &error);
-            if (!error.empty()) {
+            if (error) {
                 report.fail(path, "our own output does not parse (indent " +
-                                      std::to_string(indent) + "): " + error);
+                                      std::to_string(indent) + "): " + error.message());
                 continue;
             }
             if (reparsed != value) {
@@ -170,10 +170,10 @@ namespace conformance {
         // Our CBOR has to survive our own decoder. This says nothing about the encoding being
         // right, which is what checkForeignCbor() is for.
         {
-            std::string error;
+            stdc::CborDecodeError error;
             const auto decoded = JsonValue::fromCbor(value.toCbor(), &error);
-            if (!error.empty()) {
-                report.fail(path, "our own CBOR does not decode: " + error);
+            if (error) {
+                report.fail(path, "our own CBOR does not decode: " + error.message());
             } else if (decoded != value) {
                 report.fail(path, "value changed across a CBOR round trip");
             }
@@ -193,14 +193,14 @@ namespace conformance {
         }
 
         const auto bytes = readFile(cborPath);
-        std::string error;
+        stdc::CborDecodeError error;
         const auto decoded = JsonValue::fromCbor(
             stdc::array_view<uint8_t>(reinterpret_cast<const uint8_t *>(bytes.data()),
                                       bytes.size()),
             &error);
         report.checked++;
-        if (!error.empty()) {
-            report.fail(cborPath, "foreign CBOR does not decode: " + error);
+        if (error) {
+            report.fail(cborPath, "foreign CBOR does not decode: " + error.message());
         } else if (decoded != value) {
             report.fail(cborPath, "foreign CBOR decodes to a different value than the JSON");
         }
@@ -210,26 +210,26 @@ namespace conformance {
                                Expectation expectation, int *eitherAccepted) {
         report.checked++;
 
-        std::string error;
+        stdc::JsonParseError error;
         auto value = JsonValue::fromJson(text, false, &error);
 
         switch (expectation) {
             case Expectation::Accept:
-                if (!error.empty()) {
-                    report.fail(path, "rejected, but must be accepted: " + error);
+                if (error) {
+                    report.fail(path, "rejected, but must be accepted: " + error.message());
                     return {};
                 }
                 checkValue(path, value);
                 return value;
 
             case Expectation::Reject:
-                if (error.empty()) {
+                if (!error) {
                     report.fail(path, "accepted, but must be rejected");
                 }
                 return {};
 
             case Expectation::Either:
-                if (error.empty()) {
+                if (!error) {
                     if (eitherAccepted)
                         (*eitherAccepted)++;
                     checkValue(path, value);
@@ -274,9 +274,9 @@ namespace conformance {
 
             if (expectation == Expectation::Reject) {
                 report.checked++;
-                std::string error;
+                stdc::JsonParseError error;
                 JsonValue::fromJson(line, false, &error);
-                if (!error.empty()) {
+                if (error) {
                     rejected++;
                 }
             } else {

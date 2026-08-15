@@ -219,11 +219,11 @@ namespace {
             return;
         }
 
-        std::string encodedError;
+        stdc::CborDecodeError encodedError;
         const auto fromEncoded = JsonValue::fromCbor(view(test.encoded), &encodedError);
 
         if (test.fail) {
-            if (encodedError.empty()) {
+            if (!encodedError) {
                 report.fail(where, "accepted " + vectors::toHex(view(test.encoded)) +
                                        ", which is not well formed");
             } else {
@@ -232,12 +232,12 @@ namespace {
             return;
         }
 
-        if (!encodedError.empty()) {
-            if (const auto *what = outsideOurTypes(encodedError)) {
+        if (encodedError) {
+            if (const auto *what = outsideOurTypes(encodedError.what)) {
                 outside(what);
             } else {
                 report.fail(where, "rejected " + vectors::toHex(view(test.encoded)) + ": " +
-                                       encodedError);
+                                                              encodedError.message());
             }
             return;
         }
@@ -245,17 +245,17 @@ namespace {
         // The file writes the same item a second time, in preferred form. Both spellings have to
         // reach us as the same value -- that is the whole of what a decoder is for.
         if (test.hasDecoded) {
-            std::string decodedError;
+            stdc::CborDecodeError decodedError;
             const auto fromDecoded = JsonValue::fromCbor(view(test.decoded), &decodedError);
-            if (!decodedError.empty()) {
-                if (const auto *what = outsideOurTypes(decodedError)) {
+            if (decodedError) {
+                if (const auto *what = outsideOurTypes(decodedError.what)) {
                     // The preferred form uses something we do not carry, but the encoded form did
                     // not. Nothing to compare against, and no claim either way.
                     outside(what);
                     return;
                 }
                 report.fail(where, "read the encoded form but not the decoded one: " +
-                                       decodedError);
+                                                              decodedError.message());
                 return;
             }
             if (!sameValue(fromEncoded, fromDecoded)) {
@@ -339,10 +339,10 @@ namespace {
             return;
         }
 
-        std::string error;
+        stdc::JsonParseError error;
         const auto document = JsonValue::fromJson(readFile(path), false, &error);
-        if (!error.empty()) {
-            report.fail("appendix_a.json", "could not be read: " + error);
+        if (error) {
+            report.fail("appendix_a.json", "could not be read: " + error.message());
             return;
         }
 

@@ -267,33 +267,42 @@ namespace {
             }
             skipSpace();
             if (_pos != _s.size()) {
-                return fail("trailing content after the value");
+                return fail(JsonParseError::TrailingContent, "trailing content after the value");
             }
             return true;
         }
 
-        const std::string &error() const {
+        const JsonParseError &error() const {
             return _error;
         }
 
     private:
-        bool fail(const std::string &what) {
-            if (!_error.empty()) {
+        bool fail(JsonParseError::Code code, const char *what) {
+            if (_error) {
                 return false;
             }
+            // A comment where one is not allowed reads as an unexpected token from every position
+            // a comment can take, leaving the caller to work out that all it has to do is ask
+            // again with them on. Named here rather than at each of those positions.
+            if (code == JsonParseError::UnexpectedToken && !_comments && _pos + 1 < _s.size() &&
+                _s[_pos] == '/' && (_s[_pos + 1] == '/' || _s[_pos + 1] == '*')) {
+                code = JsonParseError::CommentNotAllowed;
+                what = "a comment, which this parse was not asked to ignore";
+            }
+            _error.code = code;
+            _error.offset = _pos;
+            _error.what = what;
             // Counted here rather than tracked as we go, since it only matters once.
-            size_t line = 1;
-            size_t column = 1;
+            _error.line = 1;
+            _error.column = 1;
             for (size_t i = 0; i < _pos && i < _s.size(); ++i) {
                 if (_s[i] == '\n') {
-                    ++line;
-                    column = 1;
+                    ++_error.line;
+                    _error.column = 1;
                 } else {
-                    ++column;
+                    ++_error.column;
                 }
             }
-            _error = "parse error at line " + std::to_string(line) + ", column " +
-                     std::to_string(column) + ": " + what;
             return false;
         }
 
@@ -342,27 +351,27 @@ namespace {
 
         bool parseValue(JsonValue *out, int depth) {
             if (depth > maxDepth) {
-                return fail("nested too deeply");
+                return fail(JsonParseError::NestedTooDeeply, "nested too deeply");
             }
             if (atEnd()) {
-                return fail("expected a value");
+                return fail(JsonParseError::UnexpectedEnd, "expected a value");
             }
             switch (peek()) {
                 case 'n':
                     if (!literal("null")) {
-                        return fail("expected a value");
+                        return fail(JsonParseError::UnexpectedToken, "expected a value");
                     }
                     *out = JsonValue();
                     return true;
                 case 't':
                     if (!literal("true")) {
-                        return fail("expected a value");
+                        return fail(JsonParseError::UnexpectedToken, "expected a value");
                     }
                     *out = JsonValue(true);
                     return true;
                 case 'f':
                     if (!literal("false")) {
-                        return fail("expected a value");
+                        return fail(JsonParseError::UnexpectedToken, "expected a value");
                     }
                     *out = JsonValue(false);
                     return true;
@@ -406,7 +415,7 @@ namespace {
                 }
                 skipSpace();
                 if (atEnd()) {
-                    return fail("expected ',' or ']'");
+                    return fail(JsonParseError::UnexpectedEnd, "expected ',' or ']'");
                 }
                 bool hasNext = false;
                 if (peek() == ',') {
@@ -415,7 +424,7 @@ namespace {
                 } else if (peek() == ']') {
                     ++_pos;
                 } else {
-                    return fail("expected ',' or ']'");
+                    return fail(JsonParseError::UnexpectedToken, "expected ',' or ']'");
                 }
 
                 if (!hasNext) {
@@ -437,7 +446,9 @@ namespace {
             for (;;) {
                 skipSpace();
                 if (atEnd() || peek() != '"') {
-                    return fail("expected a key");
+                    return fail(atEnd() ? JsonParseError::UnexpectedEnd
+                                        : JsonParseError::UnexpectedToken,
+                                "expected a key");
                 }
                 std::string key;
                 if (!parseString(&key)) {
@@ -445,7 +456,9 @@ namespace {
                 }
                 skipSpace();
                 if (atEnd() || peek() != ':') {
-                    return fail("expected ':'");
+                    return fail(atEnd() ? JsonParseError::UnexpectedEnd
+                                        : JsonParseError::UnexpectedToken,
+                                "expected ':'");
                 }
                 ++_pos;
                 skipSpace();
@@ -458,7 +471,7 @@ namespace {
                 }
                 skipSpace();
                 if (atEnd()) {
-                    return fail("expected ',' or '}'");
+                    return fail(JsonParseError::UnexpectedEnd, "expected ',' or '}'");
                 }
                 if (peek() == ',') {
                     ++_pos;
@@ -469,7 +482,7 @@ namespace {
                     *out = JsonValue(std::move(obj));
                     return true;
                 }
-                return fail("expected ',' or '}'");
+                return fail(JsonParseError::UnexpectedToken, "expected ',' or '}'");
             }
         }
 
@@ -510,7 +523,7 @@ namespace {
                 }
                 res.append(_s.data() + start, _pos - start);
                 if (atEnd()) {
-                    return fail("unterminated string");
+                    return fail(JsonParseError::UnexpectedEnd, "unterminated string");
                 }
                 char c = peek();
                 if (c == '"') {
@@ -518,12 +531,12 @@ namespace {
                     break;
                 }
                 if (uint8_t(c) < 0x20) {
-                    return fail("control character in string");
+                    return fail(JsonParseError::IllegalString, "control character in string");
                 }
 
                 ++_pos;
                 if (atEnd()) {
-                    return fail("unterminated escape");
+                    return fail(JsonParseError::UnexpectedEnd, "unterminated escape");
                 }
                 char e = peek();
                 ++_pos;
@@ -555,30 +568,34 @@ namespace {
                     case 'u': {
                         char32_t cp;
                         if (!hex4(&cp)) {
-                            return fail("expected four hexadecimal digits");
+                            return fail(JsonParseError::IllegalEscape,
+                                        "expected four hexadecimal digits");
                         }
                         if (cp >= 0xD800 && cp <= 0xDBFF) {
                             // A high surrogate means nothing without the low one after it.
                             if (_pos + 1 >= _s.size() || _s[_pos] != '\\' || _s[_pos + 1] != 'u') {
-                                return fail("expected a low surrogate");
+                                return fail(JsonParseError::IllegalEscape,
+                                            "expected a low surrogate");
                             }
                             _pos += 2;
                             char32_t low;
                             if (!hex4(&low)) {
-                                return fail("expected four hexadecimal digits");
+                                return fail(JsonParseError::IllegalEscape,
+                                            "expected four hexadecimal digits");
                             }
                             if (low < 0xDC00 || low > 0xDFFF) {
-                                return fail("expected a low surrogate");
+                                return fail(JsonParseError::IllegalEscape,
+                                            "expected a low surrogate");
                             }
                             cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
                         } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-                            return fail("unpaired low surrogate");
+                            return fail(JsonParseError::IllegalEscape, "unpaired low surrogate");
                         }
                         appendUtf8(res, cp);
                         break;
                     }
                     default:
-                        return fail("unknown escape");
+                        return fail(JsonParseError::IllegalEscape, "unknown escape");
                 }
             }
 
@@ -586,7 +603,7 @@ namespace {
             // raw high bytes need the full validator. A \u escape was validated as it was
             // decoded.
             if (hasNonAscii && !stdc::utf::is_valid_utf8(res)) {
-                return fail("string is not valid UTF-8");
+                return fail(JsonParseError::IllegalString, "string is not valid UTF-8");
             }
             *out = std::move(res);
             return true;
@@ -602,12 +619,12 @@ namespace {
                 ++_pos;
             }
             if (_pos == digitsStart) {
-                return fail("expected a value");
+                return fail(JsonParseError::UnexpectedToken, "expected a value");
             }
             // A leading zero is not one number, it is two written together.
             if (_s[digitsStart] == '0' && _pos - digitsStart > 1) {
                 _pos = digitsStart;
-                return fail("number has a leading zero");
+                return fail(JsonParseError::IllegalNumber, "number has a leading zero");
             }
 
             bool isDouble = false;
@@ -619,7 +636,8 @@ namespace {
                     ++_pos;
                 }
                 if (_pos == fracStart) {
-                    return fail("expected a digit after the decimal point");
+                    return fail(JsonParseError::IllegalNumber,
+                                "expected a digit after the decimal point");
                 }
             }
             if (!atEnd() && (peek() == 'e' || peek() == 'E')) {
@@ -633,7 +651,7 @@ namespace {
                     ++_pos;
                 }
                 if (_pos == expStart) {
-                    return fail("expected a digit in the exponent");
+                    return fail(JsonParseError::IllegalNumber, "expected a digit in the exponent");
                 }
             }
 
@@ -674,7 +692,7 @@ namespace {
             char *end = nullptr;
             double d = std::strtod(text.data(), &end);
             if (end != text.data() + text.size() - 1) {
-                return fail("malformed number");
+                return fail(JsonParseError::IllegalNumber, "malformed number");
             }
             *out = JsonValue(d);
             return true;
@@ -683,7 +701,7 @@ namespace {
         std::string_view _s;
         size_t _pos = 0;
         bool _comments;
-        std::string _error;
+        JsonParseError _error;
     };
 
     // ------------------------------------------------------------------------------------------
@@ -798,26 +816,28 @@ namespace {
                     return false;
                 }
                 if (_pos != _d.size()) {
-                    return fail("trailing bytes after the value");
+                    return fail(CborDecodeError::TrailingContent, "trailing bytes after the value");
                 }
                 return true;
             }
 
-            const std::string &error() const {
+            const CborDecodeError &error() const {
                 return _error;
             }
 
         private:
-            bool fail(const std::string &what) {
-                if (_error.empty()) {
-                    _error = "cbor error at byte " + std::to_string(_pos) + ": " + what;
+            bool fail(CborDecodeError::Code code, const char *what) {
+                if (!_error) {
+                    _error.code = code;
+                    _error.offset = _pos;
+                    _error.what = what;
                 }
                 return false;
             }
 
             bool take(uint8_t *out) {
                 if (_pos >= _d.size()) {
-                    return fail("input ended early");
+                    return fail(CborDecodeError::UnexpectedEnd, "input ended early");
                 }
                 *out = _d[_pos++];
                 return true;
@@ -825,7 +845,7 @@ namespace {
 
             bool takeBig(int bytes, uint64_t *out) {
                 if (_pos + size_t(bytes) > _d.size()) {
-                    return fail("input ended early");
+                    return fail(CborDecodeError::UnexpectedEnd, "input ended early");
                 }
                 uint64_t v = 0;
                 for (int i = 0; i < bytes; ++i) {
@@ -860,12 +880,13 @@ namespace {
                         return takeBig(8, out);
                     case 31:
                         if (!indefinite) {
-                            return fail("this type cannot have an indefinite length");
+                            return fail(CborDecodeError::IllegalEncoding,
+                                        "this type cannot have an indefinite length");
                         }
                         *indefinite = true;
                         return true;
                     default:
-                        return fail("reserved length encoding");
+                        return fail(CborDecodeError::IllegalEncoding, "reserved length encoding");
                 }
             }
 
@@ -875,7 +896,7 @@ namespace {
             template <class Bytes>
             bool rawBytes(uint64_t count, Bytes *out) {
                 if (count > _d.size() - _pos) {
-                    return fail("input ended early");
+                    return fail(CborDecodeError::UnexpectedEnd, "input ended early");
                 }
                 const auto *first =
                     reinterpret_cast<const typename Bytes::value_type *>(_d.data() + _pos);
@@ -887,7 +908,7 @@ namespace {
             /// Whether the next byte ends an indefinite-length item, consuming it if so.
             bool atBreak(bool *broke) {
                 if (_pos >= _d.size()) {
-                    return fail("input ended before the break");
+                    return fail(CborDecodeError::UnexpectedEnd, "input ended before the break");
                 }
                 *broke = _d[_pos] == breakByte;
                 if (*broke) {
@@ -917,11 +938,13 @@ namespace {
                         return false;
                     }
                     if (uint8_t(initial >> 5) != major) {
-                        return fail(
-                            "an indefinite-length string is made of strings of its own kind");
+                        return fail(CborDecodeError::IllegalEncoding,
+                                    "an indefinite-length string is made of strings of its own "
+                                    "kind");
                     }
                     if ((initial & 0x1F) == 31) {
-                        return fail("a piece of an indefinite-length string has to have a length");
+                        return fail(CborDecodeError::IllegalEncoding,
+                                    "a piece of an indefinite-length string has to have a length");
                     }
                     uint64_t count = 0;
                     if (!argument(initial, &count)) {
@@ -934,7 +957,8 @@ namespace {
                     if (major == 3 &&
                         !stdc::utf::is_valid_utf8(std::string_view(
                             reinterpret_cast<const char *>(chunk.data()), chunk.size()))) {
-                        return fail("text string is not valid UTF-8");
+                        return fail(CborDecodeError::IllegalString,
+                                    "text string is not valid UTF-8");
                     }
                     out->insert(out->end(), chunk.begin(), chunk.end());
                 }
@@ -942,7 +966,7 @@ namespace {
 
             bool decodeValue(JsonValue *out, int depth) {
                 if (depth > maxDepth) {
-                    return fail("nested too deeply");
+                    return fail(CborDecodeError::NestedTooDeeply, "nested too deeply");
                 }
                 uint8_t initial;
                 if (!take(&initial)) {
@@ -963,7 +987,8 @@ namespace {
                             return false;
                         }
                         if (arg > uint64_t(INT64_MAX)) {
-                            return fail("negative integer is out of range");
+                            return fail(CborDecodeError::OutOfRange,
+                                        "negative integer is out of range");
                         }
                         *out = JsonValue(-int64_t(arg) - 1);
                         return true;
@@ -995,7 +1020,8 @@ namespace {
                                 return false;
                             }
                             if (!stdc::utf::is_valid_utf8(raw)) {
-                                return fail("text string is not valid UTF-8");
+                                return fail(CborDecodeError::IllegalString,
+                                            "text string is not valid UTF-8");
                             }
                         }
                         *out = JsonValue(std::move(raw));
@@ -1011,7 +1037,7 @@ namespace {
                             // Every value occupies at least one byte, so this also rejects an
                             // impossible count before reserve can trust untrusted input.
                             if (arg > _d.size() - _pos) {
-                                return fail("input ended early");
+                                return fail(CborDecodeError::UnexpectedEnd, "input ended early");
                             }
                             arr.reserve(size_t(arg));
                         }
@@ -1055,7 +1081,8 @@ namespace {
                                 return false;
                             }
                             if (!key.isString()) {
-                                return fail("a map key has to be a text string");
+                                return fail(CborDecodeError::UnsupportedType,
+                                            "a map key has to be a text string");
                             }
                             JsonValue value;
                             if (!decodeValue(&value, depth + 1)) {
@@ -1067,7 +1094,7 @@ namespace {
                         return true;
                     }
                     case 6:
-                        return fail("tags are not supported");
+                        return fail(CborDecodeError::UnsupportedType, "tags are not supported");
                     default:
                         break;
                 }
@@ -1114,9 +1141,10 @@ namespace {
                         return true;
                     }
                     case breakByte:
-                        return fail("a break outside an indefinite-length item");
+                        return fail(CborDecodeError::IllegalEncoding,
+                                    "a break outside an indefinite-length item");
                     default:
-                        return fail("unsupported initial byte");
+                        return fail(CborDecodeError::IllegalEncoding, "unsupported initial byte");
                 }
             }
 
@@ -1136,7 +1164,7 @@ namespace {
 
             stdc::array_view<uint8_t> _d;
             size_t _pos = 0;
-            std::string _error;
+            CborDecodeError _error;
         };
 
     }
@@ -1144,6 +1172,20 @@ namespace {
 }
 
 namespace stdc {
+
+    std::string JsonParseError::message() const {
+        if (!*this) {
+            return {};
+        }
+        return "line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + what;
+    }
+
+    std::string CborDecodeError::message() const {
+        if (!*this) {
+            return {};
+        }
+        return "byte " + std::to_string(offset) + ": " + what;
+    }
 
     JsonValue::JsonValue(Type type) : _type(type) {
         _p.u = 0;
@@ -1433,9 +1475,10 @@ namespace stdc {
         return res;
     }
 
-    JsonValue JsonValue::fromJson(std::string_view json, bool ignoreComments, std::string *error) {
+    JsonValue JsonValue::fromJson(std::string_view json, bool ignoreComments,
+                                  JsonParseError *error) {
         if (error) {
-            error->clear();
+            *error = JsonParseError();
         }
         Parser parser(json, ignoreComments);
         JsonValue res;
@@ -1454,9 +1497,9 @@ namespace stdc {
         return res;
     }
 
-    JsonValue JsonValue::fromCbor(stdc::array_view<uint8_t> cbor, std::string *error) {
+    JsonValue JsonValue::fromCbor(stdc::array_view<uint8_t> cbor, CborDecodeError *error) {
         if (error) {
-            error->clear();
+            *error = CborDecodeError();
         }
         cbor::Decoder decoder(cbor);
         JsonValue res;
