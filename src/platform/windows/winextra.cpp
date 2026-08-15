@@ -12,18 +12,18 @@ namespace stdc::windows {
 
     using namespace winapi;
 
-    std::wstring SystemError(DWORD error_code, DWORD language_id) {
+    std::wstring systemError(DWORD errorCode, DWORD languageId) {
         std::wstring ret =
-            kernel32::FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, error_code, language_id);
+            kernel32::FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, errorCode, languageId);
         if (stdc::ends_with(ret, L"\r\n"))
             ret = ret.substr(0, ret.size() - 2);
         if (ret.empty()) {
             wchar_t buffer[50];
-            std::ignore = wsprintfW(buffer, L"Unknown error 0x%X.", unsigned(error_code));
+            std::ignore = wsprintfW(buffer, L"Unknown error 0x%X.", unsigned(errorCode));
             ret = buffer;
         }
         return ret;
-    };
+    }
 
     static RTL_OSVERSIONINFOW static_get_real_os_version() {
         HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
@@ -36,7 +36,7 @@ namespace stdc::windows {
         return rovi;
     }
 
-    RTL_OSVERSIONINFOW SystemVersion() {
+    RTL_OSVERSIONINFOW systemVersion() {
         static auto result = static_get_real_os_version();
         return result;
     }
@@ -51,7 +51,7 @@ namespace stdc::windows {
 
     }
 
-    std::chrono::system_clock::time_point FileTimeToTimePoint(const FILETIME &ft) {
+    std::chrono::system_clock::time_point fileTimeToTimePoint(const FILETIME &ft) {
         const uint64_t ticks = (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 
         // A timestamp from before 1970 makes this wrap, and reading the result back as signed is
@@ -62,7 +62,7 @@ namespace stdc::windows {
             std::chrono::duration_cast<std::chrono::system_clock::duration>(since_epoch));
     }
 
-    FILETIME TimePointToFileTime(const std::chrono::system_clock::time_point &tp) {
+    FILETIME timePointToFileTime(const std::chrono::system_clock::time_point &tp) {
         const auto since_epoch =
             std::chrono::duration_cast<FileTimeDuration>(tp.time_since_epoch());
 

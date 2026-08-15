@@ -384,7 +384,7 @@ namespace stdc {
         }
 
         std::string message(int ev) const override {
-            return wstring_conv::to_utf8(windows::SystemError(ev, 0));
+            return wstring_conv::to_utf8(windows::systemError(ev, 0));
         }
 
         std::error_condition default_error_condition(int ev) const noexcept override {

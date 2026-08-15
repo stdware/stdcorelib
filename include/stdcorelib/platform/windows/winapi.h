@@ -16,9 +16,9 @@ namespace stdc::winapi {
         //
         // winbase
         //
-        static std::wstring FormatMessageW(int from, LPCVOID source, DWORD message_id,
-                                           DWORD language_id, bool ignore_inserts = true,
-                                           void *arguments = nullptr, bool is_array = false);
+        static std::wstring FormatMessageW(int from, LPCVOID source, DWORD messageId,
+                                           DWORD languageId, bool ignoreInserts = true,
+                                           void *arguments = nullptr, bool isArray = false);
 
 
         //

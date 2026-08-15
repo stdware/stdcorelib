@@ -27,7 +27,7 @@ namespace {
 }
 
 BOOST_AUTO_TEST_CASE(test_system_error) {
-    auto message = SystemError(ERROR_FILE_NOT_FOUND);
+    auto message = systemError(ERROR_FILE_NOT_FOUND);
     BOOST_REQUIRE(!message.empty());
 
     // the system ends every one of these with a newline, which is no use inside a sentence
@@ -35,15 +35,15 @@ BOOST_AUTO_TEST_CASE(test_system_error) {
     BOOST_CHECK(message.back() != L'\r');
 
     // a code with no text behind it still describes itself rather than coming back empty
-    auto unknown = SystemError(0xDEADBEEF);
+    auto unknown = systemError(0xDEADBEEF);
     BOOST_CHECK(unknown == L"Unknown error 0xDEADBEEF.");
 
     // success is a code like any other and has its own message
-    BOOST_CHECK(!SystemError(ERROR_SUCCESS).empty());
+    BOOST_CHECK(!systemError(ERROR_SUCCESS).empty());
 }
 
 BOOST_AUTO_TEST_CASE(test_system_version) {
-    auto version = SystemVersion();
+    auto version = systemVersion();
 
     // read through RtlGetVersion rather than GetVersionEx, so it is the real version and not the
     // 6.2 that an unmanifested process is told
@@ -52,15 +52,15 @@ BOOST_AUTO_TEST_CASE(test_system_version) {
     BOOST_CHECK(version.dwBuildNumber > 0);
 
     // it is read once and kept
-    BOOST_CHECK_EQUAL(SystemVersion().dwBuildNumber, version.dwBuildNumber);
+    BOOST_CHECK_EQUAL(systemVersion().dwBuildNumber, version.dwBuildNumber);
 }
 
 BOOST_AUTO_TEST_CASE(test_file_time_at_the_unix_epoch) {
     const auto epoch = std::chrono::system_clock::time_point{};
 
-    BOOST_CHECK(FileTimeToTimePoint(fileTime(UnixEpochInFileTime)) == epoch);
+    BOOST_CHECK(fileTimeToTimePoint(fileTime(UnixEpochInFileTime)) == epoch);
 
-    auto back = TimePointToFileTime(epoch);
+    auto back = timePointToFileTime(epoch);
     BOOST_CHECK_EQUAL(back.dwLowDateTime, DWORD(UnixEpochInFileTime & 0xFFFFFFFF));
     BOOST_CHECK_EQUAL(back.dwHighDateTime, DWORD(UnixEpochInFileTime >> 32));
 }
@@ -70,12 +70,12 @@ BOOST_AUTO_TEST_CASE(test_file_time_before_the_unix_epoch) {
     // or a file system reports from before 1970 goes through a wraparound on the way out.
     constexpr uint64_t OneDay = 24ULL * 60 * 60 * 10'000'000;
 
-    auto tp = FileTimeToTimePoint(fileTime(UnixEpochInFileTime - OneDay));
+    auto tp = fileTimeToTimePoint(fileTime(UnixEpochInFileTime - OneDay));
     BOOST_CHECK(tp < std::chrono::system_clock::time_point{});
     BOOST_CHECK_EQUAL(std::chrono::duration_cast<std::chrono::hours>(tp.time_since_epoch()).count(),
                       -24);
 
-    auto back = TimePointToFileTime(tp);
+    auto back = timePointToFileTime(tp);
     BOOST_CHECK_EQUAL(back.dwLowDateTime, DWORD((UnixEpochInFileTime - OneDay) & 0xFFFFFFFF));
     BOOST_CHECK_EQUAL(back.dwHighDateTime, DWORD((UnixEpochInFileTime - OneDay) >> 32));
 }
@@ -85,7 +85,7 @@ BOOST_AUTO_TEST_CASE(test_file_time_round_trip) {
     FILETIME now;
     ::GetSystemTimeAsFileTime(&now);
 
-    auto back = TimePointToFileTime(FileTimeToTimePoint(now));
+    auto back = timePointToFileTime(fileTimeToTimePoint(now));
     BOOST_CHECK_EQUAL(back.dwLowDateTime, now.dwLowDateTime);
     BOOST_CHECK_EQUAL(back.dwHighDateTime, now.dwHighDateTime);
 }

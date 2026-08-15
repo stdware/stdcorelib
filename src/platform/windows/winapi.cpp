@@ -6,19 +6,19 @@ namespace stdc {}
 
 namespace stdc::winapi {
 
-    std::wstring kernel32::FormatMessageW(int from, LPCVOID source, DWORD message_id,
-                                          DWORD language_id, bool ignore_inserts, void *arguments,
-                                          bool is_array) {
+    std::wstring kernel32::FormatMessageW(int from, LPCVOID source, DWORD messageId,
+                                          DWORD languageId, bool ignoreInserts, void *arguments,
+                                          bool isArray) {
         DWORD dwFlags = FORMAT_MESSAGE_ALLOCATE_BUFFER | from;
-        if (ignore_inserts)
+        if (ignoreInserts)
             dwFlags |= FORMAT_MESSAGE_IGNORE_INSERTS;
-        if (is_array)
+        if (isArray)
             dwFlags |= FORMAT_MESSAGE_ARGUMENT_ARRAY;
 
         std::wstring ret;
         wchar_t *pAllocated = nullptr;
 
-        DWORD dwLength = ::FormatMessageW(dwFlags, source, message_id, language_id,
+        DWORD dwLength = ::FormatMessageW(dwFlags, source, messageId, languageId,
                                           (LPWSTR) &pAllocated, 0, (va_list *) arguments);
         if (dwLength != 0) {
             ret.assign(pAllocated, dwLength);

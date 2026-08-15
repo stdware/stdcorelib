@@ -15,13 +15,13 @@ namespace stdc::windows {
     /// \addtogroup platform
     /// @{
 
-    STDC_EXPORT std::wstring SystemError(DWORD error_code, DWORD language_id = 0);
+    STDC_EXPORT std::wstring systemError(DWORD errorCode, DWORD languageId = 0);
 
-    STDC_EXPORT RTL_OSVERSIONINFOW SystemVersion();
+    STDC_EXPORT RTL_OSVERSIONINFOW systemVersion();
 
-    STDC_EXPORT std::chrono::system_clock::time_point FileTimeToTimePoint(const FILETIME &ft);
+    STDC_EXPORT std::chrono::system_clock::time_point fileTimeToTimePoint(const FILETIME &ft);
 
-    STDC_EXPORT FILETIME TimePointToFileTime(const std::chrono::system_clock::time_point &tp);
+    STDC_EXPORT FILETIME timePointToFileTime(const std::chrono::system_clock::time_point &tp);
 
     /// @}
 }
