@@ -187,7 +187,7 @@ namespace stdc {
             // handle quoting. tokens can be surrounded by double quotes
             // "hello world". three consecutive double quotes represent
             // the quote character itself.
-            for (int i = 0; i < command.size(); ++i) {
+            for (size_t i = 0; i < command.size(); ++i) {
                 if (command.at(i) == '"') {
                     ++quoteCount;
                     if (quoteCount == 3) {
@@ -202,7 +202,7 @@ namespace stdc {
                         inQuote = !inQuote;
                     quoteCount = 0;
                 }
-                if (!inQuote && std::isspace(command.at(i))) {
+                if (!inQuote && str::is_space(command.at(i))) {
                     if (!tmp.empty()) {
                         args.push_back(tmp);
                         tmp.clear();

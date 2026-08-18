@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(test_application_name) {
     // the name is the filename with the executable suffix taken off
     BOOST_CHECK(str::starts_with(filename, name));
 #ifdef _WIN32
-    if (str::ends_with(str::to_lower(filename), ".exe")) {
+    if (str::ends_with(filename, ".exe", true)) {
         BOOST_CHECK_EQUAL(name + ".exe", filename);
     } else {
         BOOST_CHECK_EQUAL(name, filename);
@@ -110,6 +110,24 @@ BOOST_AUTO_TEST_CASE(test_split_command_line) {
         auto args = system::split_command_line(R"("C:\Program Files\app.exe" --flag)");
         BOOST_REQUIRE_EQUAL(args.size(), 2u);
         BOOST_CHECK_EQUAL(args[0], R"(C:\Program Files\app.exe)");
+        BOOST_CHECK_EQUAL(args[1], "--flag");
+    }
+
+    // A path outside ASCII, which every case above is missing. The bytes of one are negative
+    // wherever char is signed, and handing such a byte to the C library's isspace() ended the
+    // process under MSVC's debug runtime rather than answering.
+    {
+        auto args = system::split_command_line("app \xE4\xB8\xAD\xE6\x96\x87.txt --flag");
+        BOOST_REQUIRE_EQUAL(args.size(), 3u);
+        BOOST_CHECK_EQUAL(args[0], "app");
+        BOOST_CHECK_EQUAL(args[1], "\xE4\xB8\xAD\xE6\x96\x87.txt");
+        BOOST_CHECK_EQUAL(args[2], "--flag");
+    }
+    {
+        // the same bytes inside quotes, where the space must not split the token
+        auto args = system::split_command_line("\"\xE4\xB8\xAD \xE6\x96\x87.txt\" --flag");
+        BOOST_REQUIRE_EQUAL(args.size(), 2u);
+        BOOST_CHECK_EQUAL(args[0], "\xE4\xB8\xAD \xE6\x96\x87.txt");
         BOOST_CHECK_EQUAL(args[1], "--flag");
     }
 }
