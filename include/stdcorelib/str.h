@@ -12,10 +12,9 @@
 #include <initializer_list>
 #include <map>
 #include <algorithm>
-#include <cctype>
-#include <cwctype>
 #include <functional>
 #include <system_error>
+#include <tuple>
 
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/array_view.h>
@@ -311,33 +310,202 @@ namespace stdc {
 
     namespace str {
 
+        /// \defgroup ascii ASCII
+        /// \ingroup text
+        ///
+        /// Classifying and folding, for the ASCII range and nothing else.
+        ///
+        /// The C library's answers follow the current locale, so what a program accepts would
+        /// follow the machine it runs on, and they are undefined for a plain \c char that is
+        /// negative. What this library reads is machine syntax rather than human text, and it
+        /// reads it as UTF-8, where every byte of a character outside ASCII is negative. Folding
+        /// those bytes one at a time is not something that can be made to work, so these leave
+        /// them alone.
+        /// @{
+
+        constexpr bool is_digit(char c) noexcept {
+            return c >= '0' && c <= '9';
+        }
+
+        // @overload: is_digit(wchar_t)
+        constexpr bool is_digit(wchar_t c) noexcept {
+            return c >= L'0' && c <= L'9';
+        }
+
+        constexpr bool is_hex_digit(char c) noexcept {
+            return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        }
+
+        // @overload: is_hex_digit(wchar_t)
+        constexpr bool is_hex_digit(wchar_t c) noexcept {
+            return is_digit(c) || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F');
+        }
+
+        constexpr bool is_lower(char c) noexcept {
+            return c >= 'a' && c <= 'z';
+        }
+
+        // @overload: is_lower(wchar_t)
+        constexpr bool is_lower(wchar_t c) noexcept {
+            return c >= L'a' && c <= L'z';
+        }
+
+        constexpr bool is_upper(char c) noexcept {
+            return c >= 'A' && c <= 'Z';
+        }
+
+        // @overload: is_upper(wchar_t)
+        constexpr bool is_upper(wchar_t c) noexcept {
+            return c >= L'A' && c <= L'Z';
+        }
+
+        constexpr bool is_alpha(char c) noexcept {
+            return is_lower(c) || is_upper(c);
+        }
+
+        // @overload: is_alpha(wchar_t)
+        constexpr bool is_alpha(wchar_t c) noexcept {
+            return is_lower(c) || is_upper(c);
+        }
+
+        constexpr bool is_alnum(char c) noexcept {
+            return is_alpha(c) || is_digit(c);
+        }
+
+        // @overload: is_alnum(wchar_t)
+        constexpr bool is_alnum(wchar_t c) noexcept {
+            return is_alpha(c) || is_digit(c);
+        }
+
+        /// Space, tab, newline, vertical tab, form feed or carriage return.
+        constexpr bool is_space(char c) noexcept {
+            return c == ' ' || (c >= '\t' && c <= '\r');
+        }
+
+        // @overload: is_space(wchar_t)
+        constexpr bool is_space(wchar_t c) noexcept {
+            return c == L' ' || (c >= L'\t' && c <= L'\r');
+        }
+
+        /// A character that takes a place of its own on the screen, the space included.
+        constexpr bool is_print(char c) noexcept {
+            return c >= ' ' && c < '\x7F';
+        }
+
+        // @overload: is_print(wchar_t)
+        constexpr bool is_print(wchar_t c) noexcept {
+            return c >= L' ' && c < L'\x7F';
+        }
+
+        /// Printable, and neither a letter nor a digit nor the space.
+        constexpr bool is_punct(char c) noexcept {
+            return is_print(c) && c != ' ' && !is_alnum(c);
+        }
+
+        // @overload: is_punct(wchar_t)
+        constexpr bool is_punct(wchar_t c) noexcept {
+            return is_print(c) && c != L' ' && !is_alnum(c);
+        }
+
+        constexpr char to_lower(char c) noexcept {
+            return is_upper(c) ? char(c - 'A' + 'a') : c;
+        }
+
+        // @overload: to_lower(wchar_t)
+        constexpr wchar_t to_lower(wchar_t c) noexcept {
+            return is_upper(c) ? wchar_t(c - L'A' + L'a') : c;
+        }
+
+        constexpr char to_upper(char c) noexcept {
+            return is_lower(c) ? char(c - 'a' + 'A') : c;
+        }
+
+        // @overload: to_upper(wchar_t)
+        constexpr wchar_t to_upper(wchar_t c) noexcept {
+            return is_lower(c) ? wchar_t(c - L'a' + L'A') : c;
+        }
+
+        /// The value a hexadecimal digit stands for, or -1 where \a c is not one.
+        constexpr int hex_value(char c) noexcept {
+            if (is_digit(c)) {
+                return c - '0';
+            }
+            if (c >= 'a' && c <= 'f') {
+                return c - 'a' + 10;
+            }
+            if (c >= 'A' && c <= 'F') {
+                return c - 'A' + 10;
+            }
+            return -1;
+        }
+
+        /// \c strcasecmp() over views, folding the ASCII letters and nothing else.
+        ///
+        /// \return a negative number, zero, or a positive number, as \a s sorts before \a other,
+        ///         the same as it, or after it
+        STDC_EXPORT int compare_insensitive(const std::string_view &s,
+                                            const std::string_view &other);
+
+        inline bool equals_insensitive(const std::string_view &s, const std::string_view &other) {
+            if (s.size() != other.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < s.size(); ++i) {
+                if (to_lower(s[i]) != to_lower(other[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // @overload: equals_insensitive(wstring_view, wstring_view)
+        inline bool equals_insensitive(const std::wstring_view &s, const std::wstring_view &other) {
+            if (s.size() != other.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < s.size(); ++i) {
+                if (to_lower(s[i]) != to_lower(other[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         inline std::string to_upper(std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), [](char c) {
-                return static_cast<char>(::toupper(static_cast<unsigned char>(c)));
-            });
+            std::ignore = std::transform(s.begin(), s.end(), s.begin(),
+                                         [](char c) { return to_upper(c); });
             return s;
         }
 
         // @overload: to_upper(wstring)
         inline std::wstring to_upper(std::wstring s) {
-            std::transform(s.begin(), s.end(), s.begin(),
-                           [](wchar_t c) { return static_cast<wchar_t>(::towupper(c)); });
+            std::ignore = std::transform(s.begin(), s.end(), s.begin(),
+                                         [](wchar_t c) { return to_upper(c); });
             return s;
         }
 
         inline std::string to_lower(std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), [](char c) {
-                return static_cast<char>(::tolower(static_cast<unsigned char>(c)));
-            });
+            std::ignore = std::transform(s.begin(), s.end(), s.begin(),
+                                         [](char c) { return to_lower(c); });
             return s;
         }
 
         // @overload: to_lower(wstring)
         inline std::wstring to_lower(std::wstring s) {
-            std::transform(s.begin(), s.end(), s.begin(),
-                           [](wchar_t c) { return static_cast<wchar_t>(::towlower(c)); });
+            std::ignore = std::transform(s.begin(), s.end(), s.begin(),
+                                         [](wchar_t c) { return to_lower(c); });
             return s;
         }
+
+        /// @}
+    }
+
+    using str::compare_insensitive;
+    using str::equals_insensitive;
+    using str::to_lower;
+    using str::to_upper;
+
+    namespace str {
 
         inline bool starts_with(const std::string_view &s, const std::string_view &prefix) {
 #if __cplusplus >= 202002L
@@ -530,8 +698,6 @@ namespace stdc {
 
     using str::starts_with;
     using str::ends_with;
-    using str::to_lower;
-    using str::to_upper;
     using str::ltrim;
     using str::rtrim;
     using str::trim;
@@ -542,17 +708,10 @@ namespace stdc {
 
         STDC_EXPORT std::string vasprintf(const char *fmt, va_list args);
 
-        /// \c strcasecmp() over views, folding the ASCII letters and nothing else.
-        ///
-        /// The platform's folds through the current locale, so which names matched would follow
-        /// whatever the machine is set to, and a name a program declares is an identifier.
-        STDC_EXPORT int ascii_casecmp(const std::string_view &s, const std::string_view &other);
-
     }
 
     using str::asprintf;
     using str::vasprintf;
-    using str::ascii_casecmp;
 
 #ifdef _WIN32
     STDC_EXPORT const std::error_category &windows_utf8_category() noexcept;

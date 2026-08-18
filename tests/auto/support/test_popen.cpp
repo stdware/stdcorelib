@@ -710,7 +710,7 @@ BOOST_AUTO_TEST_CASE(test_unicode_environment) {
         {"\u53d8\u91cf", "\u503c\u6d4b\u8bd5"},
     };
     for (const auto &item : system::environment()) {
-        if (str::ascii_casecmp(item.first, "PATH") == 0) {
+        if (str::equals_insensitive(item.first, "PATH")) {
             childEnv.insert(item);
             break;
         }

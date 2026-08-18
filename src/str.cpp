@@ -245,10 +245,10 @@ namespace stdc {
                         segment_start = p; // Skip "%%"
                         continue;
                     }
-                    if (isdigit(next)) {
+                    if (is_digit(next)) {
                         int index = next - '0';
                         auto q = p + 2;
-                        while (!is_end(q) && isdigit(*q)) {
+                        while (!is_end(q) && is_digit(*q)) {
                             index = index * 10 + (*q - '0');
                             q++;
                         }
@@ -354,16 +354,13 @@ namespace stdc {
         // not depending on which include the translation unit saw first: the call does not
         // compile where the declaration was read without the macro, and where both were read
         // with it the symbol is one the library never exported.
-        int ascii_casecmp(const std::string_view &s, const std::string_view &other) {
-            const auto &lowered = [](char c) {
-                return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c;
-            };
-            size_t shared = std::min(s.size(), other.size());
+        int compare_insensitive(const std::string_view &s, const std::string_view &other) {
+            size_t shared = (std::min)(s.size(), other.size());
             for (size_t i = 0; i < shared; ++i) {
                 // As unsigned, or a byte above 0x7F sorts before every letter where char is
                 // signed.
-                auto a = static_cast<unsigned char>(lowered(s[i]));
-                auto b = static_cast<unsigned char>(lowered(other[i]));
+                auto a = static_cast<unsigned char>(to_lower(s[i]));
+                auto b = static_cast<unsigned char>(to_lower(other[i]));
                 if (a != b) {
                     return a < b ? -1 : 1;
                 }

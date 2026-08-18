@@ -110,13 +110,13 @@ namespace stdc::cli {
             static const std::string_view yes[] = {"true", "yes", "on", "1"};
             static const std::string_view no[] = {"false", "no", "off", "0"};
             for (auto word : yes) {
-                if (str::ascii_casecmp(token, word) == 0) {
+                if (str::equals_insensitive(token, word)) {
                     *out = true;
                     return true;
                 }
             }
             for (auto word : no) {
-                if (str::ascii_casecmp(token, word) == 0) {
+                if (str::equals_insensitive(token, word)) {
                     *out = false;
                     return true;
                 }
@@ -199,7 +199,7 @@ namespace stdc::cli {
             if (!ignore_case) {
                 return a == b;
             }
-            return str::ascii_casecmp(a, b) == 0;
+            return str::equals_insensitive(a, b);
         }
 
     }
@@ -1367,7 +1367,7 @@ namespace stdc::cli {
             }
             for (auto &item : r->options) {
                 for (const auto &spelling : item.option->tokens()) {
-                    if (str::ascii_casecmp(spelling, token) == 0) {
+                    if (str::equals_insensitive(spelling, token)) {
                         return &item;
                     }
                 }
