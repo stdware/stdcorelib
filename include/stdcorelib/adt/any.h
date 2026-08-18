@@ -90,6 +90,13 @@ namespace stdc {
             }
         };
 
+        /// Named rather than a lambda in the table below. MSVC leaves a lambda's conversion to
+        /// a function pointer out of a constant initializer, and the table then needs a guard.
+        template <class T>
+        type_id type_of() {
+            return type_id::of<T>();
+        }
+
         /// What an any needs to know about the type it is holding.
         ///
         /// One of these per type per module, reached through a pointer that is null exactly when
@@ -106,7 +113,7 @@ namespace stdc {
         template <class T>
         const any_vtable &vtable_of() noexcept {
             static const any_vtable table{
-                [] { return type_id::of<T>(); },
+                &type_of<T>,
                 &any_handler<T>::destroy,
                 &any_handler<T>::copy,
                 &any_handler<T>::move,
