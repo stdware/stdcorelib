@@ -3,7 +3,6 @@
 #include "sharedlibrary.h"
 
 #include <algorithm>
-#include <cctype>
 
 #ifdef _WIN32
 #  include "winapi.h"
@@ -372,7 +371,7 @@ namespace stdc {
                 start = dotPos + 1;
             }
             if (part.empty() || !std::all_of(part.begin(), part.end(),
-                                             [](unsigned char c) { return std::isdigit(c); })) {
+                                             [](char c) { return str::is_digit(c); })) {
                 return false;
             }
         }
@@ -382,17 +381,9 @@ namespace stdc {
 
     bool SharedLibrary::isLibrary(const fs::path &path) {
 #if defined(_WIN32)
-        auto fileName = path.wstring();
-        return fileName.size() >= 4 &&
-               std::equal(fileName.end() - 4, fileName.end(), L".dll", [](wchar_t a, wchar_t b) {
-                   return ::tolower(a) == ::tolower(b); //
-               });
+        return str::ends_with(path.wstring(), L".dll", true);
 #elif defined(__APPLE__)
-        auto fileName = path.string();
-        return fileName.size() >= 6 &&
-               std::equal(fileName.end() - 6, fileName.end(), L".dylib", [](char a, char b) {
-                   return ::tolower(a) == ::tolower(b); //
-               });
+        return str::ends_with(path.string(), ".dylib", true);
 #else
         auto fileName = path.string();
         size_t soPos;
