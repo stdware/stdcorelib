@@ -206,11 +206,11 @@ namespace stdc {
         STDC_EXPORT std::string join(const array_view<std::string> &v,
                                            const std::string_view &delimiter);
 
-        // @overload: join(vector<string_view>, string_view)
+        /// \overload
         STDC_EXPORT std::string join(const array_view<std::string_view> &v,
                                            const std::string_view &delimiter);
 
-        // @overload: join(initializer_list<string_view>, string_view)
+        /// \overload
         inline std::string join(std::initializer_list<std::string_view> v,
                                 const std::string_view &delimiter) {
             return join(array_view<std::string_view>(v.begin(), v.size()), delimiter);
@@ -225,11 +225,11 @@ namespace stdc {
         STDC_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                               const std::string_view &delimiter);
 
-        // @overload: split(string &&, string_view)
+        /// \overload
         STDC_EXPORT std::vector<std::string> split(std::string &&s,
                                                          const std::string_view &delimiter);
 
-        // @overload: split(const char *, string_view)
+        /// \overload
         inline std::vector<std::string_view> split(const char *s,
                                                    const std::string_view &delimiter) {
             return split(std::string_view(s), delimiter);
@@ -259,17 +259,17 @@ namespace stdc {
                                });
         }
 
-        // @overload: formatN(string_view)
+        /// \overload
         inline std::string formatN(const std::string_view &fmt) {
             return std::string(fmt);
         }
 
-        // @overload: formatN(string &&)
+        /// \overload
         inline std::string formatN(std::string &&fmt) {
             return fmt;
         }
 
-        // @overload: formatN(const char *)
+        /// \overload
         inline std::string formatN(const char *fmt) {
             return fmt;
         }
@@ -287,7 +287,7 @@ namespace stdc {
             varexp(const std::string_view &s,
                    const std::function<std::string(const std::string_view &)> &find);
 
-        // @overload: varexp(string, map<string, string>)
+        /// \overload
         template <template <class, class, class...> class MAP, class K, class V, class... MODS>
         inline std::string varexp(const std::string_view &s, const MAP<K, V, MODS...> &vars) {
             return varexp(s, [&vars](const std::string_view &name) -> std::string {
@@ -327,7 +327,7 @@ namespace stdc {
             return c >= '0' && c <= '9';
         }
 
-        // @overload: is_digit(wchar_t)
+        /// \overload
         constexpr bool is_digit(wchar_t c) noexcept {
             return c >= L'0' && c <= L'9';
         }
@@ -336,7 +336,7 @@ namespace stdc {
             return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         }
 
-        // @overload: is_hex_digit(wchar_t)
+        /// \overload
         constexpr bool is_hex_digit(wchar_t c) noexcept {
             return is_digit(c) || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F');
         }
@@ -345,7 +345,7 @@ namespace stdc {
             return c >= 'a' && c <= 'z';
         }
 
-        // @overload: is_lower(wchar_t)
+        /// \overload
         constexpr bool is_lower(wchar_t c) noexcept {
             return c >= L'a' && c <= L'z';
         }
@@ -354,7 +354,7 @@ namespace stdc {
             return c >= 'A' && c <= 'Z';
         }
 
-        // @overload: is_upper(wchar_t)
+        /// \overload
         constexpr bool is_upper(wchar_t c) noexcept {
             return c >= L'A' && c <= L'Z';
         }
@@ -363,7 +363,7 @@ namespace stdc {
             return is_lower(c) || is_upper(c);
         }
 
-        // @overload: is_alpha(wchar_t)
+        /// \overload
         constexpr bool is_alpha(wchar_t c) noexcept {
             return is_lower(c) || is_upper(c);
         }
@@ -372,7 +372,7 @@ namespace stdc {
             return is_alpha(c) || is_digit(c);
         }
 
-        // @overload: is_alnum(wchar_t)
+        /// \overload
         constexpr bool is_alnum(wchar_t c) noexcept {
             return is_alpha(c) || is_digit(c);
         }
@@ -382,7 +382,7 @@ namespace stdc {
             return c == ' ' || (c >= '\t' && c <= '\r');
         }
 
-        // @overload: is_space(wchar_t)
+        /// \overload
         constexpr bool is_space(wchar_t c) noexcept {
             return c == L' ' || (c >= L'\t' && c <= L'\r');
         }
@@ -392,7 +392,7 @@ namespace stdc {
             return c >= ' ' && c < '\x7F';
         }
 
-        // @overload: is_print(wchar_t)
+        /// \overload
         constexpr bool is_print(wchar_t c) noexcept {
             return c >= L' ' && c < L'\x7F';
         }
@@ -402,7 +402,7 @@ namespace stdc {
             return is_print(c) && c != ' ' && !is_alnum(c);
         }
 
-        // @overload: is_punct(wchar_t)
+        /// \overload
         constexpr bool is_punct(wchar_t c) noexcept {
             return is_print(c) && c != L' ' && !is_alnum(c);
         }
@@ -411,7 +411,7 @@ namespace stdc {
             return is_upper(c) ? char(c - 'A' + 'a') : c;
         }
 
-        // @overload: to_lower(wchar_t)
+        /// \overload
         constexpr wchar_t to_lower(wchar_t c) noexcept {
             return is_upper(c) ? wchar_t(c - L'A' + L'a') : c;
         }
@@ -420,7 +420,7 @@ namespace stdc {
             return is_lower(c) ? char(c - 'a' + 'A') : c;
         }
 
-        // @overload: to_upper(wchar_t)
+        /// \overload
         constexpr wchar_t to_upper(wchar_t c) noexcept {
             return is_lower(c) ? wchar_t(c - L'a' + L'A') : c;
         }
@@ -458,7 +458,7 @@ namespace stdc {
             return true;
         }
 
-        // @overload: equals_insensitive(wstring_view, wstring_view)
+        /// \overload
         inline bool equals_insensitive(const std::wstring_view &s, const std::wstring_view &other) {
             if (s.size() != other.size()) {
                 return false;
@@ -477,7 +477,7 @@ namespace stdc {
             return s;
         }
 
-        // @overload: to_upper(wstring)
+        /// \overload
         inline std::wstring to_upper(std::wstring s) {
             std::ignore = std::transform(s.begin(), s.end(), s.begin(),
                                          [](wchar_t c) { return to_upper(c); });
@@ -490,7 +490,7 @@ namespace stdc {
             return s;
         }
 
-        // @overload: to_lower(wstring)
+        /// \overload
         inline std::wstring to_lower(std::wstring s) {
             std::ignore = std::transform(s.begin(), s.end(), s.begin(),
                                          [](wchar_t c) { return to_lower(c); });
@@ -524,7 +524,7 @@ namespace stdc {
 #endif
         }
 
-        // @overload: starts_with(string, char)
+        /// \overload
         inline bool starts_with(const std::string_view &s, char prefix,
                                 bool case_insensitive = false) {
             if (s.empty()) {
@@ -533,7 +533,7 @@ namespace stdc {
             return case_insensitive ? to_lower(s.front()) == to_lower(prefix) : s.front() == prefix;
         }
 
-        // @overload: starts_with(wstring_view, wstring_view)
+        /// \overload
         inline bool starts_with(const std::wstring_view &s, const std::wstring_view &prefix,
                                 bool case_insensitive = false) {
             if (case_insensitive) {
@@ -547,7 +547,7 @@ namespace stdc {
 #endif
         }
 
-        // @overload: starts_with(wstring_view, wchar_t)
+        /// \overload
         inline bool starts_with(const std::wstring_view &s, wchar_t prefix,
                                 bool case_insensitive = false) {
             if (s.empty()) {
@@ -573,7 +573,7 @@ namespace stdc {
 #endif
         }
 
-        // @overload: ends_with(string_view, char)
+        /// \overload
         inline bool ends_with(const std::string_view &s, char suffix,
                               bool case_insensitive = false) {
             if (s.empty()) {
@@ -582,7 +582,7 @@ namespace stdc {
             return case_insensitive ? to_lower(s.back()) == to_lower(suffix) : s.back() == suffix;
         }
 
-        // @overload: ends_with(wstring_view, wstring_view)
+        /// \overload
         inline bool ends_with(const std::wstring_view &s, const std::wstring_view &suffix,
                               bool case_insensitive = false) {
             if (case_insensitive) {
@@ -596,7 +596,7 @@ namespace stdc {
 #endif
         }
 
-        // @overload: ends_with(wstring_view, wchar_t)
+        /// \overload
         inline bool ends_with(const std::wstring_view &s, wchar_t suffix,
                               bool case_insensitive = false) {
             if (s.empty()) {
@@ -609,12 +609,12 @@ namespace stdc {
             return s.substr(N);
         }
 
-        // @overload: drop_front(string &&, size_t)
+        /// \overload
         inline std::string drop_front(std::string &&s, size_t N = 1) {
             return s.substr(N);
         }
 
-        // @overload: drop_front(const char *, size_t)
+        /// \overload
         inline std::string_view drop_front(const char *s, size_t N = 1) {
             return drop_front(std::string_view(s), N);
         }
@@ -623,12 +623,12 @@ namespace stdc {
             return s.substr(0, s.size() - N);
         }
 
-        // @overload: drop_back(string &&, size_t)
+        /// \overload
         inline std::string drop_back(std::string &&s, size_t N = 1) {
             return s.substr(0, s.size() - N);
         }
 
-        // @overload: drop_back(const char *, size_t)
+        /// \overload
         inline std::string_view drop_back(const char *s, size_t N = 1) {
             return drop_back(std::string_view(s), N);
         }
@@ -637,30 +637,30 @@ namespace stdc {
             return drop_front(s, std::min(s.size(), s.find_first_not_of(Char)));
         }
 
-        // @overload: ltrim(string &&, char)
+        /// \overload
         inline std::string ltrim(std::string &&s, char Char) {
             return std::string(
                 drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Char))));
         }
 
-        // @overload: ltrim(string_view, string_view)
+        /// \overload
         inline std::string_view ltrim(const std::string_view &s,
                                       const std::string_view &Chars = " \t\n\v\f\r") {
             return drop_front(s, std::min(s.size(), s.find_first_not_of(Chars)));
         }
 
-        // @overload: ltrim(string &&, string_view)
+        /// \overload
         inline std::string ltrim(std::string &&s, const std::string_view &Chars = " \t\n\v\f\r") {
             return std::string(
                 drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Chars))));
         }
 
-        // @overload: ltrim(const char *, char)
+        /// \overload
         inline std::string_view ltrim(const char *s, char Char) {
             return ltrim(std::string_view(s), Char);
         }
 
-        // @overload: ltrim(const char *, string_view)
+        /// \overload
         inline std::string_view ltrim(const char *s,
                                       const std::string_view &Chars = " \t\n\v\f\r") {
             return ltrim(std::string_view(s), Chars);
@@ -670,30 +670,30 @@ namespace stdc {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1));
         }
 
-        // @overload: rtrim(string &&, char)
+        /// \overload
         inline std::string rtrim(std::string &&s, char Char) {
             return std::string(drop_back(
                 std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1)));
         }
 
-        // @overload: rtrim(string_view, string_view)
+        /// \overload
         inline std::string_view rtrim(const std::string_view &s,
                                       const std::string_view &Chars = " \t\n\v\f\r") {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1));
         }
 
-        // @overload: rtrim(string &&, string)
+        /// \overload
         inline std::string rtrim(std::string &&s, const std::string_view &Chars = " \t\n\v\f\r") {
             return std::string(drop_back(
                 std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1)));
         }
 
-        // @overload: rtrim(const char *, char)
+        /// \overload
         inline std::string_view rtrim(const char *s, char Char) {
             return rtrim(std::string_view(s), Char);
         }
 
-        // @overload: rtrim(const char *, string_view)
+        /// \overload
         inline std::string_view rtrim(const char *s,
                                       const std::string_view &Chars = " \t\n\v\f\r") {
             return rtrim(std::string_view(s), Chars);
@@ -703,28 +703,28 @@ namespace stdc {
             return rtrim(ltrim(s, Char), Char);
         }
 
-        // @overload: trim(string &&, char)
+        /// \overload
         inline std::string trim(std::string &&s, char Char) {
             return std::string(rtrim(ltrim(std::string_view(s), Char), Char));
         }
 
-        // @overload: trim(string_view, string_view)
+        /// \overload
         inline std::string_view trim(const std::string_view &s,
                                      std::string_view Chars = " \t\n\v\f\r") {
             return rtrim(ltrim(s, Chars), Chars);
         }
 
-        // @overload: trim(string &&, string)
+        /// \overload
         inline std::string trim(std::string &&s, std::string_view Chars = " \t\n\v\f\r") {
             return std::string(rtrim(ltrim(std::string_view(s), Chars), Chars));
         }
 
-        // @overload: trim(const char *, char)
+        /// \overload
         inline std::string_view trim(const char *s, char Char) {
             return trim(std::string_view(s), Char);
         }
 
-        // @overload: trim(const char *, string_view)
+        /// \overload
         inline std::string_view trim(const char *s, std::string_view Chars = " \t\n\v\f\r") {
             return trim(std::string_view(s), Chars);
         }
@@ -749,7 +749,7 @@ namespace stdc {
             return false;
         }
 
-        // @overload: contains(string_view, char)
+        /// \overload
         inline bool contains(const std::string_view &s, char c, bool case_insensitive = false) {
             if (!case_insensitive) {
                 return s.find(c) != std::string_view::npos;

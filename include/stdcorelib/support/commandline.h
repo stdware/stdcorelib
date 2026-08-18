@@ -1680,10 +1680,10 @@ namespace stdc::cli {
         ///       too. Override this where the right column is what should differ.
         virtual HelpBlock::Entry entry(const Argument &argument, const HelpSizes &sizes) const;
 
-        // @overload: entry
+        /// \overload
         virtual HelpBlock::Entry entry(const Option &option, const HelpSizes &sizes) const;
 
-        // @overload: entry
+        /// \overload
         virtual HelpBlock::Entry entry(const Command &command, const HelpSizes &sizes) const;
 
         /// The usage line, already broken across as many lines as it needs.

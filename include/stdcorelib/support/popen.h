@@ -253,7 +253,7 @@ namespace stdc {
         ///       will not be found unless \a env carries one.
         Popen &env(std::optional<std::map<std::string, std::string>> env);
 
-        // @overload: env(initializer_list)
+        /// \overload
         inline Popen &env(std::initializer_list<std::pair<const std::string, std::string>> env) {
             return this->env(std::map<std::string, std::string>(env));
         }

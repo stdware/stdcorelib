@@ -198,7 +198,7 @@ namespace stdc {
         std::enable_if_t<std::is_same<T1, T>::value, array_view<T>> &
             operator=(T1 &&Temporary) = delete;
 
-        // @overload
+        /// \overload
         template <typename T1>
         std::enable_if_t<std::is_same<T1, T>::value, array_view<T>> &
             operator=(std::initializer_list<T1>) = delete;

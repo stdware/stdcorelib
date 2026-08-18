@@ -103,10 +103,10 @@ namespace stdc {
         /// two columns, and a combining mark occupies none.
         STDC_EXPORT int display_width(const std::string_view &utf8);
 
-        // @overload: display_width
-        //
-        // For one code point, so that text can be measured while it is being walked rather than
-        // a character at a time through the string form.
+        /// \overload
+        ///
+        /// For one code point, so that text can be measured while it is being walked rather than
+        /// a character at a time through the string form.
         STDC_EXPORT int display_width(char32_t c);
 
         /// @}
@@ -128,14 +128,14 @@ namespace stdc {
         ///       \a file, so a redirected stream receives the text alone.
         STDC_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
 
-        // @overload: fputs
+        /// \overload
         STDC_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf,
                                     FILE *file);
 
         /// Like fputs(), to \c stdout and followed by a newline.
         STDC_EXPORT int puts(int style, int fg, int bg, const char *buf);
 
-        // @overload: puts
+        /// \overload
         STDC_EXPORT int puts(int style, int fg, int bg, const std::string_view &buf);
 
         /// Like fputs(), with printf-style formatting.
@@ -165,7 +165,7 @@ namespace stdc {
             return console::puts(style, fg, bg, formatN(format, std::forward<Args>(args)...));
         }
 
-        // @overload: println
+        /// \overload
         inline int println() {
             return std::putchar('\n');
         }
@@ -183,7 +183,7 @@ namespace stdc {
             return console::fputs(nostyle, nocolor, nocolor, buf, file);
         }
 
-        // @overload: u8fputs
+        /// \overload
         inline int u8fputs(const std::string_view &buf, FILE *file) {
             return console::fputs(nostyle, nocolor, nocolor, buf, file);
         }
@@ -192,7 +192,7 @@ namespace stdc {
             return console::puts(nostyle, nocolor, nocolor, buf);
         }
 
-        // @overload: u8puts
+        /// \overload
         inline int u8puts(const std::string_view &buf) {
             return console::puts(nostyle, nocolor, nocolor, buf);
         }
@@ -216,7 +216,7 @@ namespace stdc {
             return u8puts(formatN(format, std::forward<Args>(args)...));
         }
 
-        // @overload: u8println
+        /// \overload
         inline int u8println() {
             return std::putchar('\n');
         }
@@ -294,13 +294,13 @@ namespace stdc {
         /// \sa fputs(), which takes the same attributes as arguments
         STDC_EXPORT int cfputs(const char *buf, FILE *file);
 
-        // @overload: cfputs
+        /// \overload
         STDC_EXPORT int cfputs(const std::string_view &buf, FILE *file);
 
         /// Like cfputs(), to \c stdout and followed by a newline.
         STDC_EXPORT int cputs(const char *buf);
 
-        // @overload: cputs
+        /// \overload
         STDC_EXPORT int cputs(const std::string_view &buf);
 
         /// Like cfputs(), with printf-style formatting.
