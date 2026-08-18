@@ -56,8 +56,12 @@ namespace stdc {
 
         /// One of these exists per type per module.
         ///
-        /// The address answers the question in the common case, the name answers it when two
-        /// modules are involved, and \a id caches that second answer.
+        /// \a name is the identity. It is settled at compile time, and two entries stand for the
+        /// same type exactly when it matches.
+        ///
+        /// \a id is a cache of the one address this process uses for that name. There is no
+        /// answer before the process has a table, and none is wanted until two modules meet, so
+        /// it starts null and the first comparison that spans them fills it in.
         struct type_entry {
             std::string_view name;
             std::atomic<const void *> id;
@@ -140,11 +144,11 @@ namespace stdc {
         }
 
         friend bool operator==(type_id lhs, type_id rhs) {
-            if (!lhs._entry || !rhs._entry) {
-                return lhs._entry == rhs._entry;
-            }
             if (lhs._entry == rhs._entry) {
-                return true; // one module, which is every comparison that never leaves home
+                return true;
+            }
+            if (!lhs._entry || !rhs._entry) {
+                return false;
             }
             return detail::resolve_type_id(*lhs._entry) == detail::resolve_type_id(*rhs._entry);
         }
