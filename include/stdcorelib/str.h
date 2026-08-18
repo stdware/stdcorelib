@@ -507,7 +507,16 @@ namespace stdc {
 
     namespace str {
 
-        inline bool starts_with(const std::string_view &s, const std::string_view &prefix) {
+        /// Whether \a s begins with \a prefix.
+        ///
+        /// With \a case_insensitive the ASCII letters of both are folded before comparing, and
+        /// every other byte is left as it is.
+        inline bool starts_with(const std::string_view &s, const std::string_view &prefix,
+                                bool case_insensitive = false) {
+            if (case_insensitive) {
+                return s.size() >= prefix.size() &&
+                       equals_insensitive(s.substr(0, prefix.size()), prefix);
+            }
 #if __cplusplus >= 202002L
             return s.starts_with(prefix);
 #else
@@ -516,12 +525,21 @@ namespace stdc {
         }
 
         // @overload: starts_with(string, char)
-        inline bool starts_with(const std::string_view &s, char prefix) {
-            return s.size() >= 1 && s.front() == prefix;
+        inline bool starts_with(const std::string_view &s, char prefix,
+                                bool case_insensitive = false) {
+            if (s.empty()) {
+                return false;
+            }
+            return case_insensitive ? to_lower(s.front()) == to_lower(prefix) : s.front() == prefix;
         }
 
         // @overload: starts_with(wstring_view, wstring_view)
-        inline bool starts_with(const std::wstring_view &s, const std::wstring_view &prefix) {
+        inline bool starts_with(const std::wstring_view &s, const std::wstring_view &prefix,
+                                bool case_insensitive = false) {
+            if (case_insensitive) {
+                return s.size() >= prefix.size() &&
+                       equals_insensitive(s.substr(0, prefix.size()), prefix);
+            }
 #if __cplusplus >= 202002L
             return s.starts_with(prefix);
 #else
@@ -530,11 +548,24 @@ namespace stdc {
         }
 
         // @overload: starts_with(wstring_view, wchar_t)
-        inline bool starts_with(const std::wstring_view &s, wchar_t prefix) {
-            return s.size() >= 1 && s.front() == prefix;
+        inline bool starts_with(const std::wstring_view &s, wchar_t prefix,
+                                bool case_insensitive = false) {
+            if (s.empty()) {
+                return false;
+            }
+            return case_insensitive ? to_lower(s.front()) == to_lower(prefix) : s.front() == prefix;
         }
 
-        inline bool ends_with(const std::string_view &s, const std::string_view &suffix) {
+        /// Whether \a s ends with \a suffix.
+        ///
+        /// With \a case_insensitive the ASCII letters of both are folded before comparing, and
+        /// every other byte is left as it is.
+        inline bool ends_with(const std::string_view &s, const std::string_view &suffix,
+                              bool case_insensitive = false) {
+            if (case_insensitive) {
+                return s.size() >= suffix.size() &&
+                       equals_insensitive(s.substr(s.size() - suffix.size()), suffix);
+            }
 #if __cplusplus >= 202002L
             return s.ends_with(suffix);
 #else
@@ -543,12 +574,21 @@ namespace stdc {
         }
 
         // @overload: ends_with(string_view, char)
-        inline bool ends_with(const std::string_view &s, char suffix) {
-            return s.size() >= 1 && s.back() == suffix;
+        inline bool ends_with(const std::string_view &s, char suffix,
+                              bool case_insensitive = false) {
+            if (s.empty()) {
+                return false;
+            }
+            return case_insensitive ? to_lower(s.back()) == to_lower(suffix) : s.back() == suffix;
         }
 
         // @overload: ends_with(wstring_view, wstring_view)
-        inline bool ends_with(const std::wstring_view &s, const std::wstring_view &suffix) {
+        inline bool ends_with(const std::wstring_view &s, const std::wstring_view &suffix,
+                              bool case_insensitive = false) {
+            if (case_insensitive) {
+                return s.size() >= suffix.size() &&
+                       equals_insensitive(s.substr(s.size() - suffix.size()), suffix);
+            }
 #if __cplusplus >= 202002L
             return s.ends_with(suffix);
 #else
@@ -557,8 +597,12 @@ namespace stdc {
         }
 
         // @overload: ends_with(wstring_view, wchar_t)
-        inline bool ends_with(const std::wstring_view &s, wchar_t suffix) {
-            return s.size() >= 1 && s.back() == suffix;
+        inline bool ends_with(const std::wstring_view &s, wchar_t suffix,
+                              bool case_insensitive = false) {
+            if (s.empty()) {
+                return false;
+            }
+            return case_insensitive ? to_lower(s.back()) == to_lower(suffix) : s.back() == suffix;
         }
 
         inline std::string_view drop_front(const std::string_view &s, size_t N = 1) {
@@ -685,13 +729,37 @@ namespace stdc {
             return trim(std::string_view(s), Chars);
         }
 
-        inline bool contains(const std::string_view &s, const std::string_view &sub) {
-            return s.find(sub) != std::string_view::npos;
+        /// Whether \a sub appears anywhere in \a s.
+        ///
+        /// With \a case_insensitive the ASCII letters of both are folded before comparing, and
+        /// every other byte is left as it is.
+        inline bool contains(const std::string_view &s, const std::string_view &sub,
+                             bool case_insensitive = false) {
+            if (!case_insensitive) {
+                return s.find(sub) != std::string_view::npos;
+            }
+            if (sub.size() > s.size()) {
+                return false;
+            }
+            for (size_t i = 0; i + sub.size() <= s.size(); ++i) {
+                if (equals_insensitive(s.substr(i, sub.size()), sub)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // @overload: contains(string_view, char)
-        inline bool contains(const std::string_view &s, char c) {
-            return s.find(c) != std::string_view::npos;
+        inline bool contains(const std::string_view &s, char c, bool case_insensitive = false) {
+            if (!case_insensitive) {
+                return s.find(c) != std::string_view::npos;
+            }
+            for (char item : s) {
+                if (to_lower(item) == to_lower(c)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
     }

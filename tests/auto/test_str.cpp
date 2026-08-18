@@ -292,6 +292,45 @@ BOOST_AUTO_TEST_CASE(test_starts_ends_with) {
     BOOST_CHECK(str::ends_with(std::wstring_view(L"abc"), L'c'));
 }
 
+BOOST_AUTO_TEST_CASE(test_starts_ends_with_folded) {
+    BOOST_CHECK(str::starts_with("Hello World", "hello", true));
+    BOOST_CHECK(!str::starts_with("Hello World", "hello", false)); // the default
+    BOOST_CHECK(!str::starts_with("Hello World", "hello"));
+    BOOST_CHECK(str::ends_with("Hello World", "WORLD", true));
+    BOOST_CHECK(!str::ends_with("Hello World", "WORLD"));
+
+    // the edges the sensitive form has, answered the same way
+    BOOST_CHECK(str::starts_with("abc", "", true));
+    BOOST_CHECK(!str::starts_with("ab", "ABC", true));
+    BOOST_CHECK(!str::starts_with("", "a", true));
+    BOOST_CHECK(str::ends_with("abc", "", true));
+    BOOST_CHECK(!str::ends_with("ab", "XAB", true));
+    BOOST_CHECK(!str::ends_with("", "a", true));
+
+    // char overloads
+    BOOST_CHECK(str::starts_with("Abc", 'a', true));
+    BOOST_CHECK(!str::starts_with("Abc", 'a'));
+    BOOST_CHECK(str::ends_with("abC", 'c', true));
+    BOOST_CHECK(!str::ends_with("abC", 'c'));
+    BOOST_CHECK(!str::starts_with("", 'a', true));
+
+    // wide overloads, which is what SharedLibrary::isLibrary() reads a suffix with
+    BOOST_CHECK(str::ends_with(std::wstring_view(L"Qt6Core.DLL"), std::wstring_view(L".dll"),
+                               true));
+    BOOST_CHECK(!str::ends_with(std::wstring_view(L"Qt6Core.DLL"), std::wstring_view(L".dll")));
+    BOOST_CHECK(str::starts_with(std::wstring_view(L"ABC"), L'a', true));
+
+    // Only the ASCII letters fold, so a name outside it still has to match itself and nothing
+    // else. A locale-driven fold is what would answer otherwise.
+    BOOST_CHECK(str::ends_with("\xE4\xB8\xAD.DLL", ".dll", true));
+    BOOST_CHECK(str::starts_with("\xE4\xB8\xADx", "\xE4\xB8\xADX", true));
+    BOOST_CHECK(!str::starts_with("\xE4\xB8\xAD", "\xE6\x96\x87", true));
+}
+
+// The string_view and the std::string&& overloads used to be ambiguous for a plain string
+// literal: both need exactly one user-defined conversion. clang and gcc rejected every such
+// call, MSVC quietly resolved it to the std::string one and allocated. A third overload taking
+// const char * settles it, because array-to-pointer is an exact match and beats both.
 BOOST_AUTO_TEST_CASE(test_literal_overload_resolution) {
     static_assert(std::is_same_v<decltype(str::trim("x")), std::string_view>);
     static_assert(std::is_same_v<decltype(str::ltrim("x")), std::string_view>);
@@ -379,6 +418,22 @@ BOOST_AUTO_TEST_CASE(test_contains) {
     BOOST_CHECK(str::contains("hello", 'e'));
     BOOST_CHECK(!str::contains("hello", 'z'));
     BOOST_CHECK(!str::contains("", 'a'));
+
+    // folded
+    BOOST_CHECK(str::contains("Hello World", "LO W", true));
+    BOOST_CHECK(!str::contains("Hello World", "LO W"));
+    BOOST_CHECK(str::contains("hello", "HELLO", true)); // the whole string
+    BOOST_CHECK(str::contains("hello", "", true));      // and the empty one
+    BOOST_CHECK(!str::contains("hello", "XYZ", true));
+    BOOST_CHECK(!str::contains("ab", "ABC", true)); // longer than the haystack
+    BOOST_CHECK(!str::contains("", "a", true));
+    BOOST_CHECK(str::contains("hello", 'E', true));
+    BOOST_CHECK(!str::contains("hello", 'E'));
+    BOOST_CHECK(!str::contains("", 'a', true));
+
+    // Only the ASCII letters fold, so a byte outside it matches itself and nothing else.
+    BOOST_CHECK(str::contains("a\xE4\xB8\xADz", "\xE4\xB8\xAD", true));
+    BOOST_CHECK(!str::contains("a\xE4\xB8\xADz", "\xE6\x96\x87", true));
 }
 
 BOOST_AUTO_TEST_CASE(test_to_string) {
