@@ -33,8 +33,8 @@ namespace stdc {
         SharedLibrary();
         ~SharedLibrary();
 
-        SharedLibrary(SharedLibrary &&other) noexcept;
-        SharedLibrary &operator=(SharedLibrary &&other) noexcept;
+        SharedLibrary(SharedLibrary &&RHS) noexcept;
+        SharedLibrary &operator=(SharedLibrary &&RHS) noexcept;
 
     public:
         /// Passed to open(). These map onto the \c dlopen flags and are ignored where the

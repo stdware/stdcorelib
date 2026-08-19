@@ -44,12 +44,12 @@ namespace stdc {
         vlarray_base(const vlarray_base &) = delete;
         vlarray_base(vlarray_base &&) = delete;
 
-        vlarray_base &operator=(const vlarray_base &other) {
-            assign(other);
+        vlarray_base &operator=(const vlarray_base &RHS) {
+            assign(RHS);
             return *this;
         }
-        vlarray_base &operator=(vlarray_base &&other) {
-            assign(std::move(other));
+        vlarray_base &operator=(vlarray_base &&RHS) {
+            assign(std::move(RHS));
             return *this;
         }
 
@@ -261,29 +261,29 @@ namespace stdc {
         /// \name Swap
         /// @{
 
-        /// Swaps contents with \a other. Two heap-backed arrays just trade buffers. Otherwise the
+        /// Swaps contents with \a RHS. Two heap-backed arrays just trade buffers. Otherwise the
         /// shared elements are swapped and the longer one's tail is moved over, since neither can
         /// trade away its own inline buffer.
-        void swap(vlarray_base &other) {
-            if (this == &other)
+        void swap(vlarray_base &RHS) {
+            if (this == &RHS)
                 return;
 
-            if (!is_inline() && !other.is_inline() && allocators_equal(other)) {
-                std::swap(m_begin, other.m_begin);
-                std::swap(m_size, other.m_size);
-                std::swap(m_capacity, other.m_capacity);
+            if (!is_inline() && !RHS.is_inline() && allocators_equal(RHS)) {
+                std::swap(m_begin, RHS.m_begin);
+                std::swap(m_size, RHS.m_size);
+                std::swap(m_capacity, RHS.m_capacity);
                 return;
             }
 
-            reserve(other.m_size);
-            other.reserve(m_size);
+            reserve(RHS.m_size);
+            RHS.reserve(m_size);
 
-            size_type shared = std::min(m_size, other.m_size);
+            size_type shared = std::min(m_size, RHS.m_size);
             for (size_type i = 0; i < shared; ++i)
-                std::swap(m_begin[i], other.m_begin[i]);
+                std::swap(m_begin[i], RHS.m_begin[i]);
 
-            vlarray_base &longer = (m_size >= other.m_size) ? *this : other;
-            vlarray_base &shorter = (m_size >= other.m_size) ? other : *this;
+            vlarray_base &longer = (m_size >= RHS.m_size) ? *this : RHS;
+            vlarray_base &shorter = (m_size >= RHS.m_size) ? RHS : *this;
             for (size_type i = shared; i < longer.m_size; ++i)
                 AT::construct(shorter.m_alloc, shorter.m_begin + i, std::move(longer.m_begin[i]));
 
@@ -314,44 +314,44 @@ namespace stdc {
             m_inline_capacity = capacity;
         }
 
-        void assign(const vlarray_base &other) {
-            if (this == &other)
+        void assign(const vlarray_base &RHS) {
+            if (this == &RHS)
                 return;
             clear();
-            reserve(other.m_size);
-            for (m_size = 0; m_size < other.m_size; ++m_size)
-                AT::construct(m_alloc, m_begin + m_size, other.m_begin[m_size]);
+            reserve(RHS.m_size);
+            for (m_size = 0; m_size < RHS.m_size; ++m_size)
+                AT::construct(m_alloc, m_begin + m_size, RHS.m_begin[m_size]);
         }
 
-        void assign(vlarray_base &&other) {
-            if (this == &other)
+        void assign(vlarray_base &&RHS) {
+            if (this == &RHS)
                 return;
             reset_to_inline();
-            bool may_steal = allocators_equal(other);
+            bool may_steal = allocators_equal(RHS);
             if constexpr (AT::propagate_on_container_move_assignment::value) {
-                m_alloc = std::move(other.m_alloc);
+                m_alloc = std::move(RHS.m_alloc);
                 may_steal = true;
             }
-            if (!other.is_inline() && may_steal) {
+            if (!RHS.is_inline() && may_steal) {
                 // Steal the heap buffer outright. Its elements come along with it.
-                m_begin = other.m_begin;
-                m_size = other.m_size;
-                m_capacity = other.m_capacity;
-                other.m_begin = other.m_inline_begin;
-                other.m_capacity = other.m_inline_capacity;
-                other.m_size = 0;
+                m_begin = RHS.m_begin;
+                m_size = RHS.m_size;
+                m_capacity = RHS.m_capacity;
+                RHS.m_begin = RHS.m_inline_begin;
+                RHS.m_capacity = RHS.m_inline_capacity;
+                RHS.m_size = 0;
             } else {
-                reserve(other.m_size);
-                for (m_size = 0; m_size < other.m_size; ++m_size) {
-                    AT::construct(m_alloc, m_begin + m_size, std::move(other.m_begin[m_size]));
+                reserve(RHS.m_size);
+                for (m_size = 0; m_size < RHS.m_size; ++m_size) {
+                    AT::construct(m_alloc, m_begin + m_size, std::move(RHS.m_begin[m_size]));
                 }
                 if constexpr (AT::propagate_on_container_move_assignment::value) {
-                    for (size_type i = 0; i < other.m_size; ++i) {
-                        AT::destroy(m_alloc, other.m_begin + i);
+                    for (size_type i = 0; i < RHS.m_size; ++i) {
+                        AT::destroy(m_alloc, RHS.m_begin + i);
                     }
-                    other.m_size = 0;
+                    RHS.m_size = 0;
                 } else {
-                    other.clear();
+                    RHS.clear();
                 }
             }
         }
@@ -361,11 +361,11 @@ namespace stdc {
             return m_begin == m_inline_begin;
         }
 
-        bool allocators_equal(const vlarray_base &other) const {
+        bool allocators_equal(const vlarray_base &RHS) const {
             if constexpr (AT::is_always_equal::value) {
                 return true;
             } else {
-                return m_alloc == other.m_alloc;
+                return m_alloc == RHS.m_alloc;
             }
         }
 
@@ -481,18 +481,18 @@ namespace stdc {
     };
 
     template <class T, class Alloc>
-    inline void swap(vlarray_base<T, Alloc> &lhs, vlarray_base<T, Alloc> &rhs) {
-        lhs.swap(rhs);
+    inline void swap(vlarray_base<T, Alloc> &LHS, vlarray_base<T, Alloc> &RHS) {
+        LHS.swap(RHS);
     }
 
     template <class T, class Alloc>
-    inline bool operator==(const vlarray_base<T, Alloc> &lhs, const vlarray_base<T, Alloc> &rhs) {
-        return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(), rhs.begin());
+    inline bool operator==(const vlarray_base<T, Alloc> &LHS, const vlarray_base<T, Alloc> &RHS) {
+        return LHS.size() == RHS.size() && std::equal(LHS.begin(), LHS.end(), RHS.begin());
     }
 
     template <class T, class Alloc>
-    inline bool operator!=(const vlarray_base<T, Alloc> &lhs, const vlarray_base<T, Alloc> &rhs) {
-        return !(lhs == rhs);
+    inline bool operator!=(const vlarray_base<T, Alloc> &LHS, const vlarray_base<T, Alloc> &RHS) {
+        return !(LHS == RHS);
     }
 
     /// A dynamic array with N elements of inline (pre-allocated) storage.
@@ -521,21 +521,21 @@ namespace stdc {
             this->resize(size, value);
         }
 
-        vlarray(const vlarray &other) : vlarray(other.get_allocator()) {
-            this->assign(other);
+        vlarray(const vlarray &RHS) : vlarray(RHS.get_allocator()) {
+            this->assign(RHS);
         }
-        vlarray(vlarray &&other) noexcept(std::is_nothrow_move_constructible_v<T> &&
-                                         std::is_nothrow_copy_constructible_v<Alloc>)
-            : vlarray(other.get_allocator()) {
-            this->assign(std::move(other));
+        vlarray(vlarray &&RHS) noexcept(std::is_nothrow_move_constructible_v<T> &&
+                                        std::is_nothrow_copy_constructible_v<Alloc>)
+            : vlarray(RHS.get_allocator()) {
+            this->assign(std::move(RHS));
         }
 
         // Cross-size construction: accept any vlarray<T, M> through the common base.
-        vlarray(const Base &other) : vlarray(other.get_allocator()) {
-            this->assign(other);
+        vlarray(const Base &RHS) : vlarray(RHS.get_allocator()) {
+            this->assign(RHS);
         }
-        vlarray(Base &&other) : vlarray(other.get_allocator()) {
-            this->assign(std::move(other));
+        vlarray(Base &&RHS) : vlarray(RHS.get_allocator()) {
+            this->assign(std::move(RHS));
         }
 
         vlarray(std::initializer_list<T> init, const Alloc &alloc = Alloc()) : vlarray(alloc) {
@@ -547,23 +547,23 @@ namespace stdc {
             this->append(first, last);
         }
 
-        vlarray &operator=(const vlarray &other) {
-            this->assign(other);
+        vlarray &operator=(const vlarray &RHS) {
+            this->assign(RHS);
             return *this;
         }
-        vlarray &operator=(vlarray &&other) noexcept(
+        vlarray &operator=(vlarray &&RHS) noexcept(
             std::is_nothrow_move_constructible_v<T> &&
             (!AllocTraits::propagate_on_container_move_assignment::value ||
              std::is_nothrow_move_assignable_v<Alloc>)) {
-            this->assign(std::move(other));
+            this->assign(std::move(RHS));
             return *this;
         }
-        vlarray &operator=(const Base &other) {
-            this->assign(other);
+        vlarray &operator=(const Base &RHS) {
+            this->assign(RHS);
             return *this;
         }
-        vlarray &operator=(Base &&other) {
-            this->assign(std::move(other));
+        vlarray &operator=(Base &&RHS) {
+            this->assign(std::move(RHS));
             return *this;
         }
         vlarray &operator=(std::initializer_list<T> init) {

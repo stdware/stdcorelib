@@ -129,11 +129,11 @@ namespace stdc {
                 return r;
             }
 
-            bool operator==(const Iterator &other) const {
-                return _node == other._node;
+            bool operator==(const Iterator &RHS) const {
+                return _node == RHS._node;
             }
-            bool operator!=(const Iterator &other) const {
-                return _node != other._node;
+            bool operator!=(const Iterator &RHS) const {
+                return _node != RHS._node;
             }
 
         private:

@@ -1250,10 +1250,10 @@ namespace stdc::cli {
         ParseResult();
 
         /// Move only: one command line, parsed once, one owner of the answer.
-        ParseResult(const ParseResult &other) = delete;
-        ParseResult &operator=(const ParseResult &other) = delete;
-        ParseResult(ParseResult &&other) noexcept;
-        ParseResult &operator=(ParseResult &&other) noexcept;
+        ParseResult(const ParseResult &RHS) = delete;
+        ParseResult &operator=(const ParseResult &RHS) = delete;
+        ParseResult(ParseResult &&RHS) noexcept;
+        ParseResult &operator=(ParseResult &&RHS) noexcept;
         ~ParseResult();
 
         inline bool isValid() const {
@@ -1468,12 +1468,12 @@ namespace stdc::cli {
         explicit Parser(Command root);
         ~Parser();
 
-        Parser(const Parser &other) = delete;
-        Parser &operator=(const Parser &other) = delete;
+        Parser(const Parser &RHS) = delete;
+        Parser &operator=(const Parser &RHS) = delete;
 
         /// Movable, so that a parser can be built and returned by a function of its own.
-        Parser(Parser &&other) noexcept;
-        Parser &operator=(Parser &&other) noexcept;
+        Parser(Parser &&RHS) noexcept;
+        Parser &operator=(Parser &&RHS) noexcept;
 
         /// Sets a new root command, replacing the one given to the constructor or the one the
         /// last parse() ran against.

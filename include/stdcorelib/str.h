@@ -441,17 +441,17 @@ namespace stdc {
 
         /// \c strcasecmp() over views, folding the ASCII letters and nothing else.
         ///
-        /// \return a negative number, zero, or a positive number, as \a s sorts before \a other,
+        /// \return a negative number, zero, or a positive number, as \a LHS sorts before \a RHS,
         ///         the same as it, or after it
-        STDC_EXPORT int compare_insensitive(const std::string_view &s,
-                                            const std::string_view &other);
+        STDC_EXPORT int compare_insensitive(const std::string_view &LHS,
+                                            const std::string_view &RHS);
 
-        inline bool equals_insensitive(const std::string_view &s, const std::string_view &other) {
-            if (s.size() != other.size()) {
+        inline bool equals_insensitive(const std::string_view &LHS, const std::string_view &RHS) {
+            if (LHS.size() != RHS.size()) {
                 return false;
             }
-            for (size_t i = 0; i < s.size(); ++i) {
-                if (to_lower(s[i]) != to_lower(other[i])) {
+            for (size_t i = 0; i < LHS.size(); ++i) {
+                if (to_lower(LHS[i]) != to_lower(RHS[i])) {
                     return false;
                 }
             }
@@ -459,12 +459,12 @@ namespace stdc {
         }
 
         /// \overload
-        inline bool equals_insensitive(const std::wstring_view &s, const std::wstring_view &other) {
-            if (s.size() != other.size()) {
+        inline bool equals_insensitive(const std::wstring_view &LHS, const std::wstring_view &RHS) {
+            if (LHS.size() != RHS.size()) {
                 return false;
             }
-            for (size_t i = 0; i < s.size(); ++i) {
-                if (to_lower(s[i]) != to_lower(other[i])) {
+            for (size_t i = 0; i < LHS.size(); ++i) {
+                if (to_lower(LHS[i]) != to_lower(RHS[i])) {
                     return false;
                 }
             }

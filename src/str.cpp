@@ -354,21 +354,21 @@ namespace stdc {
         // not depending on which include the translation unit saw first: the call does not
         // compile where the declaration was read without the macro, and where both were read
         // with it the symbol is one the library never exported.
-        int compare_insensitive(const std::string_view &s, const std::string_view &other) {
-            size_t shared = (std::min)(s.size(), other.size());
+        int compare_insensitive(const std::string_view &LHS, const std::string_view &RHS) {
+            size_t shared = (std::min)(LHS.size(), RHS.size());
             for (size_t i = 0; i < shared; ++i) {
                 // As unsigned, or a byte above 0x7F sorts before every letter where char is
                 // signed.
-                auto a = static_cast<unsigned char>(to_lower(s[i]));
-                auto b = static_cast<unsigned char>(to_lower(other[i]));
+                auto a = static_cast<unsigned char>(to_lower(LHS[i]));
+                auto b = static_cast<unsigned char>(to_lower(RHS[i]));
                 if (a != b) {
                     return a < b ? -1 : 1;
                 }
             }
-            if (s.size() == other.size()) {
+            if (LHS.size() == RHS.size()) {
                 return 0;
             }
-            return s.size() < other.size() ? -1 : 1;
+            return LHS.size() < RHS.size() ? -1 : 1;
         }
 
     }

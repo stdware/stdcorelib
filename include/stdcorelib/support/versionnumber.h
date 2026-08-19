@@ -51,12 +51,12 @@ namespace stdc {
         std::string toString() const;
         bool isEmpty() const;
 
-        bool operator==(const VersionNumber &rhs) const;
-        bool operator!=(const VersionNumber &rhs) const;
-        bool operator<(const VersionNumber &rhs) const;
-        bool operator>(const VersionNumber &rhs) const;
-        bool operator<=(const VersionNumber &rhs) const;
-        bool operator>=(const VersionNumber &rhs) const;
+        bool operator==(const VersionNumber &RHS) const;
+        bool operator!=(const VersionNumber &RHS) const;
+        bool operator<(const VersionNumber &RHS) const;
+        bool operator>(const VersionNumber &RHS) const;
+        bool operator<=(const VersionNumber &RHS) const;
+        bool operator>=(const VersionNumber &RHS) const;
 
     private:
         std::array<int, 4> m_numbers;

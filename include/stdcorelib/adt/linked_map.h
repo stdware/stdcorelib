@@ -67,9 +67,9 @@ namespace stdc {
             }
 
             template <class Mapped>
-            static rebind<Mapped> copy_configuration(const rebind<Mapped> &other,
+            static rebind<Mapped> copy_configuration(const rebind<Mapped> &RHS,
                                                      const Allocator &allocator) {
-                return rebind<Mapped>(other.key_comp(), allocator_for<Mapped>(allocator));
+                return rebind<Mapped>(RHS.key_comp(), allocator_for<Mapped>(allocator));
             }
         };
 
@@ -88,11 +88,11 @@ namespace stdc {
             }
 
             template <class Mapped>
-            static rebind<Mapped> copy_configuration(const rebind<Mapped> &other,
+            static rebind<Mapped> copy_configuration(const rebind<Mapped> &RHS,
                                                      const Allocator &allocator) {
-                rebind<Mapped> result(other.bucket_count(), other.hash_function(), other.key_eq(),
+                rebind<Mapped> result(RHS.bucket_count(), RHS.hash_function(), RHS.key_eq(),
                                       allocator_for<Mapped>(allocator));
-                result.max_load_factor(other.max_load_factor());
+                result.max_load_factor(RHS.max_load_factor());
                 return result;
             }
         };
@@ -143,40 +143,40 @@ namespace stdc {
               _map(index_traits::template make<iterator>(allocator)) {
         }
 
-        linked_map(const linked_map &other)
-            : linked_map(other, allocator_traits::select_on_container_copy_construction(
-                                    other.get_allocator())) {
+        linked_map(const linked_map &RHS)
+            : linked_map(RHS, allocator_traits::select_on_container_copy_construction(
+                                  RHS.get_allocator())) {
         }
 
-        linked_map(linked_map &&other) = default;
+        linked_map(linked_map &&RHS) = default;
 
-        linked_map &operator=(const linked_map &other) {
-            if (this == &other) {
+        linked_map &operator=(const linked_map &RHS) {
+            if (this == &RHS) {
                 return *this;
             }
-            linked_map replacement(other, get_allocator());
+            linked_map replacement(RHS, get_allocator());
             swap(replacement);
             return *this;
         }
 
         linked_map &
-            operator=(linked_map &&other) noexcept(allocator_traits::is_always_equal::value &&
-                                                   std::is_nothrow_move_assignable_v<map_type>) {
-            if (this == &other) {
+            operator=(linked_map &&RHS) noexcept(allocator_traits::is_always_equal::value &&
+                                                 std::is_nothrow_move_assignable_v<map_type>) {
+            if (this == &RHS) {
                 return *this;
             }
 
             if constexpr (allocator_traits::is_always_equal::value) {
-                move_from_equal_allocator(other);
-            } else if (get_allocator() == other.get_allocator()) {
-                move_from_equal_allocator(other);
+                move_from_equal_allocator(RHS);
+            } else if (get_allocator() == RHS.get_allocator()) {
+                move_from_equal_allocator(RHS);
             } else {
-                linked_map replacement(empty_copy, other, get_allocator());
-                for (auto &item : other._list) {
+                linked_map replacement(empty_copy, RHS, get_allocator());
+                for (auto &item : RHS._list) {
                     replacement.append(item.first, std::move(item.second));
                 }
                 swap(replacement);
-                other.clear();
+                RHS.clear();
             }
             return *this;
         }
@@ -192,21 +192,21 @@ namespace stdc {
             }
         }
 
-        bool operator==(const linked_map &other) const {
-            return _list == other._list;
+        bool operator==(const linked_map &RHS) const {
+            return _list == RHS._list;
         }
 
-        bool operator!=(const linked_map &other) const {
-            return !(*this == other);
+        bool operator!=(const linked_map &RHS) const {
+            return !(*this == RHS);
         }
 
-        void swap(linked_map &other) noexcept(
+        void swap(linked_map &RHS) noexcept(
             noexcept(std::declval<list_type &>().swap(std::declval<list_type &>())) &&
             noexcept(std::declval<map_type &>().swap(std::declval<map_type &>()))) {
             assert(allocator_traits::propagate_on_container_swap::value ||
-                   get_allocator() == other.get_allocator());
-            _map.swap(other._map);
-            _list.swap(other._list);
+                   get_allocator() == RHS.get_allocator());
+            _map.swap(RHS._map);
+            _list.swap(RHS._list);
         }
 
         std::pair<iterator, bool> append(const K &key, const V &value) {
@@ -439,14 +439,14 @@ namespace stdc {
         struct empty_copy_t {};
         static constexpr empty_copy_t empty_copy{};
 
-        linked_map(empty_copy_t, const linked_map &other, const allocator_type &allocator)
+        linked_map(empty_copy_t, const linked_map &RHS, const allocator_type &allocator)
             : _list(list_allocator_type(allocator)),
-              _map(index_traits::template copy_configuration<iterator>(other._map, allocator)) {
+              _map(index_traits::template copy_configuration<iterator>(RHS._map, allocator)) {
         }
 
-        linked_map(const linked_map &other, const allocator_type &allocator)
-            : linked_map(empty_copy, other, allocator) {
-            for (const auto &item : other._list) {
+        linked_map(const linked_map &RHS, const allocator_type &allocator)
+            : linked_map(empty_copy, RHS, allocator) {
+            for (const auto &item : RHS._list) {
                 append(item.first, item.second);
             }
         }
@@ -475,10 +475,10 @@ namespace stdc {
 #endif
         }
 
-        void move_from_equal_allocator(linked_map &other) {
-            _map = std::move(other._map);
+        void move_from_equal_allocator(linked_map &RHS) {
+            _map = std::move(RHS._map);
             _list.clear();
-            _list.splice(_list.end(), other._list);
+            _list.splice(_list.end(), RHS._list);
         }
 
         list_type _list;

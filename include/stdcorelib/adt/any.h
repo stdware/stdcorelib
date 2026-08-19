@@ -162,15 +162,15 @@ namespace stdc {
             reset();
         }
 
-        any(const any &other) {
-            if (other._vtable) {
-                other._vtable->copy(other._storage, _storage);
-                _vtable = other._vtable;
+        any(const any &RHS) {
+            if (RHS._vtable) {
+                RHS._vtable->copy(RHS._storage, _storage);
+                _vtable = RHS._vtable;
             }
         }
 
-        any(any &&other) noexcept {
-            adopt(other);
+        any(any &&RHS) noexcept {
+            adopt(RHS);
         }
 
         /// Takes a value of any type other than \c any itself.
@@ -187,8 +187,8 @@ namespace stdc {
             _vtable = &detail::vtable_of<std::decay_t<T>>();
         }
 
-        any &operator=(any other) noexcept {
-            swap(other);
+        any &operator=(any RHS) noexcept {
+            swap(RHS);
             return *this;
         }
 
@@ -211,14 +211,14 @@ namespace stdc {
         ///
         /// \note Written out rather than through the assignment operator, which swaps and would
         ///       call straight back into here.
-        void swap(any &other) noexcept {
-            if (this == &other) {
+        void swap(any &RHS) noexcept {
+            if (this == &RHS) {
                 return;
             }
             any temp;
             temp.adopt(*this);
-            adopt(other);
-            other.adopt(temp);
+            adopt(RHS);
+            RHS.adopt(temp);
         }
 
         /// Whether the value in here is a \a T.
@@ -311,8 +311,8 @@ namespace stdc {
 
     /// @}
 
-    inline void swap(any &lhs, any &rhs) noexcept {
-        lhs.swap(rhs);
+    inline void swap(any &LHS, any &RHS) noexcept {
+        LHS.swap(RHS);
     }
 
     /// @}

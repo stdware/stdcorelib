@@ -20,11 +20,11 @@ namespace stdc::console::detail {
         int fg = nocolor;
         int bg = nocolor;
 
-        friend bool operator==(const attributes &lhs, const attributes &rhs) {
-            return lhs.style == rhs.style && lhs.fg == rhs.fg && lhs.bg == rhs.bg;
+        friend bool operator==(const attributes &LHS, const attributes &RHS) {
+            return LHS.style == RHS.style && LHS.fg == RHS.fg && LHS.bg == RHS.bg;
         }
-        friend bool operator!=(const attributes &lhs, const attributes &rhs) {
-            return !(lhs == rhs);
+        friend bool operator!=(const attributes &LHS, const attributes &RHS) {
+            return !(LHS == RHS);
         }
     };
 

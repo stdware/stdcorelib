@@ -813,8 +813,8 @@ namespace stdc {
                 wide_env.emplace_back(wstring_conv::from_utf8(item.first),
                                       wstring_conv::from_utf8(item.second));
             }
-            std::sort(wide_env.begin(), wide_env.end(), [](const auto &lhs, const auto &rhs) {
-                return _wcsicmp(lhs.first.c_str(), rhs.first.c_str()) < 0;
+            std::sort(wide_env.begin(), wide_env.end(), [](const auto &LHS, const auto &RHS) {
+                return _wcsicmp(LHS.first.c_str(), RHS.first.c_str()) < 0;
             });
             for (const auto &item : wide_env) {
                 env_str.insert(env_str.end(), item.first.begin(), item.first.end());

@@ -84,53 +84,53 @@ namespace stdc {
         return major() == 0 && minor() == 0 && patch() == 0 && tweak() == 0;
     }
 
-    bool VersionNumber::operator==(const VersionNumber &rhs) const {
-        return major() == rhs.major() && minor() == rhs.minor() && patch() == rhs.patch() &&
-               tweak() == rhs.tweak();
+    bool VersionNumber::operator==(const VersionNumber &RHS) const {
+        return major() == RHS.major() && minor() == RHS.minor() && patch() == RHS.patch() &&
+               tweak() == RHS.tweak();
     }
 
-    bool VersionNumber::operator!=(const VersionNumber &rhs) const {
-        return !(*this == rhs);
+    bool VersionNumber::operator!=(const VersionNumber &RHS) const {
+        return !(*this == RHS);
     }
 
-    bool VersionNumber::operator<(const VersionNumber &rhs) const {
-        if (major() < rhs.major())
+    bool VersionNumber::operator<(const VersionNumber &RHS) const {
+        if (major() < RHS.major())
             return true;
-        if (major() > rhs.major())
+        if (major() > RHS.major())
             return false;
-        if (minor() < rhs.minor())
+        if (minor() < RHS.minor())
             return true;
-        if (minor() > rhs.minor())
+        if (minor() > RHS.minor())
             return false;
-        if (patch() < rhs.patch())
+        if (patch() < RHS.patch())
             return true;
-        if (patch() > rhs.patch())
+        if (patch() > RHS.patch())
             return false;
-        return tweak() < rhs.tweak();
+        return tweak() < RHS.tweak();
     }
 
-    bool VersionNumber::operator>(const VersionNumber &rhs) const {
-        if (major() > rhs.major())
+    bool VersionNumber::operator>(const VersionNumber &RHS) const {
+        if (major() > RHS.major())
             return true;
-        if (major() < rhs.major())
+        if (major() < RHS.major())
             return false;
-        if (minor() > rhs.minor())
+        if (minor() > RHS.minor())
             return true;
-        if (minor() < rhs.minor())
+        if (minor() < RHS.minor())
             return false;
-        if (patch() > rhs.patch())
+        if (patch() > RHS.patch())
             return true;
-        if (patch() < rhs.patch())
+        if (patch() < RHS.patch())
             return false;
-        return tweak() > rhs.tweak();
+        return tweak() > RHS.tweak();
     }
 
-    bool VersionNumber::operator<=(const VersionNumber &rhs) const {
-        return !(*this > rhs);
+    bool VersionNumber::operator<=(const VersionNumber &RHS) const {
+        return !(*this > RHS);
     }
 
-    bool VersionNumber::operator>=(const VersionNumber &rhs) const {
-        return !(*this < rhs);
+    bool VersionNumber::operator>=(const VersionNumber &RHS) const {
+        return !(*this < RHS);
     }
 
 }

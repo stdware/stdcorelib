@@ -158,23 +158,23 @@ namespace stdc {
             return *this;
         }
 
-        constexpr flags &operator|=(flags other) noexcept {
-            i |= other.i;
+        constexpr flags &operator|=(flags RHS) noexcept {
+            i |= RHS.i;
             return *this;
         }
 
-        constexpr flags &operator|=(Enum other) noexcept {
-            i |= Int(other);
+        constexpr flags &operator|=(Enum RHS) noexcept {
+            i |= Int(RHS);
             return *this;
         }
 
-        constexpr flags &operator^=(flags other) noexcept {
-            i ^= other.i;
+        constexpr flags &operator^=(flags RHS) noexcept {
+            i ^= RHS.i;
             return *this;
         }
 
-        constexpr flags &operator^=(Enum other) noexcept {
-            i ^= Int(other);
+        constexpr flags &operator^=(Enum RHS) noexcept {
+            i ^= Int(RHS);
             return *this;
         }
 
@@ -186,28 +186,28 @@ namespace stdc {
             return i != Int(0);
         }
 
-        constexpr flags operator|(flags other) const noexcept {
-            return flags(std::in_place, i | other.i);
+        constexpr flags operator|(flags RHS) const noexcept {
+            return flags(std::in_place, i | RHS.i);
         }
 
-        constexpr flags operator|(Enum other) const noexcept {
-            return flags(std::in_place, i | Int(other));
+        constexpr flags operator|(Enum RHS) const noexcept {
+            return flags(std::in_place, i | Int(RHS));
         }
 
-        constexpr flags operator^(flags other) const noexcept {
-            return flags(std::in_place, i ^ other.i);
+        constexpr flags operator^(flags RHS) const noexcept {
+            return flags(std::in_place, i ^ RHS.i);
         }
 
-        constexpr flags operator^(Enum other) const noexcept {
-            return flags(std::in_place, i ^ Int(other));
+        constexpr flags operator^(Enum RHS) const noexcept {
+            return flags(std::in_place, i ^ Int(RHS));
         }
 
-        constexpr flags operator&(flags other) const noexcept {
-            return flags(std::in_place, i & other.i);
+        constexpr flags operator&(flags RHS) const noexcept {
+            return flags(std::in_place, i & RHS.i);
         }
 
-        constexpr flags operator&(Enum other) const noexcept {
-            return flags(std::in_place, i & Int(other));
+        constexpr flags operator&(Enum RHS) const noexcept {
+            return flags(std::in_place, i & Int(RHS));
         }
 
         constexpr flags operator~() const noexcept {
@@ -241,28 +241,28 @@ namespace stdc {
             return on ? (*this |= value) : (*this &= ~flags(value));
         }
 
-        friend constexpr bool operator==(flags lhs, flags rhs) noexcept {
-            return lhs.i == rhs.i;
+        friend constexpr bool operator==(flags LHS, flags RHS) noexcept {
+            return LHS.i == RHS.i;
         }
 
-        friend constexpr bool operator!=(flags lhs, flags rhs) noexcept {
-            return lhs.i != rhs.i;
+        friend constexpr bool operator!=(flags LHS, flags RHS) noexcept {
+            return LHS.i != RHS.i;
         }
 
-        friend constexpr bool operator==(flags lhs, Enum rhs) noexcept {
-            return lhs == flags(rhs);
+        friend constexpr bool operator==(flags LHS, Enum RHS) noexcept {
+            return LHS == flags(RHS);
         }
 
-        friend constexpr bool operator!=(flags lhs, Enum rhs) noexcept {
-            return lhs != flags(rhs);
+        friend constexpr bool operator!=(flags LHS, Enum RHS) noexcept {
+            return LHS != flags(RHS);
         }
 
-        friend constexpr bool operator==(Enum lhs, flags rhs) noexcept {
-            return flags(lhs) == rhs;
+        friend constexpr bool operator==(Enum LHS, flags RHS) noexcept {
+            return flags(LHS) == RHS;
         }
 
-        friend constexpr bool operator!=(Enum lhs, flags rhs) noexcept {
-            return flags(lhs) != rhs;
+        friend constexpr bool operator!=(Enum LHS, flags RHS) noexcept {
+            return flags(LHS) != RHS;
         }
 
     private:
@@ -280,30 +280,30 @@ namespace stdc {
 
 #define STDC_DECLARE_FLAGS(Flags, Enum) using Flags = ::stdc::flags<Enum>;
 
-#define STDC_DECLARE_OPERATORS_FOR_FLAGS(Flags)                                              \
+#define STDC_DECLARE_OPERATORS_FOR_FLAGS(Flags)                                                    \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator|(          \
-        typename Flags::enum_type lhs, typename Flags::enum_type rhs) noexcept {                   \
-        return ::stdc::flags<typename Flags::enum_type>(lhs) | rhs;                                \
+        typename Flags::enum_type LHS, typename Flags::enum_type RHS) noexcept {                   \
+        return ::stdc::flags<typename Flags::enum_type>(LHS) | RHS;                                \
     }                                                                                              \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator|(          \
-        typename Flags::enum_type lhs, ::stdc::flags<typename Flags::enum_type> rhs) noexcept {    \
-        return rhs | lhs;                                                                          \
+        typename Flags::enum_type LHS, ::stdc::flags<typename Flags::enum_type> RHS) noexcept {    \
+        return RHS | LHS;                                                                          \
     }                                                                                              \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator&(          \
-        typename Flags::enum_type lhs, typename Flags::enum_type rhs) noexcept {                   \
-        return ::stdc::flags<typename Flags::enum_type>(lhs) & rhs;                                \
+        typename Flags::enum_type LHS, typename Flags::enum_type RHS) noexcept {                   \
+        return ::stdc::flags<typename Flags::enum_type>(LHS) & RHS;                                \
     }                                                                                              \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator&(          \
-        typename Flags::enum_type lhs, ::stdc::flags<typename Flags::enum_type> rhs) noexcept {    \
-        return rhs & lhs;                                                                          \
+        typename Flags::enum_type LHS, ::stdc::flags<typename Flags::enum_type> RHS) noexcept {    \
+        return RHS & LHS;                                                                          \
     }                                                                                              \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator^(          \
-        typename Flags::enum_type lhs, typename Flags::enum_type rhs) noexcept {                   \
-        return ::stdc::flags<typename Flags::enum_type>(lhs) ^ rhs;                                \
+        typename Flags::enum_type LHS, typename Flags::enum_type RHS) noexcept {                   \
+        return ::stdc::flags<typename Flags::enum_type>(LHS) ^ RHS;                                \
     }                                                                                              \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator^(          \
-        typename Flags::enum_type lhs, ::stdc::flags<typename Flags::enum_type> rhs) noexcept {    \
-        return rhs ^ lhs;                                                                          \
+        typename Flags::enum_type LHS, ::stdc::flags<typename Flags::enum_type> RHS) noexcept {    \
+        return RHS ^ LHS;                                                                          \
     }                                                                                              \
     constexpr inline void operator+(typename Flags::enum_type,                                     \
                                     typename Flags::enum_type) noexcept = delete;                  \

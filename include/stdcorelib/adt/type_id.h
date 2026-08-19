@@ -143,18 +143,18 @@ namespace stdc {
             return _entry != nullptr;
         }
 
-        friend bool operator==(type_id lhs, type_id rhs) {
-            if (lhs._entry == rhs._entry) {
+        friend bool operator==(type_id LHS, type_id RHS) {
+            if (LHS._entry == RHS._entry) {
                 return true;
             }
-            if (!lhs._entry || !rhs._entry) {
+            if (!LHS._entry || !RHS._entry) {
                 return false;
             }
-            return detail::resolve_type_id(*lhs._entry) == detail::resolve_type_id(*rhs._entry);
+            return detail::resolve_type_id(*LHS._entry) == detail::resolve_type_id(*RHS._entry);
         }
 
-        friend bool operator!=(type_id lhs, type_id rhs) {
-            return !(lhs == rhs);
+        friend bool operator!=(type_id LHS, type_id RHS) {
+            return !(LHS == RHS);
         }
 
     private:

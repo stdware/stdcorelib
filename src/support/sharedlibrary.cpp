@@ -273,9 +273,9 @@ namespace stdc {
 
     SharedLibrary::~SharedLibrary() = default;
 
-    SharedLibrary::SharedLibrary(SharedLibrary &&other) noexcept = default;
+    SharedLibrary::SharedLibrary(SharedLibrary &&RHS) noexcept = default;
 
-    SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept = default;
+    SharedLibrary &SharedLibrary::operator=(SharedLibrary &&RHS) noexcept = default;
 
     bool SharedLibrary::open(const fs::path &path, LoadHints hints) {
         stdc_impl_t;

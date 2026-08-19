@@ -332,8 +332,8 @@ namespace stdc::cli {
     ParseResult::ParseResult() : _impl(std::make_unique<detail::parse_data>()) {
     }
 
-    ParseResult::ParseResult(ParseResult &&other) noexcept = default;
-    ParseResult &ParseResult::operator=(ParseResult &&other) noexcept = default;
+    ParseResult::ParseResult(ParseResult &&RHS) noexcept = default;
+    ParseResult &ParseResult::operator=(ParseResult &&RHS) noexcept = default;
     ParseResult::~ParseResult() = default;
 
     ParseResult::Error ParseResult::error() const {
@@ -1892,9 +1892,9 @@ namespace stdc::cli {
 
     Parser::~Parser() = default;
 
-    Parser::Parser(Parser &&other) noexcept = default;
+    Parser::Parser(Parser &&RHS) noexcept = default;
 
-    Parser &Parser::operator=(Parser &&other) noexcept = default;
+    Parser &Parser::operator=(Parser &&RHS) noexcept = default;
 
     void Parser::setRootCommand(Command root) {
         stdc_impl_t;
