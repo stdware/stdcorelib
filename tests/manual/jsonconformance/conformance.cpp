@@ -194,10 +194,10 @@ namespace conformance {
 
         const auto bytes = readFile(cborPath);
         stdc::CborDecodeError error;
-        const auto decoded = JsonValue::fromCbor(
-            stdc::array_view<uint8_t>(reinterpret_cast<const uint8_t *>(bytes.data()),
-                                      bytes.size()),
-            &error);
+        const auto decoded =
+            JsonValue::fromCbor(stdc::array_view<uint8_t>(
+                                    reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()),
+                                &error);
         report.checked++;
         if (error) {
             report.fail(cborPath, "foreign CBOR does not decode: " + error.message());
@@ -206,8 +206,8 @@ namespace conformance {
         }
     }
 
-    static JsonValue checkText(const fs::path &path, std::string_view text,
-                               Expectation expectation, int *eitherAccepted) {
+    static JsonValue checkText(const fs::path &path, std::string_view text, Expectation expectation,
+                               int *eitherAccepted) {
         report.checked++;
 
         stdc::JsonParseError error;

@@ -241,9 +241,9 @@ BOOST_AUTO_TEST_CASE(test_compare_insensitive) {
     // Only the ASCII letters fold. UTF-8 bytes have no case and must come through as they are.
     BOOST_CHECK_EQUAL(str::compare_insensitive("\xE4\xB8\xAD", "\xE4\xB8\xAD"), 0);
     BOOST_CHECK_EQUAL(str::compare_insensitive("a\xE4\xB8\xAD"
-                                         "z",
-                                         "A\xE4\xB8\xAD"
-                                         "Z"),
+                                               "z",
+                                               "A\xE4\xB8\xAD"
+                                               "Z"),
                       0);
     BOOST_CHECK_NE(str::compare_insensitive("_", "?"), 0);
 
@@ -315,8 +315,8 @@ BOOST_AUTO_TEST_CASE(test_starts_ends_with_folded) {
     BOOST_CHECK(!str::starts_with("", 'a', true));
 
     // wide overloads, which is what SharedLibrary::isLibrary() reads a suffix with
-    BOOST_CHECK(str::ends_with(std::wstring_view(L"Qt6Core.DLL"), std::wstring_view(L".dll"),
-                               true));
+    BOOST_CHECK(
+        str::ends_with(std::wstring_view(L"Qt6Core.DLL"), std::wstring_view(L".dll"), true));
     BOOST_CHECK(!str::ends_with(std::wstring_view(L"Qt6Core.DLL"), std::wstring_view(L".dll")));
     BOOST_CHECK(str::starts_with(std::wstring_view(L"ABC"), L'a', true));
 

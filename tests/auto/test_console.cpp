@@ -430,7 +430,7 @@ BOOST_AUTO_TEST_CASE(test_display_width_counts_columns) {
     // escapes so the answers do not rest on how a compiler read this file.
     BOOST_CHECK_EQUAL(display_width(U'a'), 1);
     BOOST_CHECK_EQUAL(display_width(U'中'), 2); // a CJK ideograph
-    BOOST_CHECK_EQUAL(display_width(U'́'), 0); // a combining acute
+    BOOST_CHECK_EQUAL(display_width(U'́'), 0);   // a combining acute
     BOOST_CHECK_EQUAL(display_width(U'\U0001F600'), 2);
 }
 
@@ -597,7 +597,7 @@ BOOST_AUTO_TEST_CASE(test_width_asks_a_real_terminal) {
     ::unsetenv("COLUMNS");
 
     const auto &resize = [&](unsigned short columns) {
-        struct winsize ws {};
+        struct winsize ws{};
         ws.ws_col = columns;
         ws.ws_row = 40;
         BOOST_REQUIRE_EQUAL(::ioctl(slave, TIOCSWINSZ, &ws), 0);

@@ -273,8 +273,7 @@ BOOST_AUTO_TEST_CASE(test_every_two_byte_string) {
     for (int lead = 0x00; lead <= 0xFF; ++lead) {
         for (int trail = 0x00; trail <= 0xFF; ++trail) {
             bool two_characters = lead <= 0x7F && trail <= 0x7F;
-            bool one_sequence =
-                lead >= 0xC2 && lead <= 0xDF && trail >= 0x80 && trail <= 0xBF;
+            bool one_sequence = lead >= 0xC2 && lead <= 0xDF && trail >= 0x80 && trail <= 0xBF;
             bool expected = two_characters || one_sequence;
             if (utf::is_valid_utf8(bytes({lead, trail})) != expected) {
                 if (++wrong <= 8) {
@@ -294,8 +293,8 @@ BOOST_AUTO_TEST_CASE(test_every_three_byte_sequence) {
     for (int lead = 0xE0; lead <= 0xEF; ++lead) {
         for (int second = 0x00; second <= 0xFF; ++second) {
             for (int third = 0x00; third <= 0xFF; ++third) {
-                char32_t c = char32_t(((lead & 0x0F) << 12) | ((second & 0x3F) << 6) |
-                                      (third & 0x3F));
+                char32_t c =
+                    char32_t(((lead & 0x0F) << 12) | ((second & 0x3F) << 6) | (third & 0x3F));
                 bool shaped = second >= 0x80 && second <= 0xBF && third >= 0x80 && third <= 0xBF;
                 // Three bytes may not spell what two would have, and may not spell a surrogate.
                 bool expected = shaped && c >= 0x800 && !(c >= 0xD800 && c <= 0xDFFF);
@@ -324,6 +323,7 @@ BOOST_AUTO_TEST_CASE(test_what_a_broken_sequence_costs) {
         const char *why;
     };
 
+    // clang-format off
     const Case cases[] = {
         // A truncated sequence is one error however many bytes it got through, as long as every
         // byte of it was still on the way to something valid.
@@ -354,6 +354,7 @@ BOOST_AUTO_TEST_CASE(test_what_a_broken_sequence_costs) {
         {bytes({0xE1, 0x80, 'A'}), 1, "a truncated sequence then a letter"},
         {bytes({0xC2, 'A', 0xC2, 'B'}), 2, "two truncated leads with letters between"},
     };
+    // clang-format on
 
     for (const auto &c : cases) {
         auto out = utf::utf8_to_utf32(c.input);
@@ -364,9 +365,8 @@ BOOST_AUTO_TEST_CASE(test_what_a_broken_sequence_costs) {
             }
         }
         BOOST_CHECK_MESSAGE(count == c.replacements,
-                            std::string(c.why) + ": expected " +
-                                std::to_string(c.replacements) + " replacements, got " +
-                                std::to_string(count));
+                            std::string(c.why) + ": expected " + std::to_string(c.replacements) +
+                                " replacements, got " + std::to_string(count));
         // Whatever it was, it is not valid, and failing rather than replacing says so.
         BOOST_CHECK(!utf::is_valid_utf8(c.input));
         bool ok = true;

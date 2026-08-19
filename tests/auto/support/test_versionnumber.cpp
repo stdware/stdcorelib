@@ -64,23 +64,23 @@ BOOST_AUTO_TEST_CASE(test_fromString) {
 // these used to come back as a VersionNumber, and "abc" and "0" were the same answer.
 BOOST_AUTO_TEST_CASE(test_fromString_refuses_what_is_not_a_version) {
     for (const auto *given : {
-             "",           // nothing at all
-             "abc",        // a word
-             "x.2",        // a word where the first component goes
-             "1.x",        // and where a later one goes
-             "1.2.x",      //
-             "1.2.3abc",   // digits and then something else, which used to read as 1.2.3
-             "1.2.3.4.5",  // more components than there are places for
-             "1.",         // a trailing dot, so an empty component
-             ".1",         // and a leading one
-             "1..2",       // and one in the middle
-             "1.-2",       // a minus, which from_chars reads into an int quite happily
-             "-1",         //
-             "1.2.3.4.",   // full up and then a dot
-             " 1.2",       // blanks are not part of a version
-             "1.2 ",       //
-             "+1",         // from_chars refuses this one, but say so here rather than rely on it
-             "1.2.3999999999999",  // digits throughout and past what an int holds
+             "",          // nothing at all
+             "abc",       // a word
+             "x.2",       // a word where the first component goes
+             "1.x",       // and where a later one goes
+             "1.2.x",     //
+             "1.2.3abc",  // digits and then something else, which used to read as 1.2.3
+             "1.2.3.4.5", // more components than there are places for
+             "1.",        // a trailing dot, so an empty component
+             ".1",        // and a leading one
+             "1..2",      // and one in the middle
+             "1.-2",      // a minus, which from_chars reads into an int quite happily
+             "-1",        //
+             "1.2.3.4.",  // full up and then a dot
+             " 1.2",      // blanks are not part of a version
+             "1.2 ",      //
+             "+1",        // from_chars refuses this one, but say so here rather than rely on it
+             "1.2.3999999999999", // digits throughout and past what an int holds
          }) {
         BOOST_CHECK_MESSAGE(!VersionNumber::fromString(given).has_value(),
                             "\"" + std::string(given) + "\" was read as a version");

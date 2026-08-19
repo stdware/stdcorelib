@@ -197,7 +197,7 @@ namespace stdc {
 #endif
 
         while (in_fd >= 0 || out_fd >= 0 || err_fd >= 0) {
-            struct pollfd fds[3] {};
+            struct pollfd fds[3]{};
             int count = 0;
             int in_slot = -1, out_slot = -1, err_slot = -1;
             if (in_fd >= 0) {

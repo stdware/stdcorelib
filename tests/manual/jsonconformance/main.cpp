@@ -265,8 +265,8 @@ namespace {
             }
         }
 
-        heading("markus_kuhn", counted(lines, "line") + ", " + std::to_string(accepted) +
-                                  " accepted",
+        heading("markus_kuhn",
+                counted(lines, "line") + ", " + std::to_string(accepted) + " accepted",
                 report.since(mark));
     }
 
@@ -294,7 +294,7 @@ namespace {
         const bool asExpected = error.what.find("indefinite-length string") != std::string::npos;
         if (!asExpected) {
             report.fail(path, !error ? "ill-formed nesting was accepted"
-                                            : "rejected for an unexpected reason: " + error.message());
+                                     : "rejected for an unexpected reason: " + error.message());
         }
         heading("binary_data", "1 document", asExpected ? 0 : 1);
     }
@@ -429,6 +429,7 @@ namespace {
         void (*run)(const fs::path &root);
     };
 
+    // clang-format off
     const Vendor vendors[] = {
         {"nlohmann", "json_test_data", "https://github.com/nlohmann/json_test_data", "a1375cea",
          runNlohmann},
@@ -439,6 +440,7 @@ namespace {
         {"simdjson", "simdjson-data", "https://github.com/simdjson/simdjson-data", "4197c425",
          runSimdjson},
     };
+    // clang-format on
 
     const Vendor *findVendor(std::string_view key) {
         for (const auto &vendor : vendors) {

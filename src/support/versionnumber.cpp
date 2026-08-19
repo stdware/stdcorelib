@@ -35,8 +35,7 @@ namespace stdc {
             }
 
             auto stop = s.find('.', start);
-            auto segment =
-                s.substr(start, stop == std::string_view::npos ? stop : stop - start);
+            auto segment = s.substr(start, stop == std::string_view::npos ? stop : stop - start);
             // The same answer comes out of from_chars, which refuses an empty range. This is
             // here so that a default constructed string_view, whose data() is null, is not the
             // range handed to it.
@@ -53,9 +52,8 @@ namespace stdc {
 
             // Digits throughout, so the only thing left for from_chars to refuse is a number
             // too big for an int, and there is nothing it can leave behind.
-            auto answer =
-                std::from_chars(segment.data(), segment.data() + segment.size(),
-                                res.m_numbers[index]);
+            auto answer = std::from_chars(segment.data(), segment.data() + segment.size(),
+                                          res.m_numbers[index]);
             if (answer.ec != std::errc{}) {
                 return std::nullopt;
             }

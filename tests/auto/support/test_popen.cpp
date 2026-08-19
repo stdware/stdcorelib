@@ -150,8 +150,8 @@ namespace {
         explicit TempFile(const char *tag) {
             _path = std::filesystem::temp_directory_path() /
                     ("stdc_popen_" + std::string(tag) + "_" +
-                     std::to_string(
-                         std::chrono::steady_clock::now().time_since_epoch().count() % 1000000));
+                     std::to_string(std::chrono::steady_clock::now().time_since_epoch().count() %
+                                    1000000));
         }
         ~TempFile() {
             std::error_code ec;
@@ -162,7 +162,8 @@ namespace {
         }
         std::string read() const {
             std::ifstream in(_path, std::ios::binary);
-            return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            return std::string(std::istreambuf_iterator<char>(in),
+                               std::istreambuf_iterator<char>());
         }
 
     private:
@@ -254,8 +255,8 @@ BOOST_AUTO_TEST_CASE(test_start_retry) {
 BOOST_AUTO_TEST_CASE(test_shell) {
     {
         Popen p;
-        p.args({ChildPath, "argv", "two words", "quote\"here", "single'here", "a&b", "a|b",
-                "a<b", "a>b", "a(b)", "a^b", "$HOME", "%PATH%", "!PATH!", ""})
+        p.args({ChildPath, "argv", "two words", "quote\"here", "single'here", "a&b", "a|b", "a<b",
+                "a>b", "a(b)", "a^b", "$HOME", "%PATH%", "!PATH!", ""})
             .shell(true)
             .standardOutput(Popen::Pipe);
         BOOST_REQUIRE_MESSAGE(p.start(), p.errorMessage());
@@ -318,6 +319,8 @@ BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused
         p.args({std::string(ChildPath) + embedded, "argv"});
         refused(p);
     }
+    // clang-format explodes a braced list inside a chained call, so not here.
+    // clang-format off
     {
         Popen p;
         p.args({ChildPath, "argv"}).env({{"NAME", embedded}});
@@ -333,6 +336,7 @@ BOOST_AUTO_TEST_CASE(test_a_nul_inside_an_argument_or_the_environment_is_refused
         p.args({ChildPath, "argv"}).env({{"", "value"}});
         refused(p);
     }
+    // clang-format on
 
     // Corrected, the same object starts, so the refusal changed nothing.
     Popen p;
@@ -494,9 +498,7 @@ BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
     // With it they part: the loaded file is the helper, and what it reads back is the name.
     {
         Popen p;
-        p.executable(ChildPath)
-            .args({"a-name-of-its-own", "arg0"})
-            .standardOutput(Popen::Pipe);
+        p.executable(ChildPath).args({"a-name-of-its-own", "arg0"}).standardOutput(Popen::Pipe);
         BOOST_REQUIRE_MESSAGE(p.start(), p.errorMessage());
         auto [out, _] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "a-name-of-its-own");
@@ -706,8 +708,8 @@ BOOST_AUTO_TEST_CASE(test_unicode_environment) {
     // application directory, which is every MinGW build, PATH is what finds it. Measured: a
     // MinGW binary started with an empty environment fails at 0xC0000135 before main().
     std::map<std::string, std::string> childEnv{
-        {"STDC_POPEN_UNICODE_CHILD", "1"},
-        {"\u53d8\u91cf", "\u503c\u6d4b\u8bd5"},
+        {"STDC_POPEN_UNICODE_CHILD", "1"                 },
+        {"\u53d8\u91cf",             "\u503c\u6d4b\u8bd5"},
     };
     for (const auto &item : system::environment()) {
         if (str::equals_insensitive(item.first, "PATH")) {
@@ -717,10 +719,8 @@ BOOST_AUTO_TEST_CASE(test_unicode_environment) {
     }
 
     Popen p;
-    p.args({
-               system::application_path().string(),
-               "--run_test=test_popen/test_unicode_environment", "--log_level=nothing"
-    })
+    p.args({system::application_path().string(), "--run_test=test_popen/test_unicode_environment",
+            "--log_level=nothing"})
         .env(childEnv);
     BOOST_REQUIRE_MESSAGE(p.start(), p.errorMessage());
     BOOST_REQUIRE(p.wait(Timeout));
@@ -824,16 +824,16 @@ BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
         Popen p;
         p.args(FilterX).standardInput(Popen::Pipe).standardOutput(Popen::Pipe);
         BOOST_REQUIRE_MESSAGE(p.start(), p.errorMessage());
-#ifdef _WIN32
+#  ifdef _WIN32
         // Only the two console control events, and anything else is refused rather than
         // approximated.
         BOOST_CHECK(!p.sendSignal(SIGTERM));
         BOOST_CHECK(p.errorCode().value() != 0);
         std::ignore = p.kill();
-#else
+#  else
         BOOST_CHECK(p.sendSignal(SIGKILL));
         BOOST_CHECK_EQUAL(p.errorCode().value(), 0);
-#endif
+#  endif
         BOOST_REQUIRE(p.wait(Timeout));
     }
 
@@ -846,11 +846,11 @@ BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
         BOOST_CHECK(p.kill());
         BOOST_REQUIRE(p.wait(Timeout));
 
-#ifdef _WIN32
+#  ifdef _WIN32
         BOOST_CHECK(p.sendSignal(Popen::WS_CTRL_BREAK_EVENT));
-#else
+#  else
         BOOST_CHECK(p.sendSignal(SIGTERM));
-#endif
+#  endif
         BOOST_CHECK_EQUAL(p.errorCode().value(), 0);
     }
 }
@@ -882,11 +882,11 @@ BOOST_AUTO_TEST_CASE(test_signal_returncode) {
 // Every descriptor a run opens has to come back, or a long-lived program runs out of them.
 BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
     const auto &open_fd_count = []() {
-#ifdef __APPLE__
+#  ifdef __APPLE__
         DIR *dir = opendir("/dev/fd");
-#else
+#  else
         DIR *dir = opendir("/proc/self/fd");
-#endif
+#  endif
         if (!dir) {
             return -1;
         }
@@ -931,11 +931,11 @@ BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
 // there having checked nothing at all for as long as it existed.
 BOOST_AUTO_TEST_CASE(test_close_fds) {
     const auto &open_in_child = [](bool closeFds) {
-#ifdef __APPLE__
+#  ifdef __APPLE__
         std::string script = "ls /dev/fd | wc -l";
-#else
+#  else
         std::string script = "ls /proc/self/fd | wc -l";
-#endif
+#  endif
         Popen p;
         p.args({"/bin/sh", "-c", script}).standardOutput(Popen::Pipe).closeFds(closeFds);
         BOOST_REQUIRE_MESSAGE(p.start(), p.errorMessage());
@@ -1152,9 +1152,9 @@ BOOST_AUTO_TEST_CASE(test_communicate_leaves_the_signal_disposition_alone) {
 
     BOOST_CHECK_EQUAL(out.size(), 8000000u);
     BOOST_REQUIRE_GT(samples.load(), 0);
-    BOOST_CHECK_MESSAGE(changed.load() == 0,
-                        "the disposition changed under " + std::to_string(samples.load()) +
-                            " samples of a communicate that read 8 MB");
+    BOOST_CHECK_MESSAGE(changed.load() == 0, "the disposition changed under " +
+                                                 std::to_string(samples.load()) +
+                                                 " samples of a communicate that read 8 MB");
     BOOST_CHECK(disposition() == before);
 }
 
@@ -1301,7 +1301,8 @@ BOOST_AUTO_TEST_CASE(test_the_longest_accepted_command_line_really_starts) {
 
     Popen p;
     p.args(args).standardOutput(Popen::Pipe);
-    BOOST_REQUIRE_MESSAGE(p.start(), "the longest accepted line did not start: " + p.errorMessage());
+    BOOST_REQUIRE_MESSAGE(p.start(),
+                          "the longest accepted line did not start: " + p.errorMessage());
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(p.returnCode().value_or(-1), 0);
     BOOST_CHECK_MESSAGE(out.find(std::string(199, 'x') + "z\n") != std::string::npos,
@@ -1335,8 +1336,8 @@ BOOST_AUTO_TEST_CASE(test_polling_neither_kills_the_child_nor_misses_its_exit) {
         rounds++;
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    BOOST_REQUIRE_MESSAGE(p.returnCode().has_value(), "it never exited, after " +
-                                                          std::to_string(rounds) + " rounds");
+    BOOST_REQUIRE_MESSAGE(p.returnCode().has_value(),
+                          "it never exited, after " + std::to_string(rounds) + " rounds");
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
     BOOST_CHECK(!p.errorCode());
 
@@ -1347,17 +1348,37 @@ BOOST_AUTO_TEST_CASE(test_polling_neither_kills_the_child_nor_misses_its_exit) {
 
 BOOST_AUTO_TEST_CASE(test_argument_quoting) {
     const std::vector<std::string> tricky = {
-        "plain",     "a b",   "  ",         "a\"b",   "\"lead",   "trail\"",
-        "back\\sla", "end\\", "end\\\\",    "a\\\"b", "\\\"quo\"", "tab\there",
-        "semi;colon", "amp&and", "pipe|bar", "caret^up", "per%cent", "dollar$sign",
+        "plain",
+        "a b",
+        "  ",
+        "a\"b",
+        "\"lead",
+        "trail\"",
+        "back\\sla",
+        "end\\",
+        "end\\\\",
+        "a\\\"b",
+        "\\\"quo\"",
+        "tab\there",
+        "semi;colon",
+        "amp&and",
+        "pipe|bar",
+        "caret^up",
+        "per%cent",
+        "dollar$sign",
 
         // A space and a trailing backslash in the same argument, which the two above have one
         // each of and neither together. Quoting puts the argument in quotes because of the
         // space, and then the backslash before the closing quote is the one that escapes it.
         // This is llvm's CreateProcessTrailingSlash, and it is the case the quoting is written
         // for. \sa llvm/unittests/Support/ProgramTest.cpp
-        "has\\\\ trailing\\", "a b\\", "a b\\\\", "a b\\\\\\", "\\\\ leading",
-        "quote\" and space", "a b\"c\\",
+        "has\\\\ trailing\\",
+        "a b\\",
+        "a b\\\\",
+        "a b\\\\\\",
+        "\\\\ leading",
+        "quote\" and space",
+        "a b\"c\\",
     };
 
     for (const auto &arg : tricky) {

@@ -81,8 +81,7 @@ namespace stdc {
         /// join_command_line() applies.
         ///
         /// \sa join_command_line()
-        STDC_EXPORT std::vector<std::string>
-            split_command_line(const std::string_view &command);
+        STDC_EXPORT std::vector<std::string> split_command_line(const std::string_view &command);
 
         /// Joins \a args into one command line, quoting each so that the receiving program takes
         /// it apart into the same pieces.

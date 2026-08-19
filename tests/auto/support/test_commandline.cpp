@@ -3952,10 +3952,8 @@ BOOST_AUTO_TEST_CASE(test_a_parser_can_validate_a_complete_tree_on_request) {
     BOOST_REQUIRE(badOccurrence.validate().has_value());
     BOOST_CHECK(has(*badOccurrence.validate(), "negative occurrence"));
 
-    Parser badOptionArguments(
-        Command("prog").addOption(Option({"-o"}, "Output")
-                                      .arg(Argument("format").optional())
-                                      .arg(Argument("path"))));
+    Parser badOptionArguments(Command("prog").addOption(
+        Option({"-o"}, "Output").arg(Argument("format").optional()).arg(Argument("path"))));
     BOOST_REQUIRE(badOptionArguments.validate().has_value());
     BOOST_CHECK(has(*badOptionArguments.validate(), "argument sequence"));
 
@@ -3975,13 +3973,11 @@ BOOST_AUTO_TEST_CASE(test_validation_checks_argument_defaults_and_catalogue_refe
     BOOST_REQUIRE(badDefault.validate().has_value());
     BOOST_CHECK(has(*badDefault.validate(), "default value"));
 
-    Parser badExpected(
-        Command("prog").addArgument(Argument("count").type<int>().expect({"many"})));
+    Parser badExpected(Command("prog").addArgument(Argument("count").type<int>().expect({"many"})));
     BOOST_REQUIRE(badExpected.validate().has_value());
     BOOST_CHECK(has(*badExpected.validate(), "expected value"));
 
-    Parser requiredDefault(
-        Command("prog").addArgument(Argument("count").defaultValue("1")));
+    Parser requiredDefault(Command("prog").addArgument(Argument("count").defaultValue("1")));
     BOOST_REQUIRE(requiredDefault.validate().has_value());
     BOOST_CHECK(has(*requiredDefault.validate(), "required"));
 
@@ -4030,14 +4026,11 @@ BOOST_AUTO_TEST_CASE(test_a_tree_is_checked_only_on_request_or_by_a_debug_parse)
     // the otherwise invisible release guarantee measurable.
     int calls = 0;
     const auto &tree = [&calls] {
-        return Command("prog").addArgument(
-            Argument("count")
-                .optional()
-                .defaultValue("1")
-                .validate([&calls](std::string_view, std::string *) {
-                    ++calls;
-                    return true;
-                }));
+        return Command("prog").addArgument(Argument("count").optional().defaultValue("1").validate(
+            [&calls](std::string_view, std::string *) {
+                ++calls;
+                return true;
+            }));
     };
 
     Parser parser(tree());

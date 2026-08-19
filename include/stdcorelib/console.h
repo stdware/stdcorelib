@@ -129,8 +129,7 @@ namespace stdc {
         STDC_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
 
         /// \overload
-        STDC_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf,
-                                    FILE *file);
+        STDC_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf, FILE *file);
 
         /// Like fputs(), to \c stdout and followed by a newline.
         STDC_EXPORT int puts(int style, int fg, int bg, const char *buf);
@@ -143,7 +142,7 @@ namespace stdc {
             STDC_PRINTF_FORMAT(5, 6);
 
         STDC_EXPORT int vfprintf(int style, int fg, int bg, FILE *file, const char *fmt,
-                                       va_list args);
+                                 va_list args);
 
         STDC_EXPORT int printf(int style, int fg, int bg, const char *fmt, ...)
             STDC_PRINTF_FORMAT(4, 5);
@@ -197,8 +196,7 @@ namespace stdc {
             return console::puts(nostyle, nocolor, nocolor, buf);
         }
 
-        STDC_EXPORT int u8fprintf(FILE *file, const char *fmt, ...)
-            STDC_PRINTF_FORMAT(2, 3);
+        STDC_EXPORT int u8fprintf(FILE *file, const char *fmt, ...) STDC_PRINTF_FORMAT(2, 3);
 
         STDC_EXPORT int u8vfprintf(FILE *file, const char *fmt, va_list args);
 
@@ -308,8 +306,7 @@ namespace stdc {
         /// \warning The markup is read after the formatting, so a \c %s expanding to text that
         ///          holds \c ${ or \c $$ has it eaten rather than printed. Write text you do not
         ///          control with u8fprintf() instead.
-        STDC_EXPORT int cfprintf(FILE *file, const char *fmt, ...)
-            STDC_PRINTF_FORMAT(2, 3);
+        STDC_EXPORT int cfprintf(FILE *file, const char *fmt, ...) STDC_PRINTF_FORMAT(2, 3);
 
         STDC_EXPORT int cvfprintf(FILE *file, const char *fmt, va_list args);
 

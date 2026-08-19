@@ -123,10 +123,10 @@ namespace {
             const char *what;
         };
         static const Known known[] = {
-            {"tags are not supported", "a tag"},
-            {"a map key has to be a text string", "a map key that is not text"},
-            {"negative integer is out of range", "an integer below INT64_MIN"},
-            {"unsupported initial byte", "a simple value that is not null or a boolean"},
+            {"tags are not supported",            "a tag"                                       },
+            {"a map key has to be a text string", "a map key that is not text"                  },
+            {"negative integer is out of range",  "an integer below INT64_MIN"                  },
+            {"unsupported initial byte",          "a simple value that is not null or a boolean"},
         };
         for (const auto &entry : known) {
             if (error.find(entry.fragment) != std::string::npos) {
@@ -237,7 +237,7 @@ namespace {
                 outside(what);
             } else {
                 report.fail(where, "rejected " + vectors::toHex(view(test.encoded)) + ": " +
-                                                              encodedError.message());
+                                       encodedError.message());
             }
             return;
         }
@@ -255,13 +255,12 @@ namespace {
                     return;
                 }
                 report.fail(where, "read the encoded form but not the decoded one: " +
-                                                              decodedError.message());
+                                       decodedError.message());
                 return;
             }
             if (!sameValue(fromEncoded, fromDecoded)) {
                 report.fail(where, "read " + vectors::toHex(view(test.encoded)) + " and " +
-                                       vectors::toHex(view(test.decoded)) +
-                                       " as different values");
+                                       vectors::toHex(view(test.decoded)) + " as different values");
                 return;
             }
         }
@@ -293,8 +292,8 @@ namespace {
     void runCborWg(const fs::path &root) {
         for (const auto &path : filesUnder(root / "tests", ".cbor")) {
             const auto bytes = readFile(path);
-            const auto name = path.parent_path().filename().string() + "/" +
-                              path.filename().string();
+            const auto name =
+                path.parent_path().filename().string() + "/" + path.filename().string();
 
             vectors::File file;
             std::string error;
@@ -311,13 +310,13 @@ namespace {
                 checkVector(name + " #" + std::to_string(i + 1) + " " + file.tests[i].description,
                             file.tests[i]);
             }
-            std::printf("  %-34s %-46s %s\n", name.c_str(),
-                        (file.title + ": " + std::to_string(file.tests.size()) + " vectors")
-                            .c_str(),
-                        report.failures.size() == failuresBefore
-                            ? "ok"
-                            : (std::to_string(report.failures.size() - failuresBefore) + " FAILED")
-                                  .c_str());
+            std::printf(
+                "  %-34s %-46s %s\n", name.c_str(),
+                (file.title + ": " + std::to_string(file.tests.size()) + " vectors").c_str(),
+                report.failures.size() == failuresBefore
+                    ? "ok"
+                    : (std::to_string(report.failures.size() - failuresBefore) + " FAILED")
+                          .c_str());
             (void) before;
         }
     }
@@ -350,8 +349,8 @@ namespace {
         const auto &items = document.toArray();
         for (size_t i = 0; i < items.size(); ++i) {
             const auto &item = items[i];
-            const auto where = "appendix_a.json #" + std::to_string(i + 1) + " " +
-                               item["hex"].toString();
+            const auto where =
+                "appendix_a.json #" + std::to_string(i + 1) + " " + item["hex"].toString();
 
             vectors::Vector test;
             if (!vectors::fromHex(item["hex"].toStringView(), &test.encoded)) {
@@ -372,12 +371,12 @@ namespace {
             checkVector(where, test);
         }
 
-        std::printf("  %-34s %-46s %s\n", "appendix_a.json",
-                    ("RFC 7049 appendix A: " + std::to_string(items.size()) + " vectors").c_str(),
-                    report.failures.size() == failuresBefore
-                        ? "ok"
-                        : (std::to_string(report.failures.size() - failuresBefore) + " FAILED")
-                              .c_str());
+        std::printf(
+            "  %-34s %-46s %s\n", "appendix_a.json",
+            ("RFC 7049 appendix A: " + std::to_string(items.size()) + " vectors").c_str(),
+            report.failures.size() == failuresBefore
+                ? "ok"
+                : (std::to_string(report.failures.size() - failuresBefore) + " FAILED").c_str());
     }
 
     // ----------------------------------------------------------------------------------------
@@ -392,12 +391,14 @@ namespace {
         void (*run)(const fs::path &root);
     };
 
+    // clang-format off
     const Vendor vendors[] = {
         {"cbor-wg", "cbor-test-vectors", "https://github.com/cbor-wg/cbor-test-vectors",
          "7e84843b", runCborWg},
         {"cbor-legacy", "cbor-test-vectors-legacy", "https://github.com/cbor/test-vectors",
          "aba89b65", runCborLegacy},
     };
+    // clang-format on
 
     void runVendor(const Vendor &vendor, const fs::path &root) {
         std::printf("\n%s  %s @ %s\n", vendor.key, vendor.repository, vendor.commit);

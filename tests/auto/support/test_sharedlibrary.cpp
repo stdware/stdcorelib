@@ -418,9 +418,7 @@ BOOST_AUTO_TEST_CASE(test_setting_the_library_path_gives_back_the_old_one) {
     auto original = SharedLibrary::setLibraryPath(std::filesystem::path());
 
     // Restored whatever this case does, since the setting outlives it.
-    auto guard = stdc::make_scope_guard([&] {
-        SharedLibrary::setLibraryPath(original);
-    });
+    auto guard = stdc::make_scope_guard([&] { SharedLibrary::setLibraryPath(original); });
 
     auto first = std::filesystem::temp_directory_path();
     auto wasEmpty = SharedLibrary::setLibraryPath(first);
@@ -455,9 +453,7 @@ BOOST_AUTO_TEST_CASE(test_setting_the_library_path_gives_back_the_old_one) {
 // environment variable the loader read before main and will not read again.
 BOOST_AUTO_TEST_CASE(test_what_the_library_path_reaches) {
     auto original = SharedLibrary::setLibraryPath(std::filesystem::path());
-    auto guard = stdc::make_scope_guard([&] {
-        SharedLibrary::setLibraryPath(original);
-    });
+    auto guard = stdc::make_scope_guard([&] { SharedLibrary::setLibraryPath(original); });
 
     auto dir = std::filesystem::temp_directory_path();
     SharedLibrary::setLibraryPath(dir);

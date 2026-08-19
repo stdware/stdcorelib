@@ -37,7 +37,8 @@ namespace {
     }
 
     void fill(FILE *stream, long bytes) {
-        static const char block[] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde\n";
+        static const char block[] =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde\n";
         const size_t size = sizeof(block) - 1;
         long written = 0;
         while (written < bytes) {

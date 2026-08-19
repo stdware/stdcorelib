@@ -461,11 +461,11 @@ namespace stdc {
 
                 WORD result = initial;
                 if (attrs.fg != nocolor) {
-                    constexpr WORD mask = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE |
-                                          FOREGROUND_INTENSITY;
+                    constexpr WORD mask =
+                        FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
                     result &= ~mask;
-                    result |= color_bits(attrs.fg, FOREGROUND_RED, FOREGROUND_GREEN,
-                                         FOREGROUND_BLUE);
+                    result |=
+                        color_bits(attrs.fg, FOREGROUND_RED, FOREGROUND_GREEN, FOREGROUND_BLUE);
                     if ((attrs.fg & intensified) || (attrs.style & bold)) {
                         result |= FOREGROUND_INTENSITY;
                     }
@@ -473,11 +473,11 @@ namespace stdc {
                     result |= FOREGROUND_INTENSITY;
                 }
                 if (attrs.bg != nocolor) {
-                    constexpr WORD mask = BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE |
-                                          BACKGROUND_INTENSITY;
+                    constexpr WORD mask =
+                        BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY;
                     result &= ~mask;
-                    result |= color_bits(attrs.bg, BACKGROUND_RED, BACKGROUND_GREEN,
-                                         BACKGROUND_BLUE);
+                    result |=
+                        color_bits(attrs.bg, BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE);
                     if (attrs.bg & intensified) {
                         result |= BACKGROUND_INTENSITY;
                     }
@@ -513,7 +513,7 @@ namespace stdc {
             }
             int value = detail::columns_of(info);
 #else
-            struct winsize ws {};
+            struct winsize ws{};
             if (::ioctl(id, TIOCGWINSZ, &ws) != 0) {
                 return fallback;
             }

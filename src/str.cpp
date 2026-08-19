@@ -355,7 +355,7 @@ namespace stdc {
         // compile where the declaration was read without the macro, and where both were read
         // with it the symbol is one the library never exported.
         int compare_insensitive(const std::string_view &LHS, const std::string_view &RHS) {
-            size_t shared = (std::min)(LHS.size(), RHS.size());
+            size_t shared = (std::min) (LHS.size(), RHS.size());
             for (size_t i = 0; i < shared; ++i) {
                 // As unsigned, or a byte above 0x7F sorts before every letter where char is
                 // signed.

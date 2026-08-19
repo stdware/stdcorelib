@@ -33,23 +33,22 @@
 #  endif
 #endif
 
-#define STDC_DISABLE_COPY(Class)                                                             \
+#define STDC_DISABLE_COPY(Class)                                                                   \
     Class(const Class &) = delete;                                                                 \
     Class &operator=(const Class &) = delete;
 
-#define STDC_DISABLE_MOVE(Class)                                                             \
+#define STDC_DISABLE_MOVE(Class)                                                                   \
     Class(Class &&) = delete;                                                                      \
     Class &operator=(Class &&) = delete;
 
-#define STDC_DISABLE_COPY_MOVE(Class)                                                        \
-    STDC_DISABLE_COPY(Class)                                                                 \
+#define STDC_DISABLE_COPY_MOVE(Class)                                                              \
+    STDC_DISABLE_COPY(Class)                                                                       \
     STDC_DISABLE_MOVE(Class)
 
 #if defined(__GNUC__) || defined(__clang__)
-#  define STDC_PRINTF_FORMAT(fmtpos, attrpos)                                                \
+#  define STDC_PRINTF_FORMAT(fmtpos, attrpos)                                                      \
       __attribute__((__format__(__printf__, fmtpos, attrpos)))
-#  define STDC_SCANF_FORMAT(fmtpos, attrpos)                                                 \
-      __attribute__((__format__(__scanf__, fmtpos, attrpos)))
+#  define STDC_SCANF_FORMAT(fmtpos, attrpos) __attribute__((__format__(__scanf__, fmtpos, attrpos)))
 #else
 #  define STDC_PRINTF_FORMAT(fmtpos, attrpos)
 #  define STDC_SCANF_FORMAT

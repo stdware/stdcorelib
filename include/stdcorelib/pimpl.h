@@ -71,7 +71,7 @@ namespace stdc::pimpl::detail {
 #endif
 
 #define stdc_impl_get(T)                                                                           \
-    ::stdc::pimpl::detail::get_impl_helper<typename T::Impl>(                                    \
+    ::stdc::pimpl::detail::get_impl_helper<typename T::Impl>(                                      \
         static_cast<T *>(this)->STDC_PIMPL_IMPL_MEMBER_VAR_NAME)
 #define stdc_decl_get(T) static_cast<T *>(STDC_PIMPL_DECL_MEMBER_VAR_NAME)
 

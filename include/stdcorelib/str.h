@@ -167,7 +167,7 @@ namespace stdc {
             }
 
             STDC_EXPORT static std::string normalize_separators(const std::string &utf8_path,
-                                                                      bool native);
+                                                                bool native);
         };
 
         /// Renders \a t as UTF-8.
@@ -204,11 +204,11 @@ namespace stdc {
 
         /// Concatenates \a v with \a delimiter between the pieces.
         STDC_EXPORT std::string join(const array_view<std::string> &v,
-                                           const std::string_view &delimiter);
+                                     const std::string_view &delimiter);
 
         /// \overload
         STDC_EXPORT std::string join(const array_view<std::string_view> &v,
-                                           const std::string_view &delimiter);
+                                     const std::string_view &delimiter);
 
         /// \overload
         inline std::string join(std::initializer_list<std::string_view> v,
@@ -223,11 +223,11 @@ namespace stdc {
         ///          taking an rvalue \c std::string returns copies instead, since there would be
         ///          nothing left to point at.
         STDC_EXPORT std::vector<std::string_view> split(const std::string_view &s,
-                                                              const std::string_view &delimiter);
+                                                        const std::string_view &delimiter);
 
         /// \overload
         STDC_EXPORT std::vector<std::string> split(std::string &&s,
-                                                         const std::string_view &delimiter);
+                                                   const std::string_view &delimiter);
 
         /// \overload
         inline std::vector<std::string_view> split(const char *s,
@@ -239,7 +239,7 @@ namespace stdc {
         ///
         /// \note A placeholder with no argument behind it is left as it stands.
         STDC_EXPORT std::string format(const std::string_view &fmt,
-                                             const array_view<std::string> &args);
+                                       const array_view<std::string> &args);
 
         /// format() with the arguments spelled out, each run through to_string() first.
         ///
@@ -472,8 +472,8 @@ namespace stdc {
         }
 
         inline std::string to_upper(std::string s) {
-            std::ignore = std::transform(s.begin(), s.end(), s.begin(),
-                                         [](char c) { return to_upper(c); });
+            std::ignore =
+                std::transform(s.begin(), s.end(), s.begin(), [](char c) { return to_upper(c); });
             return s;
         }
 
@@ -485,8 +485,8 @@ namespace stdc {
         }
 
         inline std::string to_lower(std::string s) {
-            std::ignore = std::transform(s.begin(), s.end(), s.begin(),
-                                         [](char c) { return to_lower(c); });
+            std::ignore =
+                std::transform(s.begin(), s.end(), s.begin(), [](char c) { return to_lower(c); });
             return s;
         }
 

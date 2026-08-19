@@ -28,8 +28,8 @@ namespace {
     struct can_enum_keys : std::false_type {};
 
     template <class T>
-    struct can_enum_keys<T, std::void_t<decltype(std::declval<T>().enumKeys())>>
-        : std::true_type {};
+    struct can_enum_keys<T, std::void_t<decltype(std::declval<T>().enumKeys())>> : std::true_type {
+    };
 
     template <class T, class = void>
     struct can_enum_keys_with_error : std::false_type {};
@@ -382,9 +382,9 @@ BOOST_AUTO_TEST_CASE(test_enumerating_without_an_error_code) {
     });
 
     // Volatile like its parent: Windows refuses a key that would outlive the one above it.
-    BOOST_REQUIRE(testKey.create(L"child", ec, RegKey::DA_Read | RegKey::DA_Write,
-                                 RegKey::CO_Volatile)
-                      .isValid());
+    BOOST_REQUIRE(
+        testKey.create(L"child", ec, RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile)
+            .isValid());
     BOOST_REQUIRE(testKey.setValue(L"a_value", RegValue(L"a"), ec));
 
     // Indexed reads, which is what the iterators call when given no ec.

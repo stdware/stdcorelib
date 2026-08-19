@@ -61,13 +61,13 @@ namespace stdc {
     struct STDC_EXPORT CborDecodeError {
         enum Code {
             NoError = 0,
-            UnexpectedEnd,    ///< the bytes stopped in the middle of an item
-            IllegalEncoding,  ///< a reserved encoding, or one this item is not allowed
-            IllegalString,    ///< a text string that is not UTF-8
-            OutOfRange,       ///< a number CBOR can write and JsonValue cannot hold
-            UnsupportedType,  ///< tags, and map keys that are not text
+            UnexpectedEnd,   ///< the bytes stopped in the middle of an item
+            IllegalEncoding, ///< a reserved encoding, or one this item is not allowed
+            IllegalString,   ///< a text string that is not UTF-8
+            OutOfRange,      ///< a number CBOR can write and JsonValue cannot hold
+            UnsupportedType, ///< tags, and map keys that are not text
             NestedTooDeeply,
-            TrailingContent,  ///< a whole item, and then more after it
+            TrailingContent, ///< a whole item, and then more after it
         };
 
         Code code = NoError;

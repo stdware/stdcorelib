@@ -23,7 +23,7 @@ namespace stdc::str {
     };
 
     STDC_DECL_HIDDEN bool varexp_split(const std::string_view &s,
-                                             vlarray_base<varexp_part> &result);
+                                       vlarray_base<varexp_part> &result);
 
     STDC_DECL_HIDDEN std::string varexp_post(const std::string_view &s);
 

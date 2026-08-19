@@ -259,7 +259,7 @@ namespace stdc {
 /// itself. Naming it rather than reopening it is what makes writing them anywhere else say so:
 /// the compiler answers "in namespace X, which does not enclose namespace stdc" instead of
 /// failing somewhere inside this header.
-#define STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                \
+#define STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                      \
     template <class T>                                                                             \
     typename ::stdc::StaticRegistry<T>::Node * ::stdc::StaticRegistry<T>::_head = nullptr;         \
     template <class T>                                                                             \
@@ -270,7 +270,6 @@ namespace stdc {
 ///
 /// Enough for a registry that lives in one module. A host that means to accept registrations
 /// from a plugin wants the EXPORT form above instead.
-#define STDC_INSTANTIATE_STATIC_REGISTRY(TYPE)                                               \
-    STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, )
+#define STDC_INSTANTIATE_STATIC_REGISTRY(TYPE) STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, )
 
 #endif // STDCORELIB_STATICREGISTRY_H

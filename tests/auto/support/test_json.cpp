@@ -167,7 +167,9 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Conversions) {
         arrayFallback.emplace_back(7);
         const JsonValue *arrayData = arrayFallback.data();
 
+        // clang-format off
         JsonObject objectFallback{{"fallback", JsonValue(8)}};
+        // clang-format on
         const JsonValue *objectValue = &objectFallback.begin()->second;
 
         JsonValue s("text");
@@ -183,13 +185,14 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Conversions) {
         BOOST_CHECK(binary[0] == 6);
         BOOST_CHECK(object["fallback"].toInt() == 8);
 
-        auto actualArray =
-            JsonValue(JsonArray{JsonValue(1)}).toArray(JsonArray{JsonValue(9)});
+        auto actualArray = JsonValue(JsonArray{JsonValue(1)}).toArray(JsonArray{JsonValue(9)});
         BOOST_CHECK(actualArray[0].toInt() == 1);
+        // clang-format off
         BOOST_CHECK(JsonValue(JsonObject{{"actual", JsonValue(2)}})
                         .toObject(JsonObject{{"fallback", JsonValue(9)}})
                         .at("actual")
                         .toInt() == 2);
+        // clang-format on
     }
 }
 
@@ -433,8 +436,7 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Cbor) {
     // A declared container count cannot exceed the bytes that remain. Reject it before using the
     // untrusted count to reserve storage.
     {
-        const uint8_t impossibleArray[] = {0x9B, 0xFF, 0xFF, 0xFF, 0xFF,
-                                           0xFF, 0xFF, 0xFF, 0xFF};
+        const uint8_t impossibleArray[] = {0x9B, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
         CborDecodeError error;
         JsonValue back = JsonValue::fromCbor(impossibleArray, &error);
         BOOST_CHECK(back.isNull());

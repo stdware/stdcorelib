@@ -370,8 +370,8 @@ namespace stdc {
                 part = suffix.substr(start, dotPos - start);
                 start = dotPos + 1;
             }
-            if (part.empty() || !std::all_of(part.begin(), part.end(),
-                                             [](char c) { return str::is_digit(c); })) {
+            if (part.empty() ||
+                !std::all_of(part.begin(), part.end(), [](char c) { return str::is_digit(c); })) {
                 return false;
             }
         }

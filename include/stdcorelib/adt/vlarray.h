@@ -554,7 +554,7 @@ namespace stdc {
         vlarray &operator=(vlarray &&RHS) noexcept(
             std::is_nothrow_move_constructible_v<T> &&
             (!AllocTraits::propagate_on_container_move_assignment::value ||
-             std::is_nothrow_move_assignable_v<Alloc>)) {
+             std::is_nothrow_move_assignable_v<Alloc>) ) {
             this->assign(std::move(RHS));
             return *this;
         }
