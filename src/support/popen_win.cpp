@@ -8,6 +8,7 @@
 
 #include <array>
 #include <thread>
+#include <tuple>
 #include <algorithm>
 #include <cassert>
 #include <set>
@@ -1009,9 +1010,9 @@ namespace stdc {
 
     static BOOL CALLBACK qt_terminateApp(HWND hwnd, LPARAM procId) {
         DWORD currentProcId = 0;
-        GetWindowThreadProcessId(hwnd, &currentProcId);
+        std::ignore = GetWindowThreadProcessId(hwnd, &currentProcId);
         if (currentProcId == (DWORD) procId)
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            std::ignore = PostMessageW(hwnd, WM_CLOSE, 0, 0);
         return TRUE;
     }
 

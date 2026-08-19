@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "console.h"
+#include "console_p.h"
 
 #ifdef _WIN32
 #  include "stdc_windows.h"
@@ -12,14 +13,13 @@
 
 #include <atomic>
 #include <mutex>
+#include <tuple>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 
 #include "utf.h"
-
-#include "console_p.h"
 #include "str_p.h"
 
 namespace stdc {
@@ -160,7 +160,7 @@ namespace stdc {
                                                                          : INVALID_HANDLE_VALUE;
                 if (_console != INVALID_HANDLE_VALUE) {
                     _codepage = ::GetConsoleOutputCP();
-                    ::SetConsoleOutputCP(CP_UTF8);
+                    std::ignore = ::SetConsoleOutputCP(CP_UTF8);
                 }
 #endif
                 attach();
@@ -170,7 +170,7 @@ namespace stdc {
                 reset();
 #ifdef _WIN32
                 if (_console != INVALID_HANDLE_VALUE) {
-                    ::SetConsoleOutputCP(_codepage);
+                    std::ignore = ::SetConsoleOutputCP(_codepage);
                     _console = INVALID_HANDLE_VALUE;
                 }
 #endif
@@ -264,9 +264,8 @@ namespace stdc {
             // The attributes to restore are read off the target that was just attached, not off
             // the process's stdout.
             void attach() override {
-                if (_console != INVALID_HANDLE_VALUE) {
-                    ::GetConsoleScreenBufferInfo(_console, &_csbi);
-                }
+                _read = _console != INVALID_HANDLE_VALUE &&
+                        ::GetConsoleScreenBufferInfo(_console, &_csbi);
             }
 
         public:
@@ -274,8 +273,8 @@ namespace stdc {
                 console::detail::attributes next{style, fg, bg};
                 if (next != current()) {
                     set_current(next);
-                    if (_console != INVALID_HANDLE_VALUE) {
-                        ::SetConsoleTextAttribute(
+                    if (_read) {
+                        std::ignore = ::SetConsoleTextAttribute(
                             _console, console::detail::legacy_attributes(next, _csbi.wAttributes));
                     }
                 }
@@ -283,8 +282,8 @@ namespace stdc {
 
             void reset() override {
                 if (current() != console::detail::attributes{}) {
-                    if (_console != INVALID_HANDLE_VALUE) {
-                        ::SetConsoleTextAttribute(_console, _csbi.wAttributes);
+                    if (_read) {
+                        std::ignore = ::SetConsoleTextAttribute(_console, _csbi.wAttributes);
                     }
                     set_current({});
                 }
@@ -292,6 +291,10 @@ namespace stdc {
 
         private:
             CONSOLE_SCREEN_BUFFER_INFO _csbi{};
+
+            /// Whether _csbi says what the console was set to. attach() answers it on every
+            /// entry, which is the only span in which the two writers below run.
+            bool _read = false;
         };
 #endif
 

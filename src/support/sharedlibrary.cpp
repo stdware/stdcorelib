@@ -3,6 +3,7 @@
 #include "sharedlibrary.h"
 
 #include <algorithm>
+#include <tuple>
 
 #ifdef _WIN32
 #  include "winapi.h"
@@ -213,9 +214,9 @@ namespace stdc {
         if (hints.test_flag(PreventUnloadHint)) {
             // prevent the unloading of this component
             HMODULE hmod;
-            ::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
-                                     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                                 reinterpret_cast<const wchar_t *>(handle), &hmod);
+            std::ignore = ::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
+                                                   GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                               reinterpret_cast<const wchar_t *>(handle), &hmod);
         }
 #endif
 
@@ -403,7 +404,7 @@ namespace stdc {
     fs::path SharedLibrary::setLibraryPath(const fs::path &path) {
 #ifdef _WIN32
         std::wstring org = winapi::kernel32::GetDllDirectoryW();
-        ::SetDllDirectoryW(path.c_str());
+        std::ignore = ::SetDllDirectoryW(path.c_str());
 #else
         std::string org;
         if (const char *env = std::getenv(PRIOR_LIBRARY_PATH_KEY); env) {

@@ -2,6 +2,7 @@
 
 #include "registry.h"
 
+#include <tuple>
 #include <variant>
 #include <cassert>
 #include <cstdint>
@@ -612,7 +613,7 @@ namespace stdc::windows {
         LSTATUS status = RegOpenKeyExW(_hkey, path.c_str(), 0, KEY_READ, &hkey);
         if (status == ERROR_SUCCESS) {
             assert(hkey);
-            RegCloseKey(hkey);
+            std::ignore = RegCloseKey(hkey);
             hasKey = true;
         } else if (status != ERROR_FILE_NOT_FOUND) {
             ec = make_status_error_code(status);

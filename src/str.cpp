@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "str.h"
+#include "str_p.h"
 
 #include "vlarray.h"
 
@@ -13,7 +14,6 @@
 #include <cstdarg>
 
 #include "path.h"
-#include "str_p.h"
 #include "utf.h"
 
 namespace stdc {
