@@ -162,7 +162,7 @@ namespace stdc {
 
     void Popen::Impl::_reap() {
         if (_handle != InvalidHandle) {
-            CloseHandle(_handle);
+            ::CloseHandle(_handle);
             _handle = InvalidHandle;
         }
         // pid and tid are left alone. They stay readable after the child exits, as in Python.
@@ -181,14 +181,14 @@ namespace stdc {
     }
 
     static inline std::error_code make_last_error_code() {
-        return std::error_code(GetLastError(), windows_utf8_category());
+        return std::error_code(::GetLastError(), windows_utf8_category());
     }
 
     bool Popen::Impl::_get_devnull() {
         // Create a null device handle
         auto handle =
-            CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                        nullptr, OPEN_EXISTING, 0, nullptr);
+            ::CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                          nullptr, OPEN_EXISTING, 0, nullptr);
         if (handle == INVALID_HANDLE_VALUE) {
             errorCode = make_last_error_code();
             error_api = "CreateFileW";
@@ -211,7 +211,7 @@ namespace stdc {
         Container res;
         std::set<HANDLE> seen;
         for (HANDLE handle : handle_list) {
-            if (((intptr_t) handle & 0x3) == 0x3 && GetFileType(handle) == FILE_TYPE_CHAR) {
+            if (((intptr_t) handle & 0x3) == 0x3 && ::GetFileType(handle) == FILE_TYPE_CHAR) {
                 continue;
             }
             // UpdateProcThreadAttribute rejects a list with the same handle twice.
@@ -239,10 +239,10 @@ namespace stdc {
         int err_close_handles_cnt = 0;
         auto err_close_handle_guard = make_scope_guard([&]() {
             for (int i = 0; i < err_close_handles_cnt; i++) {
-                CloseHandle(err_close_handles[i]);
+                ::CloseHandle(err_close_handles[i]);
             }
             if (_devnull != InvalidHandle) {
-                CloseHandle(_devnull);
+                ::CloseHandle(_devnull);
                 _devnull = InvalidHandle;
             }
         });
@@ -255,7 +255,7 @@ namespace stdc {
         int dup_close_handles_cnt = 0;
         auto dup_close_handle_guard = make_scope_guard([&]() {
             for (int i = 0; i < dup_close_handles_cnt; i++) {
-                CloseHandle(dup_close_handles[i]);
+                ::CloseHandle(dup_close_handles[i]);
             }
         });
         const auto &push_dup_close_handle = [&](HANDLE handle) {
@@ -265,8 +265,8 @@ namespace stdc {
         // duplicate the handle that needs to be inherited
         const auto &make_inheritable = [this](HANDLE &handle) {
             HANDLE target_handle;
-            if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &target_handle,
-                                 0, 1, DUPLICATE_SAME_ACCESS)) {
+            if (!::DuplicateHandle(GetCurrentProcess(), handle, ::GetCurrentProcess(),
+                                   &target_handle, 0, 1, DUPLICATE_SAME_ACCESS)) {
                 errorCode = make_last_error_code();
                 error_api = "DuplicateHandle";
                 return false;
@@ -289,7 +289,7 @@ namespace stdc {
 
         // create a pipe
         const auto &create_pipe = [this](HANDLE &read_handle, HANDLE &write_handle) {
-            if (!CreatePipe(&read_handle, &write_handle, nullptr, 0)) {
+            if (!::CreatePipe(&read_handle, &write_handle, nullptr, 0)) {
                 errorCode = make_last_error_code();
                 error_api = "CreatePipe";
                 return false;
@@ -313,14 +313,14 @@ namespace stdc {
         // stdin
         switch (stdin_dev.kind) {
             case IODev::None: {
-                p2cread = GetStdHandle(STD_INPUT_HANDLE);
+                p2cread = ::GetStdHandle(STD_INPUT_HANDLE);
                 if (!is_usable_std_handle(p2cread)) {
                     HANDLE tmp_pipe;
                     if (!create_pipe(p2cread, tmp_pipe)) {
                         return false;
                     }
                     push_dup_close_handle(p2cread);
-                    CloseHandle(tmp_pipe);
+                    ::CloseHandle(tmp_pipe);
                 }
                 break;
             }
@@ -371,14 +371,14 @@ namespace stdc {
         // stdout
         switch (stdout_dev.kind) {
             case IODev::None: {
-                c2pwrite = GetStdHandle(STD_OUTPUT_HANDLE);
+                c2pwrite = ::GetStdHandle(STD_OUTPUT_HANDLE);
                 if (!is_usable_std_handle(c2pwrite)) {
                     HANDLE tmp_pipe;
                     if (!create_pipe(tmp_pipe, c2pwrite)) {
                         return false;
                     }
                     push_dup_close_handle(c2pwrite);
-                    CloseHandle(tmp_pipe);
+                    ::CloseHandle(tmp_pipe);
                 }
                 break;
             }
@@ -430,14 +430,14 @@ namespace stdc {
         // stderr
         switch (stderr_dev.kind) {
             case IODev::None: {
-                errwrite = GetStdHandle(STD_ERROR_HANDLE);
+                errwrite = ::GetStdHandle(STD_ERROR_HANDLE);
                 if (!is_usable_std_handle(errwrite)) {
                     HANDLE tmp_pipe;
                     if (!create_pipe(tmp_pipe, errwrite)) {
                         return false;
                     }
                     push_dup_close_handle(errwrite);
-                    CloseHandle(tmp_pipe);
+                    ::CloseHandle(tmp_pipe);
                 }
                 break;
             }
@@ -505,16 +505,16 @@ namespace stdc {
         (void) errread;
 
         if (p2cread != InvalidHandle) {
-            CloseHandle(p2cread);
+            ::CloseHandle(p2cread);
         }
         if (c2pwrite != InvalidHandle) {
-            CloseHandle(c2pwrite);
+            ::CloseHandle(c2pwrite);
         }
         if (errwrite != InvalidHandle) {
-            CloseHandle(errwrite);
+            ::CloseHandle(errwrite);
         }
         if (_devnull != InvalidHandle) {
-            CloseHandle(_devnull);
+            ::CloseHandle(_devnull);
             _devnull = InvalidHandle;
         }
     }
@@ -600,7 +600,7 @@ namespace stdc {
 
         *size = handles.size() * sizeof(HANDLE);
 
-        LPHANDLE ret = (LPHANDLE) HeapAlloc(GetProcessHeap(), 0, *size);
+        LPHANDLE ret = (LPHANDLE)::HeapAlloc(GetProcessHeap(), 0, *size);
         for (size_t i = 0; i < handles.size(); i++) {
             ret[i] = handles[i];
         }
@@ -616,13 +616,13 @@ namespace stdc {
     // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1210
     static void _free_attribute_list(AttributeList *attribute_list) {
         if (attribute_list->attribute_list != NULL) {
-            DeleteProcThreadAttributeList(attribute_list->attribute_list);
-            HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
+            ::DeleteProcThreadAttributeList(attribute_list->attribute_list);
+            ::HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
         }
         // This runs a second time on the error path, where the struct is already zeroed. HeapFree
         // is not documented to accept a null pointer.
         if (attribute_list->handle_list != NULL) {
-            HeapFree(GetProcessHeap(), 0, attribute_list->handle_list);
+            ::HeapFree(GetProcessHeap(), 0, attribute_list->handle_list);
         }
         memset(attribute_list, 0, sizeof(*attribute_list));
     }
@@ -645,27 +645,28 @@ namespace stdc {
         }
 
         /* Get how many bytes we need for the attribute list */
-        result = InitializeProcThreadAttributeList(NULL, attribute_count, 0, &attribute_list_size);
-        if (result || ((err = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)) {
+        result =
+            ::InitializeProcThreadAttributeList(NULL, attribute_count, 0, &attribute_list_size);
+        if (result || ((err = ::GetLastError()) != ERROR_INSUFFICIENT_BUFFER)) {
             err_api = "InitializeProcThreadAttributeList";
             goto _cleanup;
         }
 
         attribute_list->attribute_list =
-            (LPPROC_THREAD_ATTRIBUTE_LIST) HeapAlloc(GetProcessHeap(), 0, attribute_list_size);
+            (LPPROC_THREAD_ATTRIBUTE_LIST)::HeapAlloc(GetProcessHeap(), 0, attribute_list_size);
         if (!attribute_list->attribute_list) {
-            err = GetLastError();
+            err = ::GetLastError();
             err_api = "HeapAlloc";
             goto _cleanup;
         }
 
-        result = InitializeProcThreadAttributeList(attribute_list->attribute_list, attribute_count,
-                                                   0, &attribute_list_size);
+        result = ::InitializeProcThreadAttributeList(attribute_list->attribute_list,
+                                                     attribute_count, 0, &attribute_list_size);
         if (!result) {
-            err = GetLastError();
+            err = ::GetLastError();
 
             /* So that we won't call DeleteProcThreadAttributeList */
-            HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
+            ::HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
             attribute_list->attribute_list = NULL;
 
             err_api = "InitializeProcThreadAttributeList";
@@ -673,11 +674,11 @@ namespace stdc {
         }
 
         if (attribute_list->handle_list != NULL) {
-            result = UpdateProcThreadAttribute(
+            result = ::UpdateProcThreadAttribute(
                 attribute_list->attribute_list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                 attribute_list->handle_list, handle_list_size, NULL, NULL);
             if (!result) {
-                err = GetLastError();
+                err = ::GetLastError();
                 err_api = "UpdateProcThreadAttribute";
                 goto _cleanup;
             }
@@ -725,7 +726,7 @@ namespace stdc {
         std::string args_str = qt_create_commandline({}, shell ? shell_args : args, shell);
 
         STARTUPINFOEXW siex;
-        ZeroMemory(&siex, sizeof(siex));
+        ::ZeroMemory(&siex, sizeof(siex));
         STARTUPINFOW &si = siex.StartupInfo;
         si.cb = sizeof(siex);
         if (startupInfo) {
@@ -845,24 +846,24 @@ namespace stdc {
         dwCreationFlags = creationFlags | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1554
-        if (!CreateProcessW(application_name.empty() ? NULL : application_name.data(), //
-                            command_line.data(),                                       //
-                            nullptr,                                                   //
-                            nullptr,                                                   //
-                            !closeFds,                                                 //
-                            dwCreationFlags,                                           //
-                            env ? env_str.data() : NULL,                               //
-                            cwd.empty() ? NULL : cwd.c_str(),
-                            (LPSTARTUPINFOW) &siex, //
-                            &pi                     //
-                            )) {
+        if (!::CreateProcessW(application_name.empty() ? NULL : application_name.data(), //
+                              command_line.data(),                                       //
+                              nullptr,                                                   //
+                              nullptr,                                                   //
+                              !closeFds,                                                 //
+                              dwCreationFlags,                                           //
+                              env ? env_str.data() : NULL,                               //
+                              cwd.empty() ? NULL : cwd.c_str(),
+                              (LPSTARTUPINFOW) &siex, //
+                              &pi                     //
+                              )) {
             errorCode = make_last_error_code();
             error_api = "CreateProcessW";
             goto _cleanup;
         }
 
         _handle = pi.hProcess;
-        CloseHandle(pi.hThread);
+        ::CloseHandle(pi.hThread);
         pid = pi.dwProcessId;
         tid = pi.dwThreadId;
 
@@ -902,11 +903,11 @@ namespace stdc {
             errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
-        DWORD result = WaitForSingleObject(_handle, 0);
+        DWORD result = ::WaitForSingleObject(_handle, 0);
         switch (result) {
             case WAIT_OBJECT_0: {
                 DWORD exitCode;
-                if (!GetExitCodeProcess(_handle, &exitCode)) {
+                if (!::GetExitCodeProcess(_handle, &exitCode)) {
                     errorCode = make_last_error_code();
                     return false;
                 }
@@ -945,7 +946,7 @@ namespace stdc {
             timeout = INFINITE;
         }
 
-        DWORD result = WaitForSingleObject(_handle, timeout);
+        DWORD result = ::WaitForSingleObject(_handle, timeout);
         switch (result) {
             case WAIT_TIMEOUT: {
                 return false;
@@ -959,7 +960,7 @@ namespace stdc {
         }
 
         DWORD exitCode;
-        if (!GetExitCodeProcess(_handle, &exitCode)) {
+        if (!::GetExitCodeProcess(_handle, &exitCode)) {
             errorCode = make_last_error_code();
             return false;
         }
@@ -987,15 +988,15 @@ namespace stdc {
             errorCode = std::make_error_code(std::errc::no_such_process);
             return false;
         }
-        if (TerminateProcess(_handle, KillProcessExitCode)) {
+        if (::TerminateProcess(_handle, KillProcessExitCode)) {
             return true;
         }
 
-        auto err = GetLastError();
+        auto err = ::GetLastError();
         if (err == ERROR_ACCESS_DENIED) {
             DWORD exitCode;
 
-            std::ignore = GetExitCodeProcess(_handle, &exitCode);
+            std::ignore = ::GetExitCodeProcess(_handle, &exitCode);
             if (exitCode == STILL_ACTIVE) {
                 errorCode.assign(err, windows_utf8_category());
                 return false;
@@ -1010,9 +1011,9 @@ namespace stdc {
 
     static BOOL CALLBACK qt_terminateApp(HWND hwnd, LPARAM procId) {
         DWORD currentProcId = 0;
-        std::ignore = GetWindowThreadProcessId(hwnd, &currentProcId);
+        std::ignore = ::GetWindowThreadProcessId(hwnd, &currentProcId);
         if (currentProcId == (DWORD) procId)
-            std::ignore = PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            std::ignore = ::PostMessageW(hwnd, WM_CLOSE, 0, 0);
         return TRUE;
     }
 
@@ -1035,8 +1036,8 @@ namespace stdc {
         // Both calls are a request, not a guarantee. A process with no windows and no message
         // loop notices neither. Qt ignores the return values for that reason, since finding
         // nothing to close is not a failure, and so do we.
-        std::ignore = EnumWindows(qt_terminateApp, (LPARAM) pid);
-        std::ignore = PostThreadMessageW(tid, WM_CLOSE, 0, 0);
+        std::ignore = ::EnumWindows(qt_terminateApp, (LPARAM) pid);
+        std::ignore = ::PostThreadMessageW(tid, WM_CLOSE, 0, 0);
         return true;
     }
 
@@ -1057,7 +1058,7 @@ namespace stdc {
         }
 
         if (sig == CTRL_C_EVENT || sig == CTRL_BREAK_EVENT) {
-            if (GenerateConsoleCtrlEvent(sig, pid)) {
+            if (::GenerateConsoleCtrlEvent(sig, pid)) {
                 return true;
             }
             errorCode = make_last_error_code();

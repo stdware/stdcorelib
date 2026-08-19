@@ -244,7 +244,7 @@ namespace stdc {
 #ifdef _WIN32
         std::map<std::string, std::string> environment() {
             std::map<std::string, std::string> env;
-            if (wchar_t *envStrings = GetEnvironmentStringsW()) {
+            if (wchar_t *envStrings = ::GetEnvironmentStringsW()) {
                 for (const wchar_t *entry = envStrings; *entry;) {
                     const int entryLen = int(wcslen(entry));
                     // + 1 to permit magic cmd variable names starting with =
@@ -257,7 +257,7 @@ namespace stdc {
                     }
                     entry += entryLen + 1;
                 }
-                FreeEnvironmentStringsW(envStrings);
+                ::FreeEnvironmentStringsW(envStrings);
             }
             return env;
         }

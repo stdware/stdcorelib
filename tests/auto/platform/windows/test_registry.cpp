@@ -124,19 +124,19 @@ BOOST_AUTO_TEST_CASE(test_reg_read_write) {
     // the reader respects the byte count instead of scanning past the allocation.
     HKEY nativeKey = nullptr;
     BOOST_REQUIRE_EQUAL(
-        RegOpenKeyExW(HKEY_CURRENT_USER, TEST_KEY.c_str(), 0, KEY_READ | KEY_WRITE, &nativeKey),
+        ::RegOpenKeyExW(HKEY_CURRENT_USER, TEST_KEY.c_str(), 0, KEY_READ | KEY_WRITE, &nativeKey),
         ERROR_SUCCESS);
-    auto nativeKeyGuard = stdc::make_scope_guard([&]() { RegCloseKey(nativeKey); });
+    auto nativeKeyGuard = stdc::make_scope_guard([&]() { ::RegCloseKey(nativeKey); });
     DWORD storedSize = 0;
-    BOOST_REQUIRE_EQUAL(RegQueryValueExW(nativeKey, TEST_STRING.first.c_str(), nullptr, nullptr,
-                                         nullptr, &storedSize),
+    BOOST_REQUIRE_EQUAL(::RegQueryValueExW(nativeKey, TEST_STRING.first.c_str(), nullptr, nullptr,
+                                           nullptr, &storedSize),
                         ERROR_SUCCESS);
     BOOST_CHECK_EQUAL(storedSize, (TEST_STRING.second.toString().size() + 1) * sizeof(wchar_t));
 
     const wchar_t unterminated[] = L"external";
-    BOOST_REQUIRE_EQUAL(RegSetValueExW(nativeKey, L"unterminated", 0, REG_SZ,
-                                       reinterpret_cast<const BYTE *>(unterminated),
-                                       DWORD(sizeof(unterminated) - sizeof(wchar_t))),
+    BOOST_REQUIRE_EQUAL(::RegSetValueExW(nativeKey, L"unterminated", 0, REG_SZ,
+                                         reinterpret_cast<const BYTE *>(unterminated),
+                                         DWORD(sizeof(unterminated) - sizeof(wchar_t))),
                         ERROR_SUCCESS);
     BOOST_CHECK(testKey.value(L"unterminated", ec).toString() == L"external");
 
@@ -280,7 +280,7 @@ BOOST_AUTO_TEST_CASE(test_value_of_an_unsupported_type) {
     // so this is not a contrived value.
     const BYTE blob[8] = {1, 2, 3, 4, 5, 6, 7, 8};
     BOOST_REQUIRE_EQUAL(
-        RegSetValueExW(key.handle(), L"exotic", 0, REG_RESOURCE_LIST, blob, sizeof(blob)),
+        ::RegSetValueExW(key.handle(), L"exotic", 0, REG_RESOURCE_LIST, blob, sizeof(blob)),
         ERROR_SUCCESS);
 
     auto val = key.value(L"exotic", ec);
@@ -475,7 +475,7 @@ BOOST_AUTO_TEST_CASE(test_regkey_ownership) {
         BOOST_CHECK(borrowed.isValid());
         BOOST_CHECK_EQUAL(borrowed.valueCount(ec), 0);
     }
-    BOOST_CHECK_EQUAL(RegCloseKey(taken), ERROR_SUCCESS);
+    BOOST_CHECK_EQUAL(::RegCloseKey(taken), ERROR_SUCCESS);
 }
 
 BOOST_AUTO_TEST_CASE(test_regvalue) {

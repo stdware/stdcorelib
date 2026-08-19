@@ -695,9 +695,9 @@ BOOST_AUTO_TEST_CASE(test_bad_cwd) {
 
 BOOST_AUTO_TEST_CASE(test_unicode_environment) {
     wchar_t marker[2];
-    if (GetEnvironmentVariableW(L"STDC_POPEN_UNICODE_CHILD", marker, 2) != 0) {
+    if (::GetEnvironmentVariableW(L"STDC_POPEN_UNICODE_CHILD", marker, 2) != 0) {
         wchar_t value[32];
-        DWORD size = GetEnvironmentVariableW(L"\u53d8\u91cf", value, DWORD(std::size(value)));
+        DWORD size = ::GetEnvironmentVariableW(L"\u53d8\u91cf", value, DWORD(std::size(value)));
         BOOST_REQUIRE(size > 0 && size < std::size(value));
         BOOST_CHECK(std::wstring(value, size) == L"\u503c\u6d4b\u8bd5");
         return;
@@ -1235,22 +1235,22 @@ BOOST_AUTO_TEST_CASE(test_startupinfo_names_the_handles_the_child_starts_with) {
     inheritable.nLength = sizeof(inheritable);
     inheritable.bInheritHandle = TRUE;
 
-    HANDLE out = CreateFileW(out_file.path().wstring().c_str(), GENERIC_WRITE,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE, &inheritable, CREATE_ALWAYS,
-                             FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE out = ::CreateFileW(out_file.path().wstring().c_str(), GENERIC_WRITE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, &inheritable, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
     BOOST_REQUIRE(out != INVALID_HANDLE_VALUE);
     bool out_open = true;
     auto close_out = stdc::make_scope_guard([&] {
         if (out_open) {
-            CloseHandle(out);
+            ::CloseHandle(out);
         }
     });
 
     // A child given STARTF_USESTDHANDLES gets all three, so stdin needs one it can hold.
-    HANDLE in = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ, &inheritable, OPEN_EXISTING,
-                            FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE in = ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ, &inheritable, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
     BOOST_REQUIRE(in != INVALID_HANDLE_VALUE);
-    auto close_in = stdc::make_scope_guard([&] { CloseHandle(in); });
+    auto close_in = stdc::make_scope_guard([&] { ::CloseHandle(in); });
 
     // Terminated by INVALID_HANDLE_VALUE, which is what the header says the key holds.
     HANDLE handles[] = {in, out, INVALID_HANDLE_VALUE};
@@ -1269,7 +1269,7 @@ BOOST_AUTO_TEST_CASE(test_startupinfo_names_the_handles_the_child_starts_with) {
     BOOST_CHECK_EQUAL(*p.returnCode(), 0);
 
     // Closed before reading, since the child's copy was never the only one open.
-    CloseHandle(out);
+    ::CloseHandle(out);
     out_open = false;
     BOOST_CHECK_EQUAL(first_line(out_file.read()), "through-startupInfo");
 }

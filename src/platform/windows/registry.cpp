@@ -78,35 +78,35 @@ namespace stdc::windows {
 
     static inline LSTATUS getRegSubKeyCountAndMaxLen(HKEY hkey, DWORD *dwSubKeys,
                                                      DWORD *dwLongestSubKeyLen) {
-        return RegQueryInfoKeyW(hkey,               // Key handle
-                                nullptr,            // Buffer for registry ked class name
-                                nullptr,            // Size of class string
-                                nullptr,            // Reserved
-                                dwSubKeys,          // Number of key subkeys
-                                dwLongestSubKeyLen, // Longest subkey size
-                                nullptr,            // Longest class string
-                                nullptr,            // number of values for this key
-                                nullptr,            // Longest value name
-                                nullptr,            // Longest value data
-                                nullptr,            // Security descriptor
-                                nullptr             // Last key write time
+        return ::RegQueryInfoKeyW(hkey,               // Key handle
+                                  nullptr,            // Buffer for registry ked class name
+                                  nullptr,            // Size of class string
+                                  nullptr,            // Reserved
+                                  dwSubKeys,          // Number of key subkeys
+                                  dwLongestSubKeyLen, // Longest subkey size
+                                  nullptr,            // Longest class string
+                                  nullptr,            // number of values for this key
+                                  nullptr,            // Longest value name
+                                  nullptr,            // Longest value data
+                                  nullptr,            // Security descriptor
+                                  nullptr             // Last key write time
         );
     }
 
     static inline LSTATUS getRegValueCountAndMaxLen(HKEY hkey, DWORD *dwValues,
                                                     DWORD *dwLongestValueNameLen) {
-        return RegQueryInfoKeyW(hkey,                  // Key handle
-                                nullptr,               // Buffer for registry ked class name
-                                nullptr,               // Size of class string
-                                nullptr,               // Reserved
-                                nullptr,               // Number of key subkeys
-                                nullptr,               // Longest subkey size
-                                nullptr,               // Longest class string
-                                dwValues,              // number of values for this key
-                                dwLongestValueNameLen, // Longest value name
-                                nullptr,               // Longest value data
-                                nullptr,               // Security descriptor
-                                nullptr                // Last key write time
+        return ::RegQueryInfoKeyW(hkey,                  // Key handle
+                                  nullptr,               // Buffer for registry ked class name
+                                  nullptr,               // Size of class string
+                                  nullptr,               // Reserved
+                                  nullptr,               // Number of key subkeys
+                                  nullptr,               // Longest subkey size
+                                  nullptr,               // Longest class string
+                                  dwValues,              // number of values for this key
+                                  dwLongestValueNameLen, // Longest value name
+                                  nullptr,               // Longest value data
+                                  nullptr,               // Security descriptor
+                                  nullptr                // Last key write time
         );
     }
 
@@ -391,7 +391,7 @@ namespace stdc::windows {
 
     RegKey::~RegKey() {
         if (_hkey && _owns) {
-            std::ignore = RegCloseKey(_hkey);
+            std::ignore = ::RegCloseKey(_hkey);
         }
     }
 
@@ -435,7 +435,8 @@ namespace stdc::windows {
         ec.clear();
 
         HKEY hkey = nullptr;
-        LSTATUS status = RegOpenKeyExW(_hkey, path.c_str(), 0, static_cast<REGSAM>(access), &hkey);
+        LSTATUS status =
+            ::RegOpenKeyExW(_hkey, path.c_str(), 0, static_cast<REGSAM>(access), &hkey);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return {};
@@ -450,8 +451,8 @@ namespace stdc::windows {
         HKEY hkey = nullptr;
         DWORD disposition = 0;
         LSTATUS status =
-            RegCreateKeyExW(_hkey, path.c_str(), 0, nullptr, static_cast<DWORD>(options),
-                            static_cast<REGSAM>(access), sa, &hkey, &disposition);
+            ::RegCreateKeyExW(_hkey, path.c_str(), 0, nullptr, static_cast<DWORD>(options),
+                              static_cast<REGSAM>(access), sa, &hkey, &disposition);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return {};
@@ -465,7 +466,7 @@ namespace stdc::windows {
     bool RegKey::close(std::error_code &ec) noexcept {
         ec.clear();
 
-        LSTATUS status = RegCloseKey(_hkey);
+        LSTATUS status = ::RegCloseKey(_hkey);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
@@ -499,8 +500,8 @@ namespace stdc::windows {
             buffer.resize(maxsize + 1);
 
             DWORD bufferSize = maxsize + 1;
-            status = RegEnumKeyExW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
-                                   nullptr, &data.lastWriteTime);
+            status = ::RegEnumKeyExW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
+                                     nullptr, &data.lastWriteTime);
             if (status == ERROR_MORE_DATA) {
                 status = getRegSubKeyCountAndMaxLen(_hkey, nullptr, &maxsize);
                 if (status != ERROR_SUCCESS) {
@@ -548,8 +549,8 @@ namespace stdc::windows {
             buffer.resize(maxsize + 1);
 
             DWORD bufferSize = maxsize + 1;
-            status = RegEnumValueW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
-                                   nullptr, nullptr);
+            status = ::RegEnumValueW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
+                                     nullptr, nullptr);
             if (status == ERROR_MORE_DATA) {
                 status = getRegValueCountAndMaxLen(_hkey, nullptr, &maxsize);
                 if (status != ERROR_SUCCESS) {
@@ -585,7 +586,7 @@ namespace stdc::windows {
     bool RegKey::flush(std::error_code &ec) noexcept {
         ec.clear();
 
-        LSTATUS status = RegFlushKey(_hkey);
+        LSTATUS status = ::RegFlushKey(_hkey);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
@@ -597,7 +598,7 @@ namespace stdc::windows {
                       int flags) noexcept {
         ec.clear();
 
-        LSTATUS status = RegSaveKeyExW(_hkey, filename.c_str(), sa, flags);
+        LSTATUS status = ::RegSaveKeyExW(_hkey, filename.c_str(), sa, flags);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
@@ -610,10 +611,10 @@ namespace stdc::windows {
 
         bool hasKey = false;
         HKEY hkey = nullptr;
-        LSTATUS status = RegOpenKeyExW(_hkey, path.c_str(), 0, KEY_READ, &hkey);
+        LSTATUS status = ::RegOpenKeyExW(_hkey, path.c_str(), 0, KEY_READ, &hkey);
         if (status == ERROR_SUCCESS) {
             assert(hkey);
-            std::ignore = RegCloseKey(hkey);
+            std::ignore = ::RegCloseKey(hkey);
             hasKey = true;
         } else if (status != ERROR_FILE_NOT_FOUND) {
             ec = make_status_error_code(status);
@@ -626,7 +627,8 @@ namespace stdc::windows {
         ec.clear();
 
         bool hasValue = false;
-        LSTATUS status = RegQueryValueExW(_hkey, name.c_str(), nullptr, nullptr, nullptr, nullptr);
+        LSTATUS status =
+            ::RegQueryValueExW(_hkey, name.c_str(), nullptr, nullptr, nullptr, nullptr);
         if (status == ERROR_SUCCESS) {
             hasValue = true;
         } else if (status != ERROR_FILE_NOT_FOUND) {
@@ -650,7 +652,7 @@ namespace stdc::windows {
         // Get the size and type of the value.
         DWORD dataType = REG_NONE;
         DWORD dataSize = 0;
-        LONG ret = RegQueryValueExW(_hkey, subKeyC, nullptr, &dataType, nullptr, &dataSize);
+        LONG ret = ::RegQueryValueExW(_hkey, subKeyC, nullptr, &dataType, nullptr, &dataSize);
         if (ret != ERROR_SUCCESS) {
             ec = make_status_error_code(ret);
             return RegValue(RegValue::Invalid);
@@ -662,8 +664,8 @@ namespace stdc::windows {
         vlarray<wchar_t, 256> data((dataSize + sizeof(wchar_t) - 1) / sizeof(wchar_t) + 2);
         std::fill(data.begin(), data.end(), 0u);
 
-        ret = RegQueryValueExW(_hkey, subKeyC, nullptr, nullptr,
-                               reinterpret_cast<BYTE *>(data.data()), &dataSize);
+        ret = ::RegQueryValueExW(_hkey, subKeyC, nullptr, nullptr,
+                                 reinterpret_cast<BYTE *>(data.data()), &dataSize);
         if (ret != ERROR_SUCCESS) {
             ec = make_status_error_code(ret);
             return RegValue(RegValue::Invalid);
@@ -763,9 +765,9 @@ namespace stdc::windows {
             } else {
                 terminated.push_back(L'\0');
             }
-            return RegSetValueExW(_hkey, name.c_str(), 0, type,
-                                  reinterpret_cast<const BYTE *>(terminated.data()),
-                                  DWORD(terminated.size() * sizeof(wchar_t)));
+            return ::RegSetValueExW(_hkey, name.c_str(), 0, type,
+                                    reinterpret_cast<const BYTE *>(terminated.data()),
+                                    DWORD(terminated.size() * sizeof(wchar_t)));
         };
 
         LSTATUS ret = ERROR_SUCCESS;
@@ -773,25 +775,25 @@ namespace stdc::windows {
             case RegValue::Invalid:
                 break;
             case RegValue::None: {
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_NONE, nullptr, 0);
+                ret = ::RegSetValueExW(_hkey, name.c_str(), 0, REG_NONE, nullptr, 0);
                 break;
             }
             case RegValue::Binary: {
                 auto data = value.toBinary();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_BINARY,
-                                     data.empty() ? nullptr : data.data(), data.size());
+                ret = ::RegSetValueExW(_hkey, name.c_str(), 0, REG_BINARY,
+                                       data.empty() ? nullptr : data.data(), data.size());
                 break;
             }
             case RegValue::Int32: {
                 auto num = value.toInt32();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_DWORD,
-                                     reinterpret_cast<const BYTE *>(&num), sizeof(num));
+                ret = ::RegSetValueExW(_hkey, name.c_str(), 0, REG_DWORD,
+                                       reinterpret_cast<const BYTE *>(&num), sizeof(num));
                 break;
             }
             case RegValue::Int64: {
                 auto num = value.toInt64();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_QWORD,
-                                     reinterpret_cast<const BYTE *>(&num), sizeof(num));
+                ret = ::RegSetValueExW(_hkey, name.c_str(), 0, REG_QWORD,
+                                       reinterpret_cast<const BYTE *>(&num), sizeof(num));
                 break;
             }
             case RegValue::String: {
@@ -821,7 +823,7 @@ namespace stdc::windows {
     bool RegKey::removeKey(const std::wstring &path, std::error_code &ec) noexcept {
         ec.clear();
 
-        LSTATUS status = RegDeleteTreeW(_hkey, path.c_str());
+        LSTATUS status = ::RegDeleteTreeW(_hkey, path.c_str());
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
@@ -832,7 +834,7 @@ namespace stdc::windows {
     bool RegKey::removeValue(const std::wstring &name, std::error_code &ec) noexcept {
         ec.clear();
 
-        LSTATUS status = RegDeleteValueW(_hkey, name.c_str());
+        LSTATUS status = ::RegDeleteValueW(_hkey, name.c_str());
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
@@ -843,7 +845,7 @@ namespace stdc::windows {
     bool RegKey::removeAll(std::error_code &ec) noexcept {
         ec.clear();
 
-        LSTATUS status = RegDeleteTreeW(_hkey, nullptr);
+        LSTATUS status = ::RegDeleteTreeW(_hkey, nullptr);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
@@ -855,7 +857,7 @@ namespace stdc::windows {
                         bool async) noexcept {
         ec.clear();
 
-        LSTATUS status = RegNotifyChangeKeyValue(_hkey, watchSubtree, notifyFilter, event, async);
+        LSTATUS status = ::RegNotifyChangeKeyValue(_hkey, watchSubtree, notifyFilter, event, async);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return false;
