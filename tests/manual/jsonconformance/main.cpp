@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-// A conformance run of stdc::JsonValue against corpora written by other implementations.
+// A conformance run of stdc::json::Value against corpora written by other implementations.
 //
 // Four of them, none part of this repository. Clone the ones you want beside each other and point
 // this program at the directory holding them:
@@ -246,8 +246,8 @@ namespace {
             }
             text += '"';
 
-            stdc::JsonParseError error;
-            const auto value = JsonValue::fromJson(text, false, &error);
+            stdc::json::ParseError error;
+            const auto value = json::Value::fromJson(text, false, &error);
             report.checked++;
 
             if (!error) {
@@ -285,8 +285,8 @@ namespace {
         }
 
         const auto bytes = readFile(path);
-        stdc::CborDecodeError error;
-        JsonValue::fromCbor(stdc::array_view<uint8_t>(
+        stdc::cbor::DecodeError error;
+        json::Value::fromCbor(stdc::array_view<uint8_t>(
                                 reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()),
                             &error);
         report.checked++;
@@ -328,8 +328,8 @@ namespace {
             int count = 0, decoded = 0;
             for (const auto &path : filesIn(dir)) {
                 const auto bytes = readFile(path);
-                stdc::CborDecodeError error;
-                const auto value = JsonValue::fromCbor(
+                stdc::cbor::DecodeError error;
+                const auto value = json::Value::fromCbor(
                     stdc::array_view<uint8_t>(reinterpret_cast<const uint8_t *>(bytes.data()),
                                               bytes.size()),
                     &error);

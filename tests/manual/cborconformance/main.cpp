@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-// A conformance run of JsonValue's CBOR against the IETF working group's test vectors.
+// A conformance run of json::Value's CBOR against the IETF working group's test vectors.
 //
 // Two corpora, neither part of this repository:
 //
@@ -18,10 +18,10 @@
 // ----------------------------
 //
 // Our CBOR is not a general CBOR implementation and is not meant to be. It exists so that a
-// JsonValue can be written in a binary form and read back, so it carries exactly what a JsonValue
+// json::Value can be written in a binary form and read back, so it carries exactly what a json::Value
 // can hold. CBOR can hold more, and a conformance suite is written for all of it.
 //
-// So a vector is not simply passed or failed. It is passed, or it lands outside what a JsonValue
+// So a vector is not simply passed or failed. It is passed, or it lands outside what a json::Value
 // can represent, and those two are counted apart. The second number is the interesting one: it is
 // this implementation's boundary, written down, and the run prints what put each vector there.
 // What must never appear is the third number -- a well-formed item we refuse for a reason that is
@@ -44,7 +44,8 @@
 
 namespace fs = std::filesystem;
 
-using stdc::JsonValue;
+namespace json = stdc::json;
+namespace cbor = stdc::cbor;
 
 namespace {
 
@@ -57,7 +58,7 @@ namespace {
         int passed = 0;
         std::vector<Failure> failures;
 
-        /// Vectors that ask for something a JsonValue cannot hold, by what it was.
+        /// Vectors that ask for something a json::Value cannot hold, by what it was.
         std::map<std::string, int> outside;
 
         void fail(const std::string &where, std::string reason) {
@@ -113,7 +114,7 @@ namespace {
     // ----------------------------------------------------------------------------------------
 
     /// The refusals that are this implementation's shape rather than a defect. Each is something
-    /// a JsonValue has no room for, so the decoder turns it away on purpose.
+    /// a json::Value has no room for, so the decoder turns it away on purpose.
     ///
     /// Matching on the message is coarse, but the alternative is an error code enumeration on a
     /// decoder that has one caller, and these strings are the decoder's own.
@@ -138,12 +139,12 @@ namespace {
 
     /// The other half of the boundary: items we read, but cannot write back the way they came.
     ///
-    /// A JsonValue holds one kind of number besides the exact integers, so a half or single float
+    /// A json::Value holds one kind of number besides the exact integers, so a half or single float
     /// widens to a double and is written back as one, and an unsigned integer above INT64_MAX
     /// becomes a double and loses its low bits. Both are stated in JSON.h. CBOR's undefined is a
     /// third: the type had an Undefined once and it was taken out, so it reads as null and is
     /// written back as null. None of the three is reachable from JSON.
-    const char *outsideOurEncoding(const std::vector<uint8_t> &encoded, const JsonValue &value) {
+    const char *outsideOurEncoding(const std::vector<uint8_t> &encoded, const json::Value &value) {
         if (encoded.size() == 1 && encoded.front() == 0xF7) {
             return "undefined, which this type does not have";
         }
@@ -162,11 +163,11 @@ namespace {
 
     /// Equality, except that a NaN equals a NaN.
     ///
-    /// JsonValue compares its doubles numerically, so a NaN is not equal to itself -- which is
+    /// json::Value compares its doubles numerically, so a NaN is not equal to itself -- which is
     /// what IEEE says and what every JSON library does. It is not what these vectors are asking
     /// about, though. When a file says that f97e00 and fa7fc00000 are the same item, the question
     /// is whether the decoder read both as a NaN, not whether two NaNs are interchangeable.
-    bool sameValue(const JsonValue &a, const JsonValue &b) {
+    bool sameValue(const json::Value &a, const json::Value &b) {
         if (a.isDouble() && b.isDouble()) {
             const auto x = a.toDouble(), y = b.toDouble();
             if (std::isnan(x) || std::isnan(y)) {
@@ -219,8 +220,8 @@ namespace {
             return;
         }
 
-        stdc::CborDecodeError encodedError;
-        const auto fromEncoded = JsonValue::fromCbor(view(test.encoded), &encodedError);
+        stdc::cbor::DecodeError encodedError;
+        const auto fromEncoded = json::Value::fromCbor(view(test.encoded), &encodedError);
 
         if (test.fail) {
             if (!encodedError) {
@@ -245,8 +246,8 @@ namespace {
         // The file writes the same item a second time, in preferred form. Both spellings have to
         // reach us as the same value -- that is the whole of what a decoder is for.
         if (test.hasDecoded) {
-            stdc::CborDecodeError decodedError;
-            const auto fromDecoded = JsonValue::fromCbor(view(test.decoded), &decodedError);
+            stdc::cbor::DecodeError decodedError;
+            const auto fromDecoded = json::Value::fromCbor(view(test.decoded), &decodedError);
             if (decodedError) {
                 if (const auto *what = outsideOurTypes(decodedError.what)) {
                     // The preferred form uses something we do not carry, but the encoded form did
@@ -266,7 +267,7 @@ namespace {
         }
 
         if (test.roundtrip) {
-            const auto reencoded = JsonValue(fromEncoded).toCbor();
+            const auto reencoded = json::Value(fromEncoded).toCbor();
             if (reencoded != test.encoded) {
                 if (const auto *what = outsideOurEncoding(test.encoded, fromEncoded)) {
                     outside(what);
@@ -338,8 +339,8 @@ namespace {
             return;
         }
 
-        stdc::JsonParseError error;
-        const auto document = JsonValue::fromJson(readFile(path), false, &error);
+        stdc::json::ParseError error;
+        const auto document = json::Value::fromJson(readFile(path), false, &error);
         if (error) {
             report.fail("appendix_a.json", "could not be read: " + error.message());
             return;
@@ -364,7 +365,7 @@ namespace {
             // date. Those entries carry a "diagnostic" string instead, which needs a diagnostic
             // notation printer we do not have, so all that is checked there is the decoding.
             if (item.toObject().count("decoded")) {
-                test.decoded = JsonValue(item["decoded"]).toCbor();
+                test.decoded = json::Value(item["decoded"]).toCbor();
                 test.hasDecoded = true;
             }
 
@@ -477,11 +478,11 @@ int main(int argc, char *argv[]) {
         beyond += item.second;
     }
 
-    std::printf("\n%d vectors: %d passed, %d outside what a JsonValue holds, %zu failed\n",
+    std::printf("\n%d vectors: %d passed, %d outside what a json::Value holds, %zu failed\n",
                 report.total(), report.passed, beyond, report.failures.size());
 
     if (beyond) {
-        std::printf("\noutside what a JsonValue holds:\n");
+        std::printf("\noutside what a json::Value holds:\n");
         for (const auto &item : report.outside) {
             std::printf("  %5d  %s\n", item.second, item.first.c_str());
         }

@@ -16,18 +16,19 @@
 namespace {
 
     using namespace stdc;
+    using namespace stdc::json;
 
     struct EmptyValues {
-        static inline const JsonValue &nullValue() {
-            static const JsonValue null;
+        static inline const Value &nullValue() {
+            static const Value null;
             return null;
         }
-        static inline const JsonArray &emptyArray() {
-            static const JsonArray emptyArray;
+        static inline const Array &emptyArray() {
+            static const Array emptyArray;
             return emptyArray;
         }
-        static inline const JsonObject &emptyObject() {
-            static const JsonObject emptyObject;
+        static inline const Object &emptyObject() {
+            static const Object emptyObject;
             return emptyObject;
         }
     };
@@ -152,7 +153,7 @@ namespace {
         out.append(buf, result.ptr);
     }
 
-    void dumpTo(std::string &out, const JsonValue &v, int indent, int depth) {
+    void dumpTo(std::string &out, const Value &v, int indent, int depth) {
         const bool pretty = indent > 0;
 
         auto newline = [&](int d) {
@@ -163,22 +164,22 @@ namespace {
         };
 
         switch (v.type()) {
-            case JsonValue::Null:
+            case Type::Null:
                 out += "null";
                 return;
-            case JsonValue::Bool:
+            case Type::Bool:
                 out += v.toBool() ? "true" : "false";
                 return;
-            case JsonValue::Int:
+            case Type::Int:
                 appendInteger(out, v.toInt());
                 return;
-            case JsonValue::Double:
+            case Type::Double:
                 formatDouble(out, v.toDouble());
                 return;
-            case JsonValue::String:
+            case Type::String:
                 quoteTo(out, v.toStringView());
                 return;
-            case JsonValue::Binary: {
+            case Type::Binary: {
                 // Binary has no JSON form. This is the shape it takes so a document holding one is
                 // still writable, and it does not read back as binary.
                 out += "{\"bytes\":[";
@@ -192,7 +193,7 @@ namespace {
                 out += "],\"subtype\":null}";
                 return;
             }
-            case JsonValue::Array: {
+            case Type::Array: {
                 const auto &arr = v.toArray();
                 if (arr.empty()) {
                     out += "[]";
@@ -210,7 +211,7 @@ namespace {
                 out += ']';
                 return;
             }
-            case JsonValue::Object: {
+            case Type::Object: {
                 const auto &obj = v.toObject();
                 if (obj.empty()) {
                     out += "{}";
@@ -255,7 +256,7 @@ namespace {
         Parser(std::string_view text, bool comments) : _s(text), _comments(comments) {
         }
 
-        bool parse(JsonValue *out) {
+        bool parse(Value *out) {
             // A byte order mark carries no information in UTF-8, but editors on Windows write one
             // anyway. RFC 8259 lets a parser skip it, so skip it.
             if (_s.size() >= 3 && _s.compare(0, 3, "\xEF\xBB\xBF") == 0) {
@@ -267,26 +268,26 @@ namespace {
             }
             skipSpace();
             if (_pos != _s.size()) {
-                return fail(JsonParseError::TrailingContent, "trailing content after the value");
+                return fail(ParseError::TrailingContent, "trailing content after the value");
             }
             return true;
         }
 
-        const JsonParseError &error() const {
+        const ParseError &error() const {
             return _error;
         }
 
     private:
-        bool fail(JsonParseError::Code code, const char *what) {
+        bool fail(ParseError::Code code, const char *what) {
             if (_error) {
                 return false;
             }
             // A comment where one is not allowed reads as an unexpected token from every position
             // a comment can take, leaving the caller to work out that all it has to do is ask
             // again with them on. Named here rather than at each of those positions.
-            if (code == JsonParseError::UnexpectedToken && !_comments && _pos + 1 < _s.size() &&
+            if (code == ParseError::UnexpectedToken && !_comments && _pos + 1 < _s.size() &&
                 _s[_pos] == '/' && (_s[_pos + 1] == '/' || _s[_pos + 1] == '*')) {
-                code = JsonParseError::CommentNotAllowed;
+                code = ParseError::CommentNotAllowed;
                 what = "a comment, which this parse was not asked to ignore";
             }
             _error.code = code;
@@ -349,38 +350,38 @@ namespace {
             return true;
         }
 
-        bool parseValue(JsonValue *out, int depth) {
+        bool parseValue(Value *out, int depth) {
             if (depth > maxDepth) {
-                return fail(JsonParseError::NestedTooDeeply, "nested too deeply");
+                return fail(ParseError::NestedTooDeeply, "nested too deeply");
             }
             if (atEnd()) {
-                return fail(JsonParseError::UnexpectedEnd, "expected a value");
+                return fail(ParseError::UnexpectedEnd, "expected a value");
             }
             switch (peek()) {
                 case 'n':
                     if (!literal("null")) {
-                        return fail(JsonParseError::UnexpectedToken, "expected a value");
+                        return fail(ParseError::UnexpectedToken, "expected a value");
                     }
-                    *out = JsonValue();
+                    *out = Value();
                     return true;
                 case 't':
                     if (!literal("true")) {
-                        return fail(JsonParseError::UnexpectedToken, "expected a value");
+                        return fail(ParseError::UnexpectedToken, "expected a value");
                     }
-                    *out = JsonValue(true);
+                    *out = Value(true);
                     return true;
                 case 'f':
                     if (!literal("false")) {
-                        return fail(JsonParseError::UnexpectedToken, "expected a value");
+                        return fail(ParseError::UnexpectedToken, "expected a value");
                     }
-                    *out = JsonValue(false);
+                    *out = Value(false);
                     return true;
                 case '"': {
                     std::string s;
                     if (!parseString(&s)) {
                         return false;
                     }
-                    *out = JsonValue(std::move(s));
+                    *out = Value(std::move(s));
                     return true;
                 }
                 case '[':
@@ -392,13 +393,13 @@ namespace {
             }
         }
 
-        bool parseArray(JsonValue *out, int depth) {
+        bool parseArray(Value *out, int depth) {
             ++_pos; // '['
-            JsonArray arr;
+            Array arr;
             skipSpace();
             if (!atEnd() && peek() == ']') {
                 ++_pos;
-                *out = JsonValue(std::move(arr));
+                *out = Value(std::move(arr));
                 return true;
             }
             for (;;) {
@@ -415,7 +416,7 @@ namespace {
                 }
                 skipSpace();
                 if (atEnd()) {
-                    return fail(JsonParseError::UnexpectedEnd, "expected ',' or ']'");
+                    return fail(ParseError::UnexpectedEnd, "expected ',' or ']'");
                 }
                 bool hasNext = false;
                 if (peek() == ',') {
@@ -424,30 +425,29 @@ namespace {
                 } else if (peek() == ']') {
                     ++_pos;
                 } else {
-                    return fail(JsonParseError::UnexpectedToken, "expected ',' or ']'");
+                    return fail(ParseError::UnexpectedToken, "expected ',' or ']'");
                 }
 
                 if (!hasNext) {
-                    *out = JsonValue(std::move(arr));
+                    *out = Value(std::move(arr));
                     return true;
                 }
             }
         }
 
-        bool parseObject(JsonValue *out, int depth) {
+        bool parseObject(Value *out, int depth) {
             ++_pos; // '{'
-            JsonObject obj;
+            Object obj;
             skipSpace();
             if (!atEnd() && peek() == '}') {
                 ++_pos;
-                *out = JsonValue(std::move(obj));
+                *out = Value(std::move(obj));
                 return true;
             }
             for (;;) {
                 skipSpace();
                 if (atEnd() || peek() != '"') {
-                    return fail(atEnd() ? JsonParseError::UnexpectedEnd
-                                        : JsonParseError::UnexpectedToken,
+                    return fail(atEnd() ? ParseError::UnexpectedEnd : ParseError::UnexpectedToken,
                                 "expected a key");
                 }
                 std::string key;
@@ -456,8 +456,7 @@ namespace {
                 }
                 skipSpace();
                 if (atEnd() || peek() != ':') {
-                    return fail(atEnd() ? JsonParseError::UnexpectedEnd
-                                        : JsonParseError::UnexpectedToken,
+                    return fail(atEnd() ? ParseError::UnexpectedEnd : ParseError::UnexpectedToken,
                                 "expected ':'");
                 }
                 ++_pos;
@@ -471,7 +470,7 @@ namespace {
                 }
                 skipSpace();
                 if (atEnd()) {
-                    return fail(JsonParseError::UnexpectedEnd, "expected ',' or '}'");
+                    return fail(ParseError::UnexpectedEnd, "expected ',' or '}'");
                 }
                 if (peek() == ',') {
                     ++_pos;
@@ -479,10 +478,10 @@ namespace {
                 }
                 if (peek() == '}') {
                     ++_pos;
-                    *out = JsonValue(std::move(obj));
+                    *out = Value(std::move(obj));
                     return true;
                 }
-                return fail(JsonParseError::UnexpectedToken, "expected ',' or '}'");
+                return fail(ParseError::UnexpectedToken, "expected ',' or '}'");
             }
         }
 
@@ -523,7 +522,7 @@ namespace {
                 }
                 res.append(_s.data() + start, _pos - start);
                 if (atEnd()) {
-                    return fail(JsonParseError::UnexpectedEnd, "unterminated string");
+                    return fail(ParseError::UnexpectedEnd, "unterminated string");
                 }
                 char c = peek();
                 if (c == '"') {
@@ -531,12 +530,12 @@ namespace {
                     break;
                 }
                 if (uint8_t(c) < 0x20) {
-                    return fail(JsonParseError::IllegalString, "control character in string");
+                    return fail(ParseError::IllegalString, "control character in string");
                 }
 
                 ++_pos;
                 if (atEnd()) {
-                    return fail(JsonParseError::UnexpectedEnd, "unterminated escape");
+                    return fail(ParseError::UnexpectedEnd, "unterminated escape");
                 }
                 char e = peek();
                 ++_pos;
@@ -568,34 +567,32 @@ namespace {
                     case 'u': {
                         char32_t cp;
                         if (!hex4(&cp)) {
-                            return fail(JsonParseError::IllegalEscape,
+                            return fail(ParseError::IllegalEscape,
                                         "expected four hexadecimal digits");
                         }
                         if (cp >= 0xD800 && cp <= 0xDBFF) {
                             // A high surrogate means nothing without the low one after it.
                             if (_pos + 1 >= _s.size() || _s[_pos] != '\\' || _s[_pos + 1] != 'u') {
-                                return fail(JsonParseError::IllegalEscape,
-                                            "expected a low surrogate");
+                                return fail(ParseError::IllegalEscape, "expected a low surrogate");
                             }
                             _pos += 2;
                             char32_t low;
                             if (!hex4(&low)) {
-                                return fail(JsonParseError::IllegalEscape,
+                                return fail(ParseError::IllegalEscape,
                                             "expected four hexadecimal digits");
                             }
                             if (low < 0xDC00 || low > 0xDFFF) {
-                                return fail(JsonParseError::IllegalEscape,
-                                            "expected a low surrogate");
+                                return fail(ParseError::IllegalEscape, "expected a low surrogate");
                             }
                             cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
                         } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-                            return fail(JsonParseError::IllegalEscape, "unpaired low surrogate");
+                            return fail(ParseError::IllegalEscape, "unpaired low surrogate");
                         }
                         appendUtf8(res, cp);
                         break;
                     }
                     default:
-                        return fail(JsonParseError::IllegalEscape, "unknown escape");
+                        return fail(ParseError::IllegalEscape, "unknown escape");
                 }
             }
 
@@ -603,13 +600,13 @@ namespace {
             // raw high bytes need the full validator. A \u escape was validated as it was
             // decoded.
             if (hasNonAscii && !stdc::utf::is_valid_utf8(res)) {
-                return fail(JsonParseError::IllegalString, "string is not valid UTF-8");
+                return fail(ParseError::IllegalString, "string is not valid UTF-8");
             }
             *out = std::move(res);
             return true;
         }
 
-        bool parseNumber(JsonValue *out) {
+        bool parseNumber(Value *out) {
             size_t start = _pos;
             if (!atEnd() && peek() == '-') {
                 ++_pos;
@@ -619,12 +616,12 @@ namespace {
                 ++_pos;
             }
             if (_pos == digitsStart) {
-                return fail(JsonParseError::UnexpectedToken, "expected a value");
+                return fail(ParseError::UnexpectedToken, "expected a value");
             }
             // A leading zero is not one number, it is two written together.
             if (_s[digitsStart] == '0' && _pos - digitsStart > 1) {
                 _pos = digitsStart;
-                return fail(JsonParseError::IllegalNumber, "number has a leading zero");
+                return fail(ParseError::IllegalNumber, "number has a leading zero");
             }
 
             bool isDouble = false;
@@ -636,7 +633,7 @@ namespace {
                     ++_pos;
                 }
                 if (_pos == fracStart) {
-                    return fail(JsonParseError::IllegalNumber,
+                    return fail(ParseError::IllegalNumber,
                                 "expected a digit after the decimal point");
                 }
             }
@@ -651,7 +648,7 @@ namespace {
                     ++_pos;
                 }
                 if (_pos == expStart) {
-                    return fail(JsonParseError::IllegalNumber, "expected a digit in the exponent");
+                    return fail(ParseError::IllegalNumber, "expected a digit in the exponent");
                 }
             }
 
@@ -664,13 +661,13 @@ namespace {
                 if (_s[start] == '-') {
                     int64_t v;
                     if (std::from_chars(first, last, v).ec == std::errc()) {
-                        *out = JsonValue(v);
+                        *out = Value(v);
                         return true;
                     }
                 } else {
                     uint64_t v;
                     if (std::from_chars(first, last, v).ec == std::errc()) {
-                        *out = JsonValue(v);
+                        *out = Value(v);
                         return true;
                     }
                 }
@@ -682,7 +679,7 @@ namespace {
             double parsed;
             const auto result = std::from_chars(first, last, parsed, std::chars_format::general);
             if (result.ec == std::errc() && result.ptr == last) {
-                *out = JsonValue(parsed);
+                *out = Value(parsed);
                 return true;
             }
 #endif
@@ -692,23 +689,23 @@ namespace {
             char *end = nullptr;
             double d = std::strtod(text.data(), &end);
             if (end != text.data() + text.size() - 1) {
-                return fail(JsonParseError::IllegalNumber, "malformed number");
+                return fail(ParseError::IllegalNumber, "malformed number");
             }
-            *out = JsonValue(d);
+            *out = Value(d);
             return true;
         }
 
         std::string_view _s;
         size_t _pos = 0;
         bool _comments;
-        JsonParseError _error;
+        ParseError _error;
     };
 
     // ------------------------------------------------------------------------------------------
     // CBOR
     // ------------------------------------------------------------------------------------------
 
-    namespace cbor {
+    namespace cbor_codec {
 
         void putHead(std::vector<uint8_t> &out, uint8_t major, uint64_t arg) {
             auto m = uint8_t(major << 5);
@@ -739,15 +736,15 @@ namespace {
             out.insert(out.end(), s.begin(), s.end());
         }
 
-        void encode(std::vector<uint8_t> &out, const JsonValue &v) {
+        void encode(std::vector<uint8_t> &out, const Value &v) {
             switch (v.type()) {
-                case JsonValue::Null:
+                case Type::Null:
                     out.push_back(0xF6);
                     return;
-                case JsonValue::Bool:
+                case Type::Bool:
                     out.push_back(v.toBool() ? 0xF5 : 0xF4);
                     return;
-                case JsonValue::Int: {
+                case Type::Int: {
                     auto i = v.toInt();
                     if (i >= 0) {
                         putHead(out, 0, uint64_t(i));
@@ -758,7 +755,7 @@ namespace {
                     }
                     return;
                 }
-                case JsonValue::Double: {
+                case Type::Double: {
                     out.push_back(0xFB);
                     double d = v.toDouble();
                     uint64_t bits;
@@ -768,16 +765,16 @@ namespace {
                     }
                     return;
                 }
-                case JsonValue::String:
+                case Type::String:
                     putBytes(out, 3, v.toStringView());
                     return;
-                case JsonValue::Binary: {
+                case Type::Binary: {
                     const auto &b = v.toBinary();
                     putHead(out, 2, b.size());
                     out.insert(out.end(), b.begin(), b.end());
                     return;
                 }
-                case JsonValue::Array: {
+                case Type::Array: {
                     const auto &arr = v.toArray();
                     putHead(out, 4, arr.size());
                     for (const auto &item : arr) {
@@ -785,7 +782,7 @@ namespace {
                     }
                     return;
                 }
-                case JsonValue::Object: {
+                case Type::Object: {
                     const auto &obj = v.toObject();
                     putHead(out, 5, obj.size());
                     for (const auto &item : obj) {
@@ -811,22 +808,23 @@ namespace {
             explicit Decoder(stdc::array_view<uint8_t> data) : _d(data) {
             }
 
-            bool decode(JsonValue *out) {
+            bool decode(Value *out) {
                 if (!decodeValue(out, 0)) {
                     return false;
                 }
                 if (_pos != _d.size()) {
-                    return fail(CborDecodeError::TrailingContent, "trailing bytes after the value");
+                    return fail(cbor::DecodeError::TrailingContent,
+                                "trailing bytes after the value");
                 }
                 return true;
             }
 
-            const CborDecodeError &error() const {
+            const cbor::DecodeError &error() const {
                 return _error;
             }
 
         private:
-            bool fail(CborDecodeError::Code code, const char *what) {
+            bool fail(cbor::DecodeError::Code code, const char *what) {
                 if (!_error) {
                     _error.code = code;
                     _error.offset = _pos;
@@ -837,7 +835,7 @@ namespace {
 
             bool take(uint8_t *out) {
                 if (_pos >= _d.size()) {
-                    return fail(CborDecodeError::UnexpectedEnd, "input ended early");
+                    return fail(cbor::DecodeError::UnexpectedEnd, "input ended early");
                 }
                 *out = _d[_pos++];
                 return true;
@@ -845,7 +843,7 @@ namespace {
 
             bool takeBig(int bytes, uint64_t *out) {
                 if (_pos + size_t(bytes) > _d.size()) {
-                    return fail(CborDecodeError::UnexpectedEnd, "input ended early");
+                    return fail(cbor::DecodeError::UnexpectedEnd, "input ended early");
                 }
                 uint64_t v = 0;
                 for (int i = 0; i < bytes; ++i) {
@@ -880,13 +878,13 @@ namespace {
                         return takeBig(8, out);
                     case 31:
                         if (!indefinite) {
-                            return fail(CborDecodeError::IllegalEncoding,
+                            return fail(cbor::DecodeError::IllegalEncoding,
                                         "this type cannot have an indefinite length");
                         }
                         *indefinite = true;
                         return true;
                     default:
-                        return fail(CborDecodeError::IllegalEncoding, "reserved length encoding");
+                        return fail(cbor::DecodeError::IllegalEncoding, "reserved length encoding");
                 }
             }
 
@@ -896,7 +894,7 @@ namespace {
             template <class Bytes>
             bool rawBytes(uint64_t count, Bytes *out) {
                 if (count > _d.size() - _pos) {
-                    return fail(CborDecodeError::UnexpectedEnd, "input ended early");
+                    return fail(cbor::DecodeError::UnexpectedEnd, "input ended early");
                 }
                 const auto *first =
                     reinterpret_cast<const typename Bytes::value_type *>(_d.data() + _pos);
@@ -908,7 +906,7 @@ namespace {
             /// Whether the next byte ends an indefinite-length item, consuming it if so.
             bool atBreak(bool *broke) {
                 if (_pos >= _d.size()) {
-                    return fail(CborDecodeError::UnexpectedEnd, "input ended before the break");
+                    return fail(cbor::DecodeError::UnexpectedEnd, "input ended before the break");
                 }
                 *broke = _d[_pos] == breakByte;
                 if (*broke) {
@@ -938,12 +936,12 @@ namespace {
                         return false;
                     }
                     if (uint8_t(initial >> 5) != major) {
-                        return fail(CborDecodeError::IllegalEncoding,
+                        return fail(cbor::DecodeError::IllegalEncoding,
                                     "an indefinite-length string is made of strings of its own "
                                     "kind");
                     }
                     if ((initial & 0x1F) == 31) {
-                        return fail(CborDecodeError::IllegalEncoding,
+                        return fail(cbor::DecodeError::IllegalEncoding,
                                     "a piece of an indefinite-length string has to have a length");
                     }
                     uint64_t count = 0;
@@ -957,16 +955,16 @@ namespace {
                     if (major == 3 &&
                         !stdc::utf::is_valid_utf8(std::string_view(
                             reinterpret_cast<const char *>(chunk.data()), chunk.size()))) {
-                        return fail(CborDecodeError::IllegalString,
+                        return fail(cbor::DecodeError::IllegalString,
                                     "text string is not valid UTF-8");
                     }
                     out->insert(out->end(), chunk.begin(), chunk.end());
                 }
             }
 
-            bool decodeValue(JsonValue *out, int depth) {
+            bool decodeValue(Value *out, int depth) {
                 if (depth > maxDepth) {
-                    return fail(CborDecodeError::NestedTooDeeply, "nested too deeply");
+                    return fail(cbor::DecodeError::NestedTooDeeply, "nested too deeply");
                 }
                 uint8_t initial;
                 if (!take(&initial)) {
@@ -980,17 +978,17 @@ namespace {
                         if (!argument(initial, &arg)) {
                             return false;
                         }
-                        *out = JsonValue(arg);
+                        *out = Value(arg);
                         return true;
                     case 1: {
                         if (!argument(initial, &arg)) {
                             return false;
                         }
                         if (arg > uint64_t(INT64_MAX)) {
-                            return fail(CborDecodeError::OutOfRange,
+                            return fail(cbor::DecodeError::OutOfRange,
                                         "negative integer is out of range");
                         }
-                        *out = JsonValue(-int64_t(arg) - 1);
+                        *out = Value(-int64_t(arg) - 1);
                         return true;
                     }
                     case 2: {
@@ -1002,7 +1000,7 @@ namespace {
                         if (indefinite ? !chunkedBytes(2, &raw) : !rawBytes(arg, &raw)) {
                             return false;
                         }
-                        *out = JsonValue(std::move(raw));
+                        *out = Value(std::move(raw));
                         return true;
                     }
                     case 3: {
@@ -1020,11 +1018,11 @@ namespace {
                                 return false;
                             }
                             if (!stdc::utf::is_valid_utf8(raw)) {
-                                return fail(CborDecodeError::IllegalString,
+                                return fail(cbor::DecodeError::IllegalString,
                                             "text string is not valid UTF-8");
                             }
                         }
-                        *out = JsonValue(std::move(raw));
+                        *out = Value(std::move(raw));
                         return true;
                     }
                     case 4: {
@@ -1032,12 +1030,12 @@ namespace {
                         if (!argument(initial, &arg, &indefinite)) {
                             return false;
                         }
-                        JsonArray arr;
+                        Array arr;
                         if (!indefinite) {
                             // Every value occupies at least one byte, so this also rejects an
                             // impossible count before reserve can trust untrusted input.
                             if (arg > _d.size() - _pos) {
-                                return fail(CborDecodeError::UnexpectedEnd, "input ended early");
+                                return fail(cbor::DecodeError::UnexpectedEnd, "input ended early");
                             }
                             arr.reserve(size_t(arg));
                         }
@@ -1051,13 +1049,13 @@ namespace {
                                     break;
                                 }
                             }
-                            JsonValue item;
+                            Value item;
                             if (!decodeValue(&item, depth + 1)) {
                                 return false;
                             }
                             arr.push_back(std::move(item));
                         }
-                        *out = JsonValue(std::move(arr));
+                        *out = Value(std::move(arr));
                         return true;
                     }
                     case 5: {
@@ -1065,7 +1063,7 @@ namespace {
                         if (!argument(initial, &arg, &indefinite)) {
                             return false;
                         }
-                        JsonObject obj;
+                        Object obj;
                         for (uint64_t i = 0; indefinite || i < arg; ++i) {
                             if (indefinite) {
                                 bool broke = false;
@@ -1076,25 +1074,25 @@ namespace {
                                     break;
                                 }
                             }
-                            JsonValue key;
+                            Value key;
                             if (!decodeValue(&key, depth + 1)) {
                                 return false;
                             }
                             if (!key.isString()) {
-                                return fail(CborDecodeError::UnsupportedType,
+                                return fail(cbor::DecodeError::UnsupportedType,
                                             "a map key has to be a text string");
                             }
-                            JsonValue value;
+                            Value value;
                             if (!decodeValue(&value, depth + 1)) {
                                 return false;
                             }
                             obj[key.toString()] = std::move(value);
                         }
-                        *out = JsonValue(std::move(obj));
+                        *out = Value(std::move(obj));
                         return true;
                     }
                     case 6:
-                        return fail(CborDecodeError::UnsupportedType, "tags are not supported");
+                        return fail(cbor::DecodeError::UnsupportedType, "tags are not supported");
                     default:
                         break;
                 }
@@ -1102,21 +1100,21 @@ namespace {
                 // Major type 7, the simple values and the floats.
                 switch (initial) {
                     case 0xF4:
-                        *out = JsonValue(false);
+                        *out = Value(false);
                         return true;
                     case 0xF5:
-                        *out = JsonValue(true);
+                        *out = Value(true);
                         return true;
                     case 0xF6:
                     case 0xF7:
-                        *out = JsonValue();
+                        *out = Value();
                         return true;
                     case 0xF9: {
                         uint64_t bits;
                         if (!takeBig(2, &bits)) {
                             return false;
                         }
-                        *out = JsonValue(fromHalf(uint16_t(bits)));
+                        *out = Value(fromHalf(uint16_t(bits)));
                         return true;
                     }
                     case 0xFA: {
@@ -1127,7 +1125,7 @@ namespace {
                         auto narrow = uint32_t(bits);
                         float f;
                         std::memcpy(&f, &narrow, sizeof(f));
-                        *out = JsonValue(double(f));
+                        *out = Value(double(f));
                         return true;
                     }
                     case 0xFB: {
@@ -1137,14 +1135,14 @@ namespace {
                         }
                         double d;
                         std::memcpy(&d, &bits, sizeof(d));
-                        *out = JsonValue(d);
+                        *out = Value(d);
                         return true;
                     }
                     case breakByte:
-                        return fail(CborDecodeError::IllegalEncoding,
+                        return fail(cbor::DecodeError::IllegalEncoding,
                                     "a break outside an indefinite-length item");
                     default:
-                        return fail(CborDecodeError::IllegalEncoding, "unsupported initial byte");
+                        return fail(cbor::DecodeError::IllegalEncoding, "unsupported initial byte");
                 }
             }
 
@@ -1164,115 +1162,119 @@ namespace {
 
             stdc::array_view<uint8_t> _d;
             size_t _pos = 0;
-            CborDecodeError _error;
+            cbor::DecodeError _error;
         };
 
     }
 
 }
 
-namespace stdc {
+namespace stdc::cbor {
 
-    std::string JsonParseError::message() const {
-        if (!*this) {
-            return {};
-        }
-        return "line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + what;
-    }
-
-    std::string CborDecodeError::message() const {
+    std::string DecodeError::message() const {
         if (!*this) {
             return {};
         }
         return "byte " + std::to_string(offset) + ": " + what;
     }
 
-    JsonValue::JsonValue(Type type) : _type(type) {
+}
+
+namespace stdc::json {
+
+    std::string ParseError::message() const {
+        if (!*this) {
+            return {};
+        }
+        return "line " + std::to_string(line) + ", column " + std::to_string(column) + ": " + what;
+    }
+
+    Value::Value(Type type) : _type(type) {
         _p.u = 0;
         switch (type) {
-            case String:
+            case Type::String:
                 _p.s = new std::string();
                 break;
-            case Binary:
+            case Type::Binary:
                 _p.bin = new std::vector<uint8_t>();
                 break;
-            case Array:
-                _p.arr = new JsonArray();
+            case Type::Array:
+                _p.arr = new Array();
                 break;
-            case Object:
-                _p.obj = new JsonObject();
+            case Type::Object:
+                _p.obj = new Object();
                 break;
             default:
                 break;
         }
     }
 
-    JsonValue::JsonValue(bool b) : _type(Bool) {
+    Value::Value(bool b) : _type(Type::Bool) {
         _p.b = b;
     }
 
-    JsonValue::JsonValue(double d) : _type(Double) {
+    Value::Value(double d) : _type(Type::Double) {
         _p.d = d;
     }
 
-    JsonValue::JsonValue(int64_t i) : _type(Int) {
+    Value::Value(int64_t i) : _type(Type::Int) {
         _p.i = i;
     }
 
-    JsonValue::JsonValue(uint64_t u) {
+    Value::Value(uint64_t u) {
         // There is no unsigned type to put this in. Anything an int64_t can hold stays exact, and
         // the range above it settles for a double.
         if (u <= uint64_t(INT64_MAX)) {
-            _type = Int;
+            _type = Type::Int;
             _p.i = int64_t(u);
         } else {
-            _type = Double;
+            _type = Type::Double;
             _p.d = double(u);
         }
     }
 
-    JsonValue::JsonValue(std::string s) : _type(String) {
+    Value::Value(std::string s) : _type(Type::String) {
         _p.s = new std::string(std::move(s));
     }
 
-    JsonValue::JsonValue(stdc::array_view<uint8_t> bytes) : _type(Binary) {
+    Value::Value(stdc::array_view<uint8_t> bytes) : _type(Type::Binary) {
         _p.bin = new std::vector<uint8_t>(bytes.begin(), bytes.end());
     }
 
-    JsonValue::JsonValue(std::vector<uint8_t> bytes) : _type(Binary) {
+    Value::Value(std::vector<uint8_t> bytes) : _type(Type::Binary) {
         _p.bin = new std::vector<uint8_t>(std::move(bytes));
     }
 
-    JsonValue::JsonValue(const JsonArray &a) : _type(Array) {
-        _p.arr = new JsonArray(a);
+    Value::Value(const Array &a) : _type(Type::Array) {
+        _p.arr = new Array(a);
     }
 
-    JsonValue::JsonValue(JsonArray &&a) : _type(Array) {
-        _p.arr = new JsonArray(std::move(a));
+    Value::Value(Array &&a) : _type(Type::Array) {
+        _p.arr = new Array(std::move(a));
     }
 
-    JsonValue::JsonValue(const JsonObject &o) : _type(Object) {
-        _p.obj = new JsonObject(o);
+    Value::Value(const Object &o) : _type(Type::Object) {
+        _p.obj = new Object(o);
     }
 
-    JsonValue::JsonValue(JsonObject &&o) : _type(Object) {
-        _p.obj = new JsonObject(std::move(o));
+    Value::Value(Object &&o) : _type(Type::Object) {
+        _p.obj = new Object(std::move(o));
     }
 
-    JsonValue::~JsonValue() {
+    Value::~Value() {
         reset();
     }
 
-    JsonValue::JsonValue(const JsonValue &RHS) {
+    Value::Value(const Value &RHS) {
         copyFrom(RHS);
     }
 
-    JsonValue::JsonValue(JsonValue &&RHS) noexcept : _type(RHS._type), _p(RHS._p) {
-        RHS._type = Null;
+    Value::Value(Value &&RHS) noexcept : _type(RHS._type), _p(RHS._p) {
+        RHS._type = Type::Null;
         RHS._p.u = 0;
     }
 
-    JsonValue &JsonValue::operator=(const JsonValue &RHS) {
+    Value &Value::operator=(const Value &RHS) {
         if (this != &RHS) {
             reset();
             copyFrom(RHS);
@@ -1280,46 +1282,46 @@ namespace stdc {
         return *this;
     }
 
-    void JsonValue::swap(JsonValue &RHS) noexcept {
+    void Value::swap(Value &RHS) noexcept {
         std::swap(_type, RHS._type);
         std::swap(_p, RHS._p);
     }
 
-    void JsonValue::reset() noexcept {
+    void Value::reset() noexcept {
         switch (_type) {
-            case String:
+            case Type::String:
                 delete _p.s;
                 break;
-            case Binary:
+            case Type::Binary:
                 delete _p.bin;
                 break;
-            case Array:
+            case Type::Array:
                 delete _p.arr;
                 break;
-            case Object:
+            case Type::Object:
                 delete _p.obj;
                 break;
             default:
                 break;
         }
-        _type = Null;
+        _type = Type::Null;
         _p.u = 0;
     }
 
-    void JsonValue::copyFrom(const JsonValue &RHS) {
+    void Value::copyFrom(const Value &RHS) {
         _type = RHS._type;
         switch (_type) {
-            case String:
+            case Type::String:
                 _p.s = new std::string(*RHS._p.s);
                 break;
-            case Binary:
+            case Type::Binary:
                 _p.bin = new std::vector<uint8_t>(*RHS._p.bin);
                 break;
-            case Array:
-                _p.arr = new JsonArray(*RHS._p.arr);
+            case Type::Array:
+                _p.arr = new Array(*RHS._p.arr);
                 break;
-            case Object:
-                _p.obj = new JsonObject(*RHS._p.obj);
+            case Type::Object:
+                _p.obj = new Object(*RHS._p.obj);
                 break;
             default:
                 _p = RHS._p;
@@ -1327,26 +1329,26 @@ namespace stdc {
         }
     }
 
-    bool JsonValue::toBool(bool defaultValue) const {
-        return _type == Bool ? _p.b : defaultValue;
+    bool Value::toBool(bool defaultValue) const {
+        return _type == Type::Bool ? _p.b : defaultValue;
     }
 
-    double JsonValue::toDouble(double defaultValue) const {
+    double Value::toDouble(double defaultValue) const {
         switch (_type) {
-            case Int:
+            case Type::Int:
                 return double(_p.i);
-            case Double:
+            case Type::Double:
                 return _p.d;
             default:
                 return defaultValue;
         }
     }
 
-    int64_t JsonValue::toInt(int64_t defaultValue) const {
+    int64_t Value::toInt(int64_t defaultValue) const {
         switch (_type) {
-            case Int:
+            case Type::Int:
                 return _p.i;
-            case Double:
+            case Type::Double:
                 // Truncated, not rounded, and undefined once the value is out of range, which is
                 // what a cast does everywhere else too.
                 return int64_t(_p.d);
@@ -1355,73 +1357,71 @@ namespace stdc {
         }
     }
 
-    std::string_view JsonValue::toStringView(std::string_view defaultValue) const {
-        return _type == String ? std::string_view(*_p.s) : defaultValue;
+    std::string_view Value::toStringView(std::string_view defaultValue) const {
+        return _type == Type::String ? std::string_view(*_p.s) : defaultValue;
     }
 
-    const std::string &JsonValue::toString(const std::string &defaultValue) const {
-        return _type == String ? *_p.s : defaultValue;
+    const std::string &Value::toString(const std::string &defaultValue) const {
+        return _type == Type::String ? *_p.s : defaultValue;
     }
 
-    std::string JsonValue::toString(std::string &&defaultValue) const {
-        if (_type == String) {
+    std::string Value::toString(std::string &&defaultValue) const {
+        if (_type == Type::String) {
             return *_p.s;
         }
         return std::move(defaultValue);
     }
 
-    stdc::array_view<uint8_t>
-        JsonValue::toBinaryView(stdc::array_view<uint8_t> defaultValue) const {
-        if (_type != Binary) {
+    stdc::array_view<uint8_t> Value::toBinaryView(stdc::array_view<uint8_t> defaultValue) const {
+        if (_type != Type::Binary) {
             return defaultValue;
         }
         return stdc::array_view<uint8_t>(_p.bin->data(), _p.bin->size());
     }
 
-    const std::vector<uint8_t> &
-        JsonValue::toBinary(const std::vector<uint8_t> &defaultValue) const {
-        return _type == Binary ? *_p.bin : defaultValue;
+    const std::vector<uint8_t> &Value::toBinary(const std::vector<uint8_t> &defaultValue) const {
+        return _type == Type::Binary ? *_p.bin : defaultValue;
     }
 
-    std::vector<uint8_t> JsonValue::toBinary(std::vector<uint8_t> &&defaultValue) const {
-        if (_type == Binary) {
+    std::vector<uint8_t> Value::toBinary(std::vector<uint8_t> &&defaultValue) const {
+        if (_type == Type::Binary) {
             return *_p.bin;
         }
         return std::move(defaultValue);
     }
 
-    const JsonArray &JsonValue::toArray() const {
-        return _type == Array ? *_p.arr : EmptyValues::emptyArray();
+    const Array &Value::toArray() const {
+        return _type == Type::Array ? *_p.arr : EmptyValues::emptyArray();
     }
 
-    const JsonArray &JsonValue::toArray(const JsonArray &defaultValue) const {
-        return _type == Array ? *_p.arr : defaultValue;
+    const Array &Value::toArray(const Array &defaultValue) const {
+        return _type == Type::Array ? *_p.arr : defaultValue;
     }
 
-    JsonArray JsonValue::toArray(JsonArray &&defaultValue) const {
-        if (_type == Array) {
+    Array Value::toArray(Array &&defaultValue) const {
+        if (_type == Type::Array) {
             return *_p.arr;
         }
         return std::move(defaultValue);
     }
 
-    const JsonObject &JsonValue::toObject() const {
-        return _type == Object ? *_p.obj : EmptyValues::emptyObject();
+    const Object &Value::toObject() const {
+        return _type == Type::Object ? *_p.obj : EmptyValues::emptyObject();
     }
 
-    const JsonObject &JsonValue::toObject(const JsonObject &defaultValue) const {
-        return _type == Object ? *_p.obj : defaultValue;
+    const Object &Value::toObject(const Object &defaultValue) const {
+        return _type == Type::Object ? *_p.obj : defaultValue;
     }
 
-    JsonObject JsonValue::toObject(JsonObject &&defaultValue) const {
-        if (_type == Object) {
+    Object Value::toObject(Object &&defaultValue) const {
+        if (_type == Type::Object) {
             return *_p.obj;
         }
         return std::move(defaultValue);
     }
 
-    const JsonValue &JsonValue::operator[](std::string_view key) const {
-        if (_type == Object) {
+    const Value &Value::operator[](std::string_view key) const {
+        if (_type == Type::Object) {
             auto it = _p.obj->find(key);
             if (it != _p.obj->end()) {
                 return it->second;
@@ -1430,18 +1430,18 @@ namespace stdc {
         return EmptyValues::nullValue();
     }
 
-    const JsonValue &JsonValue::operator[](size_t i) const {
-        if (_type == Array && i < _p.arr->size()) {
+    const Value &Value::operator[](size_t i) const {
+        if (_type == Type::Array && i < _p.arr->size()) {
             return (*_p.arr)[i];
         }
         return EmptyValues::nullValue();
     }
 
-    bool JsonValue::operator==(const JsonValue &RHS) const {
+    bool Value::operator==(const Value &RHS) const {
         // A number written as 1 and a number written as 1.0 are the same number. Nothing else
         // compares across types.
         if (isNumber() && RHS.isNumber()) {
-            if (_type == Int && RHS._type == Int) {
+            if (_type == Type::Int && RHS._type == Type::Int) {
                 return _p.i == RHS._p.i;
             }
             // A large integer loses precision here, which is the price of 1 and 1.0 being equal.
@@ -1452,62 +1452,61 @@ namespace stdc {
             return false;
         }
         switch (_type) {
-            case Null:
+            case Type::Null:
                 return true;
-            case Bool:
+            case Type::Bool:
                 return _p.b == RHS._p.b;
-            case String:
+            case Type::String:
                 return *_p.s == *RHS._p.s;
-            case Binary:
+            case Type::Binary:
                 return *_p.bin == *RHS._p.bin;
-            case Array:
+            case Type::Array:
                 return *_p.arr == *RHS._p.arr;
-            case Object:
+            case Type::Object:
                 return *_p.obj == *RHS._p.obj;
             default:
                 return false;
         }
     }
 
-    std::string JsonValue::toJson(int indent) const {
+    std::string Value::toJson(int indent) const {
         std::string res;
         dumpTo(res, *this, indent, 0);
         return res;
     }
 
-    JsonValue JsonValue::fromJson(std::string_view json, bool ignoreComments,
-                                  JsonParseError *error) {
+    Value Value::fromJson(std::string_view json, bool ignoreComments, ParseError *error) {
         if (error) {
-            *error = JsonParseError();
+            *error = ParseError();
         }
         Parser parser(json, ignoreComments);
-        JsonValue res;
+        Value res;
         if (!parser.parse(&res)) {
             if (error) {
                 *error = parser.error();
             }
-            return JsonValue();
+            return Value();
         }
         return res;
     }
 
-    std::vector<uint8_t> JsonValue::toCbor() const {
+    std::vector<uint8_t> Value::toCbor() const {
         std::vector<uint8_t> res;
-        cbor::encode(res, *this);
+        cbor_codec::encode(res, *this);
         return res;
     }
 
-    JsonValue JsonValue::fromCbor(stdc::array_view<uint8_t> cbor, CborDecodeError *error) {
+    Value Value::fromCbor(stdc::array_view<uint8_t> cbor, cbor::DecodeError *error) {
         if (error) {
-            *error = CborDecodeError();
+            *error = cbor::DecodeError();
         }
-        cbor::Decoder decoder(cbor);
-        JsonValue res;
+        cbor_codec::Decoder decoder(cbor);
+        Value res;
         if (!decoder.decode(&res)) {
             if (error) {
                 *error = decoder.error();
             }
-            return JsonValue();
+            return Value();
         }
         return res;
     }

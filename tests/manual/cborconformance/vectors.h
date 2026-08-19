@@ -5,7 +5,7 @@
 
 // Reading cbor-wg/cbor-test-vectors, whose test files are themselves CBOR.
 //
-// Decoding them with JsonValue::fromCbor would be circular -- the reader would be the thing under
+// Decoding them with json::Value::fromCbor would be circular -- the reader would be the thing under
 // test -- and it would not work anyway: a file describing what a tag decodes to has a tag in it,
 // and we do not read tags. So the manifest is walked here by hand, structurally, taking each
 // test's fields out without interpreting the items they hold.

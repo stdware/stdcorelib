@@ -17,7 +17,8 @@ namespace conformance {
 
     namespace fs = std::filesystem;
 
-    using stdc::JsonValue;
+    namespace json = stdc::json;
+    namespace cbor = stdc::cbor;
 
     struct Failure {
         std::string file;
@@ -78,16 +79,16 @@ namespace conformance {
     ///
     /// \param eitherAccepted Incremented when an implementation-defined document is accepted,
     ///        which is the only way to see what we chose.
-    JsonValue checkFile(const fs::path &path, Expectation expectation,
+    json::Value checkFile(const fs::path &path, Expectation expectation,
                         int *eitherAccepted = nullptr);
 
     /// Everything an accepted document owes us beyond parsing: its serialization parses back to an
     /// equal value, serializing that gives the same text, and its CBOR decodes to itself.
-    void checkValue(const fs::path &path, const JsonValue &value);
+    void checkValue(const fs::path &path, const json::Value &value);
 
     /// A CBOR encoding written by another implementation, sitting beside the JSON, has to decode
     /// to the value we parsed. Does nothing when there is no such file.
-    void checkForeignCbor(const fs::path &jsonPath, const JsonValue &value);
+    void checkForeignCbor(const fs::path &jsonPath, const json::Value &value);
 
     /// A file of one document per line, which is not JSON but is how several corpora ship their
     /// larger samples. Every line is held to \a expectation on its own.
@@ -104,7 +105,7 @@ namespace conformance {
     /// implementation puts there is \c null. So these documents parse, and serialize, and simply
     /// do not come back as what they were. That is the format, not a defect, and the round-trip
     /// checks skip them on that ground.
-    bool hasNonFinite(const JsonValue &value);
+    bool hasNonFinite(const json::Value &value);
 
 }
 

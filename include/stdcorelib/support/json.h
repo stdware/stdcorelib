@@ -15,21 +15,72 @@
 
 /// \defgroup json JSON and CBOR
 ///
-/// stdc::JsonValue reads and writes both, over the same tree.
+/// stdc::json::Value reads and writes both, over the same tree.
 
-namespace stdc {
+namespace stdc::cbor {
 
     /// \addtogroup json
     /// @{
 
-    class JsonValue;
+    /// Why a CBOR document was turned down, and where.
+    ///
+    /// The codec itself is json::Value::toCbor() and json::Value::fromCbor(), since one tree
+    /// serves both encodings. This sits here rather than beside them because it says what went
+    /// wrong with CBOR, and whatever else CBOR grows will want the same home.
+    struct STDC_EXPORT DecodeError {
+        enum Code {
+            NoError = 0,
+            UnexpectedEnd,   ///< the bytes stopped in the middle of an item
+            IllegalEncoding, ///< a reserved encoding, or one this item is not allowed
+            IllegalString,   ///< a text string that is not UTF-8
+            OutOfRange,      ///< a number CBOR can write and json::Value cannot hold
+            UnsupportedType, ///< tags, and map keys that are not text
+            NestedTooDeeply,
+            TrailingContent, ///< a whole item, and then more after it
+        };
 
-    using JsonArray = std::vector<JsonValue>;
+        Code code = NoError;
+        size_t offset = 0; ///< bytes from the start
+        std::string what;  ///< what was wrong, without the position in front of it
 
-    using JsonObject = std::map<std::string, JsonValue, std::less<>>;
+        explicit operator bool() const {
+            return code != NoError;
+        }
+
+        std::string message() const;
+    };
+
+    /// @}
+}
+
+namespace stdc::json {
+
+    /// \addtogroup json
+    /// @{
+
+    class Value;
+
+    using Array = std::vector<Value>;
+
+    using Object = std::map<std::string, Value, std::less<>>;
+
+    /// Which of the eight kinds a Value is.
+    ///
+    /// \note Scoped, so that the \c Array and \c Object here leave the two names above alone. An
+    ///       unscoped enumerator would hide them inside Value and everywhere else in here.
+    enum class Type {
+        Null = 0,
+        Bool,
+        Double,
+        Int,
+        String,
+        Binary,
+        Array,
+        Object,
+    };
 
     /// Why a JSON document was turned down, and where.
-    struct STDC_EXPORT JsonParseError {
+    struct STDC_EXPORT ParseError {
         enum Code {
             NoError = 0,
             UnexpectedEnd,   ///< the text stopped in the middle of something
@@ -57,116 +108,81 @@ namespace stdc {
         std::string message() const;
     };
 
-    /// Why a CBOR document was turned down, and where.
-    struct STDC_EXPORT CborDecodeError {
-        enum Code {
-            NoError = 0,
-            UnexpectedEnd,   ///< the bytes stopped in the middle of an item
-            IllegalEncoding, ///< a reserved encoding, or one this item is not allowed
-            IllegalString,   ///< a text string that is not UTF-8
-            OutOfRange,      ///< a number CBOR can write and JsonValue cannot hold
-            UnsupportedType, ///< tags, and map keys that are not text
-            NestedTooDeeply,
-            TrailingContent, ///< a whole item, and then more after it
-        };
-
-        Code code = NoError;
-        size_t offset = 0; ///< bytes from the start
-        std::string what;  ///< what was wrong, without the position in front of it
-
-        explicit operator bool() const {
-            return code != NoError;
-        }
-
-        std::string message() const;
-    };
-
-    /// JsonValue - An immutable JSON value, shaped after Qt's.
+    /// An immutable JSON value, shaped after Qt's.
     ///
     /// Reading never fails and never throws. An accessor asked for a type the value does not have
     /// hands back the default it was given, and a subscript that finds nothing hands back a null
     /// value, so a chain of them needs no check at each step.
     ///
-    /// \note A number keeps the form it was written in. \c 1 parses as \c Int and \c 1.0 as
-    ///       \c Double, which is what a round trip through \c toJson has to preserve. Comparison
-    ///       ignores the distinction and compares numerically.
+    /// \note A number keeps the form it was written in. \c 1 parses as \c Type::Int and \c 1.0 as
+    ///       \c Type::Double, which is what a round trip through toJson() has to preserve.
+    ///       Comparison ignores the distinction and compares numerically.
     ///
     ///       An integer is exact, up to the range of \c int64_t. Anything outside it, including an
-    ///       unsigned value above \c INT64_MAX, becomes a \c Double and is exact only up to 2^53.
-    class STDC_EXPORT JsonValue {
+    ///       unsigned value above \c INT64_MAX, becomes a \c Type::Double and is exact only up to
+    ///       2^53.
+    class STDC_EXPORT Value {
     public:
-        enum Type {
-            Null = 0,
-            Bool,
-            Double,
-            Int,
-            String,
-            Binary,
-            Array,
-            Object,
-        };
+        Value(Type = Type::Null);
+        Value(bool b);
+        Value(double d);
+        inline Value(int i) : Value(int64_t(i)) {
+        }
+        inline Value(uint32_t i) : Value(uint64_t(i)) {
+        }
+        Value(int64_t i);
+        Value(uint64_t u);
+        Value(std::string s);
+        inline Value(const char *s, int size = -1)
+            : Value(size < 0 ? std::string(s) : std::string(s, size)) {
+        }
+        Value(array_view<uint8_t> bytes);
+        Value(std::vector<uint8_t> bytes);
+        inline Value(const uint8_t *data, int size) : Value(array_view<uint8_t>(data, size)) {
+        }
+        Value(const Array &a);
+        Value(Array &&a);
+        Value(const Object &o);
+        Value(Object &&o);
+        ~Value();
 
-        JsonValue(Type = Null);
-        JsonValue(bool b);
-        JsonValue(double d);
-        inline JsonValue(int i) : JsonValue(int64_t(i)) {
-        }
-        inline JsonValue(uint32_t i) : JsonValue(uint64_t(i)) {
-        }
-        JsonValue(int64_t i);
-        JsonValue(uint64_t u);
-        JsonValue(std::string s);
-        inline JsonValue(const char *s, int size = -1)
-            : JsonValue(size < 0 ? std::string(s) : std::string(s, size)) {
-        }
-        JsonValue(array_view<uint8_t> bytes);
-        JsonValue(std::vector<uint8_t> bytes);
-        inline JsonValue(const uint8_t *data, int size)
-            : JsonValue(array_view<uint8_t>(data, size)) {
-        }
-        JsonValue(const JsonArray &a);
-        JsonValue(JsonArray &&a);
-        JsonValue(const JsonObject &o);
-        JsonValue(JsonObject &&o);
-        ~JsonValue();
-
-        JsonValue(const JsonValue &RHS);
-        JsonValue(JsonValue &&RHS) noexcept;
-        JsonValue &operator=(const JsonValue &RHS);
-        inline JsonValue &operator=(JsonValue &&RHS) noexcept {
+        Value(const Value &RHS);
+        Value(Value &&RHS) noexcept;
+        Value &operator=(const Value &RHS);
+        inline Value &operator=(Value &&RHS) noexcept {
             swap(RHS);
             return *this;
         }
 
-        void swap(JsonValue &RHS) noexcept;
+        void swap(Value &RHS) noexcept;
 
     public:
         inline Type type() const {
             return _type;
         }
         inline bool isNull() const {
-            return type() == Null;
+            return type() == Type::Null;
         }
         inline bool isBool() const {
-            return type() == Bool;
+            return type() == Type::Bool;
         }
         inline bool isDouble() const {
-            return type() == Double;
+            return type() == Type::Double;
         }
         inline bool isInt() const {
-            return type() == Int;
+            return type() == Type::Int;
         }
         inline bool isNumber() const {
             return isDouble() || isInt();
         }
         inline bool isString() const {
-            return type() == String;
+            return type() == Type::String;
         }
         inline bool isArray() const {
-            return type() == Array;
+            return type() == Type::Array;
         }
         inline bool isObject() const {
-            return type() == Object;
+            return type() == Type::Object;
         }
 
         bool toBool(bool defaultValue = false) const;
@@ -178,18 +194,18 @@ namespace stdc {
         array_view<uint8_t> toBinaryView(array_view<uint8_t> defaultValue = {}) const;
         const std::vector<uint8_t> &toBinary(const std::vector<uint8_t> &defaultValue = {}) const;
         std::vector<uint8_t> toBinary(std::vector<uint8_t> &&defaultValue) const;
-        const JsonArray &toArray() const;
-        const JsonArray &toArray(const JsonArray &defaultValue) const;
-        JsonArray toArray(JsonArray &&defaultValue) const;
-        const JsonObject &toObject() const;
-        const JsonObject &toObject(const JsonObject &defaultValue) const;
-        JsonObject toObject(JsonObject &&defaultValue) const;
+        const Array &toArray() const;
+        const Array &toArray(const Array &defaultValue) const;
+        Array toArray(Array &&defaultValue) const;
+        const Object &toObject() const;
+        const Object &toObject(const Object &defaultValue) const;
+        Object toObject(Object &&defaultValue) const;
 
-        const JsonValue &operator[](std::string_view key) const;
-        const JsonValue &operator[](size_t i) const;
+        const Value &operator[](std::string_view key) const;
+        const Value &operator[](size_t i) const;
 
-        bool operator==(const JsonValue &RHS) const;
-        inline bool operator!=(const JsonValue &RHS) const {
+        bool operator==(const Value &RHS) const;
+        inline bool operator!=(const Value &RHS) const {
             return !(*this == RHS);
         }
 
@@ -200,7 +216,7 @@ namespace stdc {
         ///        is performed.
         std::string toJson(int indent = -1) const;
 
-        /// Returns the serialized JsonValue instance of the given JSON text.
+        /// Returns the value the given JSON text spells.
         ///
         /// \param json The text to parse.
         /// \param ignoreComments Whether comments should be ignored and treated like whitespace
@@ -208,18 +224,18 @@ namespace stdc {
         /// \param error Set to why the text was rejected, or cleared on success. A rejected
         ///        document and the text \c null both come back as a null value, so this tells
         ///        them apart.
-        static JsonValue fromJson(std::string_view json, bool ignoreComments,
-                                  JsonParseError *error = nullptr);
+        static Value fromJson(std::string_view json, bool ignoreComments,
+                              ParseError *error = nullptr);
 
         std::vector<uint8_t> toCbor() const;
 
-        /// Returns the JsonValue the given CBOR encodes.
+        /// Returns the value the given CBOR encodes.
         ///
         /// \param cbor The bytes to decode.
         /// \param error Set to why the bytes were rejected, or cleared on success. A rejected
         ///        document and an encoded null both come back as a null value, so this tells
         ///        them apart.
-        static JsonValue fromCbor(array_view<uint8_t> cbor, CborDecodeError *error = nullptr);
+        static Value fromCbor(array_view<uint8_t> cbor, cbor::DecodeError *error = nullptr);
 
     private:
         // The alternatives, all trivially copyable, so the payload moves as one object rather
@@ -234,8 +250,8 @@ namespace stdc {
             double d;
             std::string *s;
             std::vector<uint8_t> *bin;
-            JsonArray *arr;
-            JsonObject *obj;
+            Array *arr;
+            Object *obj;
         };
 
         Type _type;
@@ -243,7 +259,7 @@ namespace stdc {
 
         // Frees what the live alternative owns, if it owns anything, and becomes null.
         void reset() noexcept;
-        void copyFrom(const JsonValue &RHS);
+        void copyFrom(const Value &RHS);
     };
 
     /// @}

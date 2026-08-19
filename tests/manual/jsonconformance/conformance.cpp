@@ -111,17 +111,17 @@ namespace conformance {
     // Checks
     // ----------------------------------------------------------------------------------------
 
-    bool hasNonFinite(const JsonValue &value) {
+    bool hasNonFinite(const json::Value &value) {
         switch (value.type()) {
-            case JsonValue::Double:
+            case json::Type::Double:
                 return !std::isfinite(value.toDouble());
-            case JsonValue::Array:
+            case json::Type::Array:
                 for (const auto &item : value.toArray()) {
                     if (hasNonFinite(item))
                         return true;
                 }
                 return false;
-            case JsonValue::Object:
+            case json::Type::Object:
                 for (const auto &item : value.toObject()) {
                     if (hasNonFinite(item.second))
                         return true;
@@ -132,7 +132,7 @@ namespace conformance {
         }
     }
 
-    void checkValue(const fs::path &path, const JsonValue &value) {
+    void checkValue(const fs::path &path, const json::Value &value) {
         // What the serializer writes is always valid UTF-8, whatever went into the value. That one
         // it is never allowed to get wrong, since a document holding a bad string still has to be
         // writable.
@@ -149,8 +149,8 @@ namespace conformance {
         for (int indent : {-1, 4}) {
             const auto text = indent < 0 ? compact : value.toJson(indent);
 
-            stdc::JsonParseError error;
-            const auto reparsed = JsonValue::fromJson(text, false, &error);
+            stdc::json::ParseError error;
+            const auto reparsed = json::Value::fromJson(text, false, &error);
             if (error) {
                 report.fail(path, "our own output does not parse (indent " +
                                       std::to_string(indent) + "): " + error.message());
@@ -170,8 +170,8 @@ namespace conformance {
         // Our CBOR has to survive our own decoder. This says nothing about the encoding being
         // right, which is what checkForeignCbor() is for.
         {
-            stdc::CborDecodeError error;
-            const auto decoded = JsonValue::fromCbor(value.toCbor(), &error);
+            stdc::cbor::DecodeError error;
+            const auto decoded = json::Value::fromCbor(value.toCbor(), &error);
             if (error) {
                 report.fail(path, "our own CBOR does not decode: " + error.message());
             } else if (decoded != value) {
@@ -180,7 +180,7 @@ namespace conformance {
         }
     }
 
-    void checkForeignCbor(const fs::path &jsonPath, const JsonValue &value) {
+    void checkForeignCbor(const fs::path &jsonPath, const json::Value &value) {
         const fs::path cborPath = jsonPath.string() + ".cbor";
         if (!fs::exists(cborPath))
             return;
@@ -193,9 +193,9 @@ namespace conformance {
         }
 
         const auto bytes = readFile(cborPath);
-        stdc::CborDecodeError error;
+        stdc::cbor::DecodeError error;
         const auto decoded =
-            JsonValue::fromCbor(stdc::array_view<uint8_t>(
+            json::Value::fromCbor(stdc::array_view<uint8_t>(
                                     reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()),
                                 &error);
         report.checked++;
@@ -206,12 +206,12 @@ namespace conformance {
         }
     }
 
-    static JsonValue checkText(const fs::path &path, std::string_view text, Expectation expectation,
+    static json::Value checkText(const fs::path &path, std::string_view text, Expectation expectation,
                                int *eitherAccepted) {
         report.checked++;
 
-        stdc::JsonParseError error;
-        auto value = JsonValue::fromJson(text, false, &error);
+        stdc::json::ParseError error;
+        auto value = json::Value::fromJson(text, false, &error);
 
         switch (expectation) {
             case Expectation::Accept:
@@ -239,7 +239,7 @@ namespace conformance {
         return {};
     }
 
-    JsonValue checkFile(const fs::path &path, Expectation expectation, int *eitherAccepted) {
+    json::Value checkFile(const fs::path &path, Expectation expectation, int *eitherAccepted) {
         bool ok = false;
         const auto content = readFile(path, &ok);
         if (!ok) {
@@ -274,8 +274,8 @@ namespace conformance {
 
             if (expectation == Expectation::Reject) {
                 report.checked++;
-                stdc::JsonParseError error;
-                JsonValue::fromJson(line, false, &error);
+                stdc::json::ParseError error;
+                json::Value::fromJson(line, false, &error);
                 if (error) {
                     rejected++;
                 }
@@ -311,7 +311,7 @@ namespace conformance {
         // catches everything this check is for -- a lost key, a changed order, whitespace that
         // came back -- and the count of these is printed at the end so they cannot pile up
         // unnoticed.
-        if (JsonValue::fromJson(expected, false) == value) {
+        if (json::Value::fromJson(expected, false) == value) {
             report.skipped++;
             return;
         }
