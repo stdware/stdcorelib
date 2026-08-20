@@ -254,7 +254,7 @@ namespace {
                 accepted++;
                 if (!isValidUtf8(line)) {
                     report.fail(path, "accepted a line that is not valid UTF-8");
-                } else if (value.toStringView() != line) {
+                } else if (value.toString() != line) {
                     report.fail(path, "a valid line did not survive parsing");
                 }
                 if (!isValidUtf8(value.toJson())) {

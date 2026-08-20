@@ -18,21 +18,6 @@ namespace {
     using namespace stdc;
     using namespace stdc::json;
 
-    struct EmptyValues {
-        static inline const Value &nullValue() {
-            static const Value null;
-            return null;
-        }
-        static inline const Array &emptyArray() {
-            static const Array emptyArray;
-            return emptyArray;
-        }
-        static inline const Object &emptyObject() {
-            static const Object emptyObject;
-            return emptyObject;
-        }
-    };
-
     // ------------------------------------------------------------------------------------------
     // Text output
     // ------------------------------------------------------------------------------------------
@@ -177,7 +162,7 @@ namespace {
                 formatDouble(out, v.toDouble());
                 return;
             case Type::String:
-                quoteTo(out, v.toStringView());
+                quoteTo(out, v.toString());
                 return;
             case Type::Binary: {
                 // Binary has no JSON form. This is the shape it takes so a document holding one is
@@ -766,7 +751,7 @@ namespace {
                     return;
                 }
                 case Type::String:
-                    putBytes(out, 3, v.toStringView());
+                    putBytes(out, 3, v.toString());
                     return;
                 case Type::Binary: {
                     const auto &b = v.toBinary();
@@ -1327,114 +1312,6 @@ namespace stdc::json {
                 _p = RHS._p;
                 break;
         }
-    }
-
-    bool Value::toBool(bool defaultValue) const {
-        return _type == Type::Bool ? _p.b : defaultValue;
-    }
-
-    double Value::toDouble(double defaultValue) const {
-        switch (_type) {
-            case Type::Int:
-                return double(_p.i);
-            case Type::Double:
-                return _p.d;
-            default:
-                return defaultValue;
-        }
-    }
-
-    int64_t Value::toInt(int64_t defaultValue) const {
-        switch (_type) {
-            case Type::Int:
-                return _p.i;
-            case Type::Double:
-                // Truncated, not rounded, and undefined once the value is out of range, which is
-                // what a cast does everywhere else too.
-                return int64_t(_p.d);
-            default:
-                return defaultValue;
-        }
-    }
-
-    std::string_view Value::toStringView(std::string_view defaultValue) const {
-        return _type == Type::String ? std::string_view(*_p.s) : defaultValue;
-    }
-
-    const std::string &Value::toString(const std::string &defaultValue) const {
-        return _type == Type::String ? *_p.s : defaultValue;
-    }
-
-    std::string Value::toString(std::string &&defaultValue) const {
-        if (_type == Type::String) {
-            return *_p.s;
-        }
-        return std::move(defaultValue);
-    }
-
-    stdc::array_view<uint8_t> Value::toBinaryView(stdc::array_view<uint8_t> defaultValue) const {
-        if (_type != Type::Binary) {
-            return defaultValue;
-        }
-        return stdc::array_view<uint8_t>(_p.bin->data(), _p.bin->size());
-    }
-
-    const std::vector<uint8_t> &Value::toBinary(const std::vector<uint8_t> &defaultValue) const {
-        return _type == Type::Binary ? *_p.bin : defaultValue;
-    }
-
-    std::vector<uint8_t> Value::toBinary(std::vector<uint8_t> &&defaultValue) const {
-        if (_type == Type::Binary) {
-            return *_p.bin;
-        }
-        return std::move(defaultValue);
-    }
-
-    const Array &Value::toArray() const {
-        return _type == Type::Array ? *_p.arr : EmptyValues::emptyArray();
-    }
-
-    const Array &Value::toArray(const Array &defaultValue) const {
-        return _type == Type::Array ? *_p.arr : defaultValue;
-    }
-
-    Array Value::toArray(Array &&defaultValue) const {
-        if (_type == Type::Array) {
-            return *_p.arr;
-        }
-        return std::move(defaultValue);
-    }
-
-    const Object &Value::toObject() const {
-        return _type == Type::Object ? *_p.obj : EmptyValues::emptyObject();
-    }
-
-    const Object &Value::toObject(const Object &defaultValue) const {
-        return _type == Type::Object ? *_p.obj : defaultValue;
-    }
-
-    Object Value::toObject(Object &&defaultValue) const {
-        if (_type == Type::Object) {
-            return *_p.obj;
-        }
-        return std::move(defaultValue);
-    }
-
-    const Value &Value::operator[](std::string_view key) const {
-        if (_type == Type::Object) {
-            auto it = _p.obj->find(key);
-            if (it != _p.obj->end()) {
-                return it->second;
-            }
-        }
-        return EmptyValues::nullValue();
-    }
-
-    const Value &Value::operator[](size_t i) const {
-        if (_type == Type::Array && i < _p.arr->size()) {
-            return (*_p.arr)[i];
-        }
-        return EmptyValues::nullValue();
     }
 
     bool Value::operator==(const Value &RHS) const {

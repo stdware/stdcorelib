@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <stdcorelib/stdc_global.h>
@@ -108,11 +109,30 @@ namespace stdc::json {
         std::string message() const;
     };
 
-    /// An immutable JSON value, shaped after Qt's.
+    namespace detail {
+
+        /// The empty objects the readers below hand back where the value holds something else.
+        /// @{
+        const Value &empty_value();
+        const std::string &empty_string();
+        const std::vector<uint8_t> &empty_binary();
+        const Array &empty_array();
+        const Object &empty_object();
+        /// @}
+
+    }
+
+    /// A JSON value, shaped after Qt's.
     ///
-    /// Reading never fails and never throws. An accessor asked for a type the value does not have
-    /// hands back the default it was given, and a subscript that finds nothing hands back a null
-    /// value, so a chain of them needs no check at each step.
+    /// The tree is built by construction and read through the \c toXxx() family, which never
+    /// fails: an accessor asked for a type the value does not have hands back the default it was
+    /// given, and a subscript that finds nothing hands back a null value, so a chain of them
+    /// needs no check at each step.
+    ///
+    /// The \c asXxx() family is the other half. It answers with a pointer into the value's own
+    /// storage, or with \c nullptr when the value holds something else, and its non-const forms
+    /// are how a document is changed after it has been built. That half needs the check the
+    /// first half does not.
     ///
     /// \note A number keeps the form it was written in. \c 1 parses as \c Type::Int and \c 1.0 as
     ///       \c Type::Double, which is what a round trip through toJson() has to preserve.
@@ -185,25 +205,183 @@ namespace stdc::json {
             return type() == Type::Object;
         }
 
-        bool toBool(bool defaultValue = false) const;
-        double toDouble(double defaultValue = 0) const;
-        int64_t toInt(int64_t defaultValue = 0) const;
-        std::string_view toStringView(std::string_view defaultValue = {}) const;
-        const std::string &toString(const std::string &defaultValue = {}) const;
-        std::string toString(std::string &&defaultValue) const;
-        array_view<uint8_t> toBinaryView(array_view<uint8_t> defaultValue = {}) const;
-        const std::vector<uint8_t> &toBinary(const std::vector<uint8_t> &defaultValue = {}) const;
-        std::vector<uint8_t> toBinary(std::vector<uint8_t> &&defaultValue) const;
-        const Array &toArray() const;
-        const Array &toArray(const Array &defaultValue) const;
-        Array toArray(Array &&defaultValue) const;
-        const Object &toObject() const;
-        const Object &toObject(const Object &defaultValue) const;
-        Object toObject(Object &&defaultValue) const;
+    public:
+        /// \name Reading, with something to fall back on
+        ///
+        /// None of these fail. Where the value holds something else the default comes back, and
+        /// the two number forms convert into each other, which is the only conversion there is.
+        ///
+        /// \warning A form that hands back a reference and was given a default hands back a
+        ///          reference to that default where the type does not match, so a temporary
+        ///          written at the call site is gone by the semicolon. The forms taking no
+        ///          default answer with a shared empty object instead and are safe to keep.
+        /// \sa The \c asXxx() family below, for the storage itself and for telling a value that
+        ///     is absent from one that happens to equal the default.
+        /// @{
 
-        const Value &operator[](std::string_view key) const;
-        const Value &operator[](size_t i) const;
+        inline bool toBool(bool defaultValue = false) const {
+            return _type == Type::Bool ? _p.b : defaultValue;
+        }
+        inline double toDouble(double defaultValue = 0) const {
+            switch (_type) {
+                case Type::Int:
+                    return double(_p.i);
+                case Type::Double:
+                    return _p.d;
+                default:
+                    break;
+            }
+            return defaultValue;
+        }
+        inline int64_t toInt(int64_t defaultValue = 0) const {
+            switch (_type) {
+                case Type::Int:
+                    return _p.i;
+                case Type::Double:
+                    // Truncated, not rounded, and undefined once the value is out of range, which
+                    // is what a cast does everywhere else too.
+                    return int64_t(_p.d);
+                default:
+                    break;
+            }
+            return defaultValue;
+        }
+        inline const std::string &toString() const {
+            return _type == Type::String ? *_p.s : detail::empty_string();
+        }
+        inline const std::string &toString(const std::string &defaultValue) const {
+            return _type == Type::String ? *_p.s : defaultValue;
+        }
+        inline std::string toString(std::string &&defaultValue) const {
+            if (_type == Type::String) {
+                return *_p.s;
+            }
+            return std::move(defaultValue);
+        }
+        inline const std::vector<uint8_t> &toBinary() const {
+            return _type == Type::Binary ? *_p.bin : detail::empty_binary();
+        }
+        inline const std::vector<uint8_t> &
+            toBinary(const std::vector<uint8_t> &defaultValue) const {
+            return _type == Type::Binary ? *_p.bin : defaultValue;
+        }
+        inline std::vector<uint8_t> toBinary(std::vector<uint8_t> &&defaultValue) const {
+            if (_type == Type::Binary) {
+                return *_p.bin;
+            }
+            return std::move(defaultValue);
+        }
+        inline const Array &toArray() const {
+            return _type == Type::Array ? *_p.arr : detail::empty_array();
+        }
+        inline const Array &toArray(const Array &defaultValue) const {
+            return _type == Type::Array ? *_p.arr : defaultValue;
+        }
+        inline Array toArray(Array &&defaultValue) const {
+            if (_type == Type::Array) {
+                return *_p.arr;
+            }
+            return std::move(defaultValue);
+        }
+        inline const Object &toObject() const {
+            return _type == Type::Object ? *_p.obj : detail::empty_object();
+        }
+        inline const Object &toObject(const Object &defaultValue) const {
+            return _type == Type::Object ? *_p.obj : defaultValue;
+        }
+        inline Object toObject(Object &&defaultValue) const {
+            if (_type == Type::Object) {
+                return *_p.obj;
+            }
+            return std::move(defaultValue);
+        }
 
+        inline const Value &operator[](std::string_view key) const {
+            if (_type == Type::Object) {
+                auto it = _p.obj->find(key);
+                if (it != _p.obj->end()) {
+                    return it->second;
+                }
+            }
+            return detail::empty_value();
+        }
+        inline const Value &operator[](size_t i) const {
+            if (_type == Type::Array && i < _p.arr->size()) {
+                return (*_p.arr)[i];
+            }
+            return detail::empty_value();
+        }
+
+        /// @}
+
+        /// \name Reading the storage itself
+        ///
+        /// The value's own payload, or \c nullptr where it holds something else. Nothing is
+        /// converted and nothing is substituted, which is the whole difference from the \c toXxx()
+        /// family above: asDouble() on an \c Int answers with null where toDouble() answers with
+        /// the number.
+        ///
+        /// This is also how to tell a value that is not there from one that happens to equal the
+        /// default, which \c toInt(-1) cannot do.
+        ///
+        /// The non-const forms hand out a writable pointer and are the only way to change a
+        /// document once it is built. There is no reference form on purpose: a type that does not
+        /// match has nothing to return a reference to, and handing back the shared empty object
+        /// would let one caller's write reach every other reader of it.
+        ///
+        /// \code
+        ///   if (auto *o = doc.asObject()) {
+        ///       o->emplace("count", json::Value(1));
+        ///   }
+        /// \endcode
+        /// @{
+
+        inline const bool *asBool() const {
+            return _type == Type::Bool ? &_p.b : nullptr;
+        }
+        inline bool *asBool() {
+            return _type == Type::Bool ? &_p.b : nullptr;
+        }
+        inline const int64_t *asInt() const {
+            return _type == Type::Int ? &_p.i : nullptr;
+        }
+        inline int64_t *asInt() {
+            return _type == Type::Int ? &_p.i : nullptr;
+        }
+        inline const double *asDouble() const {
+            return _type == Type::Double ? &_p.d : nullptr;
+        }
+        inline double *asDouble() {
+            return _type == Type::Double ? &_p.d : nullptr;
+        }
+        inline const std::string *asString() const {
+            return _type == Type::String ? _p.s : nullptr;
+        }
+        inline std::string *asString() {
+            return _type == Type::String ? _p.s : nullptr;
+        }
+        inline const std::vector<uint8_t> *asBinary() const {
+            return _type == Type::Binary ? _p.bin : nullptr;
+        }
+        inline std::vector<uint8_t> *asBinary() {
+            return _type == Type::Binary ? _p.bin : nullptr;
+        }
+        inline const Array *asArray() const {
+            return _type == Type::Array ? _p.arr : nullptr;
+        }
+        inline Array *asArray() {
+            return _type == Type::Array ? _p.arr : nullptr;
+        }
+        inline const Object *asObject() const {
+            return _type == Type::Object ? _p.obj : nullptr;
+        }
+        inline Object *asObject() {
+            return _type == Type::Object ? _p.obj : nullptr;
+        }
+
+        /// @}
+
+    public:
         bool operator==(const Value &RHS) const;
         inline bool operator!=(const Value &RHS) const {
             return !(*this == RHS);
@@ -261,6 +439,35 @@ namespace stdc::json {
         void reset() noexcept;
         void copyFrom(const Value &RHS);
     };
+
+    namespace detail {
+
+        inline const Value &empty_value() {
+            static const Value instance;
+            return instance;
+        }
+
+        inline const std::string &empty_string() {
+            static const std::string instance;
+            return instance;
+        }
+
+        inline const std::vector<uint8_t> &empty_binary() {
+            static const std::vector<uint8_t> instance;
+            return instance;
+        }
+
+        inline const Array &empty_array() {
+            static const Array instance;
+            return instance;
+        }
+
+        inline const Object &empty_object() {
+            static const Object instance;
+            return instance;
+        }
+
+    }
 
     /// @}
 }

@@ -302,10 +302,6 @@ namespace stdc::windows {
         return std::get<1>(comp->s);
     }
 
-    array_view<uint8_t> RegValue::toBinaryView() const {
-        return toBinary();
-    }
-
     int32_t RegValue::toInt32() const {
         if (!isInt32()) {
             return 0;
@@ -341,10 +337,6 @@ namespace stdc::windows {
         }
         assert(comp && comp->s.index() == 2 && comp->sl);
         return comp->sl.value();
-    }
-
-    array_view<std::wstring> RegValue::toStringListView() const {
-        return toStringList();
     }
 
     std::wstring RegValue::toExpandString() const {
@@ -755,7 +747,7 @@ namespace stdc::windows {
         ec.clear();
 
         const auto &writeString = [&](DWORD type) {
-            auto data = value.toStringView();
+            const std::wstring &data = value.toString();
             std::wstring terminated(data);
             if (type == REG_MULTI_SZ) {
                 if (terminated.empty() || terminated.back() != L'\0')

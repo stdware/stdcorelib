@@ -354,7 +354,7 @@ namespace {
                 "appendix_a.json #" + std::to_string(i + 1) + " " + item["hex"].toString();
 
             vectors::Vector test;
-            if (!vectors::fromHex(item["hex"].toStringView(), &test.encoded)) {
+            if (!vectors::fromHex(item["hex"].toString(), &test.encoded)) {
                 report.fail(where, "the hex field is not hex");
                 continue;
             }

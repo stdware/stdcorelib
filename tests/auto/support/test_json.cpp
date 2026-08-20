@@ -61,7 +61,7 @@ BOOST_AUTO_TEST_CASE(test_Value_Types) {
         BOOST_CHECK(v.type() == json::Type::Binary);
         BOOST_CHECK(!v.isString());
         BOOST_CHECK(v.toBinary().size() == 4);
-        BOOST_CHECK(v.toBinaryView().size() == 4);
+        BOOST_CHECK(v.toBinary().size() == 4);
         BOOST_CHECK(v.toBinary()[3] == 0xFF);
 
         // A vector of bytes is taken as it stands rather than through a view, so nothing is
@@ -131,7 +131,7 @@ BOOST_AUTO_TEST_CASE(test_Value_Conversions) {
         json::Value n;
         BOOST_CHECK(n.toString() == "");
         BOOST_CHECK(n.toString("fallback") == "fallback");
-        BOOST_CHECK(n.toStringView("fallback") == "fallback");
+        BOOST_CHECK(n.toString("fallback") == "fallback");
     }
     // A bool is not a number and a number is not a bool.
     {
@@ -192,6 +192,156 @@ BOOST_AUTO_TEST_CASE(test_Value_Conversions) {
                         .toInt() == 2);
         // clang-format on
     }
+}
+
+BOOST_AUTO_TEST_CASE(test_Value_AsReadsTheStorageItself) {
+    // Where the type matches the payload comes back, and where it does not null does. The cross
+    // product is the part worth writing: every accessor has to turn down every other type, which
+    // asking each one about its own type would never show.
+    {
+        const json::Value b(true);
+        const json::Value i(int64_t(7));
+        const json::Value d(1.5);
+        const json::Value s(std::string("x"));
+        const json::Value bin(std::vector<uint8_t>{1, 2});
+        const json::Value arr(json::Array{json::Value(1)});
+        const json::Value obj(json::Object{
+            {"k", json::Value(1)}
+        });
+        const json::Value null;
+
+        BOOST_REQUIRE(b.asBool());
+        BOOST_CHECK(*b.asBool());
+        BOOST_REQUIRE(i.asInt());
+        BOOST_CHECK(*i.asInt() == 7);
+        BOOST_REQUIRE(d.asDouble());
+        BOOST_CHECK(*d.asDouble() == 1.5);
+        BOOST_REQUIRE(s.asString());
+        BOOST_CHECK(*s.asString() == "x");
+        BOOST_REQUIRE(bin.asBinary());
+        BOOST_CHECK(bin.asBinary()->size() == 2);
+        BOOST_REQUIRE(arr.asArray());
+        BOOST_CHECK(arr.asArray()->size() == 1);
+        BOOST_REQUIRE(obj.asObject());
+        BOOST_CHECK(obj.asObject()->size() == 1);
+
+        const json::Value *every[] = {&b, &i, &d, &s, &bin, &arr, &obj, &null};
+        for (const auto *v : every) {
+            BOOST_CHECK((v->asBool() != nullptr) == v->isBool());
+            BOOST_CHECK((v->asInt() != nullptr) == v->isInt());
+            BOOST_CHECK((v->asDouble() != nullptr) == v->isDouble());
+            BOOST_CHECK((v->asString() != nullptr) == v->isString());
+            BOOST_CHECK((v->asBinary() != nullptr) == (v->type() == json::Type::Binary));
+            BOOST_CHECK((v->asArray() != nullptr) == v->isArray());
+            BOOST_CHECK((v->asObject() != nullptr) == v->isObject());
+        }
+    }
+    // as does not convert where to does, which is the whole reason there are two families.
+    {
+        const json::Value i(int64_t(7));
+        BOOST_CHECK(i.toDouble() == 7.0);
+        BOOST_CHECK(i.asDouble() == nullptr);
+
+        const json::Value d(2.5);
+        BOOST_CHECK(d.toInt() == 2);
+        BOOST_CHECK(d.asInt() == nullptr);
+    }
+    // A value that is not there and one that happens to equal the default read the same through
+    // to and differently through as, which is the other reason.
+    {
+        const json::Value missing;
+        const json::Value minusOne(int64_t(-1));
+        BOOST_CHECK(missing.toInt(-1) == minusOne.toInt(-1));
+        BOOST_CHECK(missing.asInt() == nullptr);
+        BOOST_REQUIRE(minusOne.asInt());
+        BOOST_CHECK(*minusOne.asInt() == -1);
+    }
+    // The non-const forms write through, which is the only way to change a document once it is
+    // built, and none of them changes what the value says it is.
+    {
+        json::Value v(json::Object{
+            {"n", json::Value(1)}
+        });
+        BOOST_REQUIRE(v.asObject());
+        v.asObject()->emplace("added", json::Value(std::string("x")));
+        (*v.asObject())["n"] = json::Value(int64_t(2));
+        BOOST_CHECK(v.toObject().size() == 2);
+        BOOST_CHECK(v["n"].toInt() == 2);
+        BOOST_CHECK(v["added"].toString() == "x");
+        BOOST_CHECK(v.type() == json::Type::Object);
+
+        json::Value a(json::Array{});
+        a.asArray()->push_back(json::Value(1));
+        BOOST_CHECK(a.toArray().size() == 1);
+        BOOST_CHECK(a.type() == json::Type::Array);
+
+        json::Value s(std::string("ab"));
+        s.asString()->push_back('c');
+        BOOST_CHECK(s.toString() == "abc");
+        BOOST_CHECK(s.type() == json::Type::String);
+
+        json::Value bin(std::vector<uint8_t>{1});
+        bin.asBinary()->push_back(2);
+        BOOST_CHECK(bin.toBinary().size() == 2);
+
+        json::Value flag(true);
+        *flag.asBool() = false;
+        BOOST_CHECK(!flag.toBool());
+
+        json::Value num(int64_t(1));
+        *num.asInt() = 5;
+        BOOST_CHECK(num.toInt() == 5);
+
+        json::Value real(1.5);
+        *real.asDouble() = 2.5;
+        BOOST_CHECK(real.toDouble() == 2.5);
+    }
+    // What is written through one handle is there through the next, so nothing is being handed
+    // a copy.
+    {
+        json::Value v(json::Array{});
+        v.asArray()->push_back(json::Value(1));
+        BOOST_CHECK(v.asArray()->size() == 1);
+        BOOST_CHECK(v.asArray()->data() == v.toArray().data());
+    }
+    // A const value hands out a const pointer and a mutable one a writable pointer, so a caller
+    // cannot reach a writable handle through a const reference.
+    {
+        static_assert(std::is_same_v<decltype(std::declval<const json::Value &>().asObject()),
+                                     const json::Object *>);
+        static_assert(
+            std::is_same_v<decltype(std::declval<json::Value &>().asObject()), json::Object *>);
+        static_assert(std::is_same_v<decltype(std::declval<const json::Value &>().asString()),
+                                     const std::string *>);
+        static_assert(
+            std::is_same_v<decltype(std::declval<json::Value &>().asString()), std::string *>);
+        static_assert(
+            std::is_same_v<decltype(std::declval<const json::Value &>().asInt()), const int64_t *>);
+        static_assert(std::is_same_v<decltype(std::declval<json::Value &>().asInt()), int64_t *>);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_Value_ReadersWithNoDefaultShareOneEmptyObject) {
+    // The forms taking no default answer with a shared empty object rather than with a temporary,
+    // so what comes back outlives the expression it was read in. Two values of the wrong type get
+    // the same one, which is what says it is shared rather than made on the spot.
+    const json::Value a(int64_t(1));
+    const json::Value b(true);
+
+    BOOST_CHECK(a.toString().empty());
+    BOOST_CHECK(a.toBinary().empty());
+    BOOST_CHECK(a.toArray().empty());
+    BOOST_CHECK(a.toObject().empty());
+
+    BOOST_CHECK(&a.toString() == &b.toString());
+    BOOST_CHECK(&a.toBinary() == &b.toBinary());
+    BOOST_CHECK(&a.toArray() == &b.toArray());
+    BOOST_CHECK(&a.toObject() == &b.toObject());
+
+    // A subscript that finds nothing answers with the one shared null, on either spelling.
+    BOOST_CHECK(&a["missing"] == &b["missing"]);
+    BOOST_CHECK(&a[size_t(0)] == &b["missing"]);
+    BOOST_CHECK(a["missing"].isNull());
 }
 
 BOOST_AUTO_TEST_CASE(test_Value_Subscript) {

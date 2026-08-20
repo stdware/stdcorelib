@@ -17,12 +17,8 @@ namespace {
 
     static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toBinary()),
                                  const std::vector<uint8_t> &>);
-    static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toBinaryView()),
-                                 stdc::array_view<uint8_t>>);
     static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toStringList()),
                                  const std::vector<std::wstring> &>);
-    static_assert(std::is_same_v<decltype(std::declval<const RegValue &>().toStringListView()),
-                                 stdc::array_view<std::wstring>>);
 
     template <class T, class = void>
     struct can_enum_keys : std::false_type {};
@@ -505,13 +501,9 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
 
         BOOST_CHECK(val1.toString() == TEST_STRING_VALUE);
         BOOST_CHECK(val2.toStringList() == TEST_STRING_LIST_VALUE);
-        BOOST_CHECK(val2.toStringListView().vec() == TEST_STRING_LIST_VALUE);
-        BOOST_CHECK(val2.toStringListView().data() == val2.toStringList().data());
         BOOST_CHECK(val3.toUInt32() == TEST_DWORD_VALUE);
         BOOST_CHECK(val4.toUInt64() == TEST_QWORD_VALUE);
         BOOST_CHECK(val5.toBinary() == TEST_BINARY_VALUE);
-        BOOST_CHECK(val5.toBinaryView().vec() == TEST_BINARY_VALUE);
-        BOOST_CHECK(val5.toBinaryView().data() == val5.toBinary().data());
     }
 
     const wchar_t TEST_STRING_LIST_LITERAL_1[] =
