@@ -44,10 +44,12 @@ namespace stdc::cbor {
         size_t offset = 0; ///< bytes from the start
         std::string what;  ///< what was wrong, without the position in front of it
 
+        /// Whether this says a decode failed.
         explicit operator bool() const {
             return code != NoError;
         }
 
+        /// The failure in words, with the byte offset in front of it. Empty for NoError.
         std::string message() const;
     };
 
@@ -113,11 +115,11 @@ namespace stdc::json {
 
         /// The empty objects the readers below hand back where the value holds something else.
         /// @{
-        const Value &empty_value();
-        const std::string &empty_string();
-        const std::vector<uint8_t> &empty_binary();
-        const Array &empty_array();
-        const Object &empty_object();
+        inline const Value &empty_value();
+        inline const std::string &empty_string();
+        inline const std::vector<uint8_t> &empty_binary();
+        inline const Array &empty_array();
+        inline const Object &empty_object();
         /// @}
 
     }
