@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <stdcorelib/support/dynamicregistry.h>
@@ -22,6 +23,27 @@ namespace {
         virtual ~Widget() = default;
         int tag = 0;
     };
+
+    struct Descriptor {
+        int tag;
+    };
+
+}
+
+namespace stdc {
+
+    template <>
+    struct dynamic_registry_traits<Descriptor> {
+        using result_type = Descriptor;
+
+        static result_type empty() {
+            return {-1};
+        }
+    };
+
+}
+
+namespace {
 
     using WidgetRegistry = DynamicRegistry<Widget>;
 
@@ -92,6 +114,21 @@ BOOST_AUTO_TEST_CASE(test_add_find_remove) {
 
     // the entry we are still holding outlives its removal, which is why they are shared
     BOOST_CHECK_EQUAL(entry->instantiate()->tag, 1);
+}
+
+BOOST_AUTO_TEST_CASE(test_value_result) {
+    using DescriptorRegistry = DynamicRegistry<Descriptor>;
+    auto &reg = DescriptorRegistry::instance();
+    reg.clear();
+
+    static_assert(std::is_same_v<DescriptorRegistry::result_type, Descriptor>);
+    BOOST_CHECK_EQUAL(reg.instantiate("missing").tag, -1);
+
+    BOOST_REQUIRE(reg.add("answer", "", []() -> Descriptor { return {42}; }));
+    BOOST_CHECK_EQUAL(reg.find("answer")->instantiate().tag, 42);
+    BOOST_CHECK_EQUAL(reg.instantiate("answer").tag, 42);
+
+    reg.clear();
 }
 
 BOOST_AUTO_TEST_CASE(test_entries_are_sorted) {

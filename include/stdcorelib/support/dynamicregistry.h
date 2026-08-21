@@ -33,6 +33,19 @@ namespace stdc {
 
     }
 
+    /// Controls what a \c DynamicRegistry factory returns and how an absent result is represented.
+    ///
+    /// The default returns an owning pointer. Specialize this trait when \a T should be returned
+    /// by value or uses another ownership type.
+    template <class T>
+    struct dynamic_registry_traits {
+        using result_type = std::unique_ptr<T>;
+
+        static result_type empty() {
+            return nullptr;
+        }
+    };
+
     /// A registry that is filled at run time, looked up by name, and can be watched.
     ///
     /// The counterpart to StaticRegistry, for the entries a program only learns about once it is
@@ -60,15 +73,17 @@ namespace stdc {
     /// \warning Do not call remove_listener() from inside a listener callback.
     ///
     /// \sa StaticRegistry, for what is known at link time
-    template <class T>
+    template <class T, class Traits = dynamic_registry_traits<T>>
     class DynamicRegistry {
     public:
         using type = T;
+        using traits_type = Traits;
+        using result_type = typename traits_type::result_type;
 
         /// How to make one. A \c std::function rather than a plain pointer, since an entry
         /// discovered at run time usually has to carry something with it, such as the library it
         /// came out of.
-        using Factory = std::function<std::unique_ptr<T>()>;
+        using Factory = std::function<result_type()>;
 
         /// One registered implementation. Owns its name, unlike the static registry's, because
         /// there is no literal to point at.
@@ -85,9 +100,9 @@ namespace stdc {
                 return _desc;
             }
 
-            /// Makes one, or returns null if the factory declines.
-            std::unique_ptr<T> instantiate() const {
-                return _factory ? _factory() : nullptr;
+            /// Makes one, or returns the traits' empty result if the factory is absent.
+            result_type instantiate() const {
+                return _factory ? _factory() : traits_type::empty();
             }
 
         private:
@@ -210,10 +225,10 @@ namespace stdc {
             return it == _entries.end() ? EntryPointer() : it->second;
         }
 
-        /// Makes one directly, or returns null if \a name is not registered.
-        std::unique_ptr<T> instantiate(std::string_view name) const {
+        /// Makes one directly, or returns the traits' empty result if \a name is not registered.
+        result_type instantiate(std::string_view name) const {
             auto entry = find(name);
-            return entry ? entry->instantiate() : nullptr;
+            return entry ? entry->instantiate() : traits_type::empty();
         }
 
         /// Every entry, in name order. A snapshot, so iterating it is safe while another thread
