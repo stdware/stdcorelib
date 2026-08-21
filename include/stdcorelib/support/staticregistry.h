@@ -271,15 +271,19 @@ namespace stdc {
 /// plugin arrangement is the host. \a EXPORT is what makes the list reachable from a plugin:
 /// \c __declspec(dllexport) on Windows, or nothing on the platforms where \c -rdynamic on the
 /// host is what does it.
+/// Since the macro defines the primary template's storage, use it only once in a translation
+/// unit; instantiate unrelated registry types in separate translation units.
 /// Both of these have to sit where they can name stdc, which is the global scope or inside stdc
 /// itself. Naming it rather than reopening it is what makes writing them anywhere else say so:
 /// the compiler answers "in namespace X, which does not enclose namespace stdc" instead of
 /// failing somewhere inside this header.
 #define STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                      \
-    template <>                                                                                    \
-    typename ::stdc::StaticRegistry<TYPE>::Node * ::stdc::StaticRegistry<TYPE>::_head = nullptr;   \
-    template <>                                                                                    \
-    typename ::stdc::StaticRegistry<TYPE>::Node * ::stdc::StaticRegistry<TYPE>::_tail = nullptr;   \
+    template <class T, class Traits>                                                               \
+    typename ::stdc::StaticRegistry<T, Traits>::Node *                                             \
+        ::stdc::StaticRegistry<T, Traits>::_head = nullptr;                                        \
+    template <class T, class Traits>                                                               \
+    typename ::stdc::StaticRegistry<T, Traits>::Node *                                             \
+        ::stdc::StaticRegistry<T, Traits>::_tail = nullptr;                                        \
     template class EXPORT ::stdc::StaticRegistry<TYPE>;
 
 /// Defines the storage for a \c StaticRegistry over \a TYPE, undecorated.

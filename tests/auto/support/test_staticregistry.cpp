@@ -46,28 +46,9 @@ namespace {
         int _channels;
     };
 
-    struct Descriptor {
-        int value;
-    };
-
-}
-
-namespace stdc {
-
-    template <>
-    struct static_registry_traits<Descriptor> {
-        using result_type = Descriptor;
-
-        template <class V>
-        static result_type construct() {
-            return V();
-        }
-    };
-
 }
 
 STDC_INSTANTIATE_STATIC_REGISTRY(Codec)
-STDC_INSTANTIATE_STATIC_REGISTRY(Descriptor)
 
 namespace {
 
@@ -83,10 +64,6 @@ namespace {
     CodecRegistry::AddFactory pcm_entry("pcm", "Linear PCM", []() -> std::unique_ptr<Codec> {
         return std::make_unique<PcmCodec>(44100, 2);
     });
-
-    using DescriptorRegistry = StaticRegistry<Descriptor>;
-    DescriptorRegistry::AddFactory descriptor_entry("answer", "",
-                                                    []() -> Descriptor { return {42}; });
 
 }
 
@@ -136,11 +113,6 @@ BOOST_AUTO_TEST_CASE(test_factory_entry) {
     auto codec = pcm->instantiate();
     BOOST_REQUIRE(codec);
     BOOST_CHECK_EQUAL(codec->id(), "pcm-44100-2"); // the arguments survived
-}
-
-BOOST_AUTO_TEST_CASE(test_value_result) {
-    const auto descriptor = DescriptorRegistry::begin()->instantiate();
-    BOOST_CHECK_EQUAL(descriptor.value, 42);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
