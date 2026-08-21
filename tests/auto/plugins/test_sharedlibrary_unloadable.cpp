@@ -5,11 +5,11 @@
 // nothing, so loading it pulls in no dependency that could keep it alive.
 
 #if defined(_WIN32)
-#  define TEST_UNLOADABLE_EXPORT __declspec(dllexport)
+#  define TEST_SHAREDLIBRARY_UNLOADABLE_EXPORT __declspec(dllexport)
 #else
-#  define TEST_UNLOADABLE_EXPORT __attribute__((visibility("default")))
+#  define TEST_SHAREDLIBRARY_UNLOADABLE_EXPORT __attribute__((visibility("default")))
 #endif
 
-extern "C" TEST_UNLOADABLE_EXPORT int test_unloadable_answer() {
+extern "C" TEST_SHAREDLIBRARY_UNLOADABLE_EXPORT int test_sharedlibrary_unloadable_answer() {
     return 42;
 }

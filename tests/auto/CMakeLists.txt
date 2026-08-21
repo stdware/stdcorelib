@@ -65,8 +65,8 @@ endforeach()
 # cannot be either of the two above: a module another suite left loaded answers "still loaded"
 # whatever ownership did. Nothing else in the binary touches this one, so what it says is about
 # the case that is asking.
-add_library(test_unloadable MODULE plugins/test_unloadable.cpp)
-set_target_properties(test_unloadable PROPERTIES
+add_library(test_sharedlibrary_unloadable MODULE plugins/test_sharedlibrary_unloadable.cpp)
+set_target_properties(test_sharedlibrary_unloadable PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
@@ -77,8 +77,8 @@ set_target_properties(test_unloadable PROPERTIES
 # A second one for PreventUnloadHint, which cannot share the first: a module that was pinned
 # stays for the life of the process by definition, so the case would leave every later question
 # about the first one answered before it was asked.
-add_library(test_pinned MODULE plugins/test_unloadable.cpp)
-set_target_properties(test_pinned PROPERTIES
+add_library(test_sharedlibrary_pinned MODULE plugins/test_sharedlibrary_unloadable.cpp)
+set_target_properties(test_sharedlibrary_pinned PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
@@ -98,12 +98,12 @@ set_target_properties(test_popen_child PROPERTIES
 )
 
 add_dependencies(${PROJECT_NAME}
-    test_any_plugin test_dynamicregistry_plugin test_unloadable test_pinned test_popen_child)
+    test_any_plugin test_dynamicregistry_plugin test_sharedlibrary_unloadable test_sharedlibrary_pinned test_popen_child)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
     TEST_DYNAMICREGISTRY_PLUGIN_PATH="$<TARGET_FILE:test_dynamicregistry_plugin>"
-    TEST_UNLOADABLE_PATH="$<TARGET_FILE:test_unloadable>"
-    TEST_PINNED_PATH="$<TARGET_FILE:test_pinned>"
+    TEST_SHAREDLIBRARY_UNLOADABLE_PATH="$<TARGET_FILE:test_sharedlibrary_unloadable>"
+    TEST_SHAREDLIBRARY_PINNED_PATH="$<TARGET_FILE:test_sharedlibrary_pinned>"
     TEST_POPEN_CHILD_PATH="$<TARGET_FILE:test_popen_child>"
 )
 

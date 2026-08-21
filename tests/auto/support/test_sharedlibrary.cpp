@@ -47,8 +47,8 @@ namespace {
 
     // Named once rather than expanded at every use, since a macro standing where a value belongs
     // reads as a value the reader has to go and look up.
-    const char UnloadablePath[] = TEST_UNLOADABLE_PATH;
-    const char PinnedPath[] = TEST_PINNED_PATH;
+    const char UnloadablePath[] = TEST_SHAREDLIBRARY_UNLOADABLE_PATH;
+    const char PinnedPath[] = TEST_SHAREDLIBRARY_PINNED_PATH;
 
 #ifndef _WIN32
     // The variable setLibraryPath() writes, named the same way the implementation names it.
@@ -275,7 +275,7 @@ BOOST_AUTO_TEST_CASE(test_release_keeps_the_library_loaded) {
     SharedLibrary again;
     BOOST_REQUIRE(again.open(unloadable()));
     BOOST_CHECK(again.handle() == handle);
-    BOOST_CHECK(again.resolve("test_unloadable_answer") != nullptr);
+    BOOST_CHECK(again.resolve("test_sharedlibrary_unloadable_answer") != nullptr);
     BOOST_CHECK(again.close());
 
     // Two references were taken and one was given back, so it is still there. The one release()
@@ -298,7 +298,7 @@ BOOST_AUTO_TEST_CASE(test_preventing_the_unload_keeps_it_after_the_object_is_gon
     {
         SharedLibrary lib;
         BOOST_REQUIRE(lib.open(pinned(), SharedLibrary::PreventUnloadHint));
-        BOOST_CHECK(lib.resolve("test_unloadable_answer") != nullptr);
+        BOOST_CHECK(lib.resolve("test_sharedlibrary_unloadable_answer") != nullptr);
     }
     BOOST_CHECK(still_loaded(pinned()));
 
@@ -359,7 +359,7 @@ BOOST_AUTO_TEST_CASE(test_the_path_that_comes_back_is_absolute) {
     BOOST_REQUIRE_MESSAGE(lib.open(relative), lib.errorMessage());
     BOOST_CHECK(lib.path().is_absolute());
     BOOST_CHECK(fs::equivalent(lib.path(), unloadable()));
-    BOOST_CHECK(lib.resolve("test_unloadable_answer") != nullptr);
+    BOOST_CHECK(lib.resolve("test_sharedlibrary_unloadable_answer") != nullptr);
     BOOST_CHECK(lib.close());
 }
 
