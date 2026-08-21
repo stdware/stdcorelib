@@ -66,6 +66,7 @@ endforeach()
 # whatever ownership did. Nothing else in the binary touches this one, so what it says is about
 # the case that is asking.
 add_library(test_sharedlibrary_unloadable MODULE plugins/test_sharedlibrary_unloadable.cpp)
+target_include_directories(test_sharedlibrary_unloadable PRIVATE ${stdcorelib_SOURCE_DIR}/include)
 set_target_properties(test_sharedlibrary_unloadable PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
@@ -78,6 +79,7 @@ set_target_properties(test_sharedlibrary_unloadable PROPERTIES
 # stays for the life of the process by definition, so the case would leave every later question
 # about the first one answered before it was asked.
 add_library(test_sharedlibrary_pinned MODULE plugins/test_sharedlibrary_unloadable.cpp)
+target_include_directories(test_sharedlibrary_pinned PRIVATE ${stdcorelib_SOURCE_DIR}/include)
 set_target_properties(test_sharedlibrary_pinned PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
