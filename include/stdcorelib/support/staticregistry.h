@@ -13,6 +13,21 @@ namespace stdc {
     /// \addtogroup types
     /// @{
 
+    /// Controls what a \c StaticRegistry constructs for one registered implementation.
+    ///
+    /// The default returns an owning pointer so derived implementations retain their dynamic
+    /// type. Specialize this trait when \a T is a small descriptor that should be returned by
+    /// value instead.
+    template <class T>
+    struct static_registry_traits {
+        using result_type = std::unique_ptr<T>;
+
+        template <class V>
+        static result_type construct() {
+            return std::make_unique<V>();
+        }
+    };
+
     /// A registry that fills itself before \c main, so an implementation is available merely by
     /// having been linked in.
     ///
@@ -53,15 +68,17 @@ namespace stdc {
     ///          outlives the program.
     ///
     /// \sa DynamicRegistry, for the entries that are not known at link time
-    template <class T>
+    template <class T, class Traits = static_registry_traits<T>>
     class StaticRegistry {
     public:
         using type = T;
+        using traits_type = Traits;
+        using result_type = typename traits_type::result_type;
 
         /// One registered implementation: what it is called, and how to make one.
         class Entry {
         public:
-            Entry(std::string_view name, std::string_view desc, std::unique_ptr<T> (*ctor)())
+            Entry(std::string_view name, std::string_view desc, result_type (*ctor)())
                 : _name(name), _desc(desc), _ctor(ctor) {
             }
 
@@ -74,14 +91,14 @@ namespace stdc {
 
             /// Makes one. A fresh object every call, so the registry holds descriptions rather
             /// than instances.
-            std::unique_ptr<T> instantiate() const {
+            result_type instantiate() const {
                 return _ctor();
             }
 
         private:
             std::string_view _name;
             std::string_view _desc;
-            std::unique_ptr<T> (*_ctor)();
+            result_type (*_ctor)();
         };
 
         class Iterator;
@@ -189,8 +206,8 @@ namespace stdc {
             }
 
         private:
-            static std::unique_ptr<T> construct() {
-                return std::make_unique<V>();
+            static result_type construct() {
+                return traits_type::template construct<V>();
             }
 
             Entry _entry;
@@ -219,8 +236,7 @@ namespace stdc {
         ///       DynamicRegistry holds a \c std::function and takes those.
         class AddFactory {
         public:
-            AddFactory(std::string_view name, std::string_view desc,
-                       std::unique_ptr<T> (*factory)())
+            AddFactory(std::string_view name, std::string_view desc, result_type (*factory)())
                 : _entry(name, desc, factory), _node(_entry) {
                 add_node(&_node);
             }
@@ -260,10 +276,10 @@ namespace stdc {
 /// the compiler answers "in namespace X, which does not enclose namespace stdc" instead of
 /// failing somewhere inside this header.
 #define STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                      \
-    template <class T>                                                                             \
-    typename ::stdc::StaticRegistry<T>::Node * ::stdc::StaticRegistry<T>::_head = nullptr;         \
-    template <class T>                                                                             \
-    typename ::stdc::StaticRegistry<T>::Node * ::stdc::StaticRegistry<T>::_tail = nullptr;         \
+    template <>                                                                                    \
+    typename ::stdc::StaticRegistry<TYPE>::Node * ::stdc::StaticRegistry<TYPE>::_head = nullptr;   \
+    template <>                                                                                    \
+    typename ::stdc::StaticRegistry<TYPE>::Node * ::stdc::StaticRegistry<TYPE>::_tail = nullptr;   \
     template class EXPORT ::stdc::StaticRegistry<TYPE>;
 
 /// Defines the storage for a \c StaticRegistry over \a TYPE, undecorated.
