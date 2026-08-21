@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(stdcorelib VERSION 0.2.1.0 LANGUAGES CXX)
+project(stdcorelib
+    VERSION 0.2.1.0
+    LANGUAGES CXX
+    DESCRIPTION "C++ Auxiliary Core Library"
+    HOMEPAGE_URL "https://github.com/stdware/stdcorelib"
+)
 
 # ----------------------------------
 # Build Options
@@ -57,6 +62,10 @@ set(STDC_INSTALL_NAME ${PROJECT_NAME})
 # ----------------------------------
 # Main Project
 # ----------------------------------
+include(cmake/AddDoxygenDocs.cmake)
+include(cmake/AddWinRC.cmake)
+include(cmake/AddInstallRule.cmake)
+
 if(TRUE)
     file(GLOB _common_src src/*.cpp)
     file(GLOB_RECURSE _subdir_src
@@ -175,15 +184,47 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # Add platform specific
 if(WIN32)
-    set(RC_DESCRIPTION "C++ Auxiliary Core Library")
-    set(RC_COPYRIGHT "Copyright (C) 2022-present Stdware Collections")
-    include("cmake/winrc.cmake")
+    stdc_add_win_rc(${PROJECT_NAME}
+        COPYRIGHT "Copyright (C) 2022-present Stdware Collections"
+    )
 endif()
 
 if(STDC_BUILD_DOCS)
-    find_package(Doxygen REQUIRED)
-    set(DOXY_DESCRIPTION "C++ Auxiliary Core Library")
-    include("cmake/doxygen.cmake")
+    set(_doxygen_install)
+
+    if(STDC_INSTALL)
+        set(_doxygen_install INSTALL)
+    endif()
+
+    stdc_add_doxygen_docs(${PROJECT_NAME}
+        ${_doxygen_install}
+        DESCRIPTION "${PROJECT_DESCRIPTION}"
+        INPUT
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/doxygen"
+        EXCLUDE_SYMBOLS
+        "*::detail"
+        "*::detail::*"
+        "stdc::pimpl"
+        "stdc::str::conv*"
+        "*enable_if*"
+        "stdc::is_map"
+        "stdc::has_key_type*"
+        "stdc::has_mapped_type*"
+        "stdc::vlarray_base"
+        "stdc::flag"
+        "stdc::incompatible_flag"
+        "stdc::winapi::kernel32"
+        "stdc::winapi::user32"
+        PREDEFINED
+        "STDC_EXPORT="
+        "STDC_DECL_EXPORT="
+        "STDC_DECL_IMPORT="
+        "STDC_HAS_EXCEPTIONS=1"
+        "STDC_ALLOCA(size)="
+        "_WIN32=1"
+        "DOXYGEN=1"
+    )
 endif()
 
 if(STDC_INSTALL)
@@ -239,6 +280,9 @@ if(STDC_INSTALL)
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}Config.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}ConfigVersion.cmake"
+        DESTINATION ${_install_dir}
+    )
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
         DESTINATION ${_install_dir}
     )
 
