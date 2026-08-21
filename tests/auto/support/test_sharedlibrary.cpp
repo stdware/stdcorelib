@@ -49,6 +49,7 @@ namespace {
     // reads as a value the reader has to go and look up.
     const char UnloadablePath[] = TEST_SHAREDLIBRARY_UNLOADABLE_PATH;
     const char PinnedPath[] = TEST_SHAREDLIBRARY_PINNED_PATH;
+    const char NeedsDependencyPath[] = TEST_SHAREDLIBRARY_NEEDS_DEPENDENCY_PATH;
 
 #ifndef _WIN32
     // The variable setLibraryPath() writes, named the same way the implementation names it.
@@ -64,6 +65,9 @@ namespace {
     }
     fs::path pinned() {
         return fs::path(PinnedPath);
+    }
+    fs::path needsDependency() {
+        return fs::path(NeedsDependencyPath);
     }
 
     // A library that is guaranteed to be present, plus a symbol it is guaranteed to export.
@@ -313,6 +317,42 @@ BOOST_AUTO_TEST_CASE(test_preventing_the_unload_keeps_it_after_the_object_is_gon
         BOOST_CHECK(lib.handle() == nullptr);
     }
     BOOST_CHECK(still_loaded(pinned()));
+}
+
+// A module whose own dependency sits beside it, in a directory the loader is given no other
+// reason to look in. The two are built into a directory of their own rather than next to the
+// test binary, or the dependency would be found through the application directory and the case
+// would pass whatever the hint did.
+BOOST_AUTO_TEST_CASE(test_searching_the_directory_the_library_came_from) {
+    BOOST_REQUIRE(fs::exists(needsDependency()));
+
+    {
+        SharedLibrary lib;
+        BOOST_REQUIRE_MESSAGE(lib.open(needsDependency(),
+                                       SharedLibrary::SearchLibraryLoadDirectoryHint),
+                              lib.errorMessage());
+        auto answer = reinterpret_cast<int (*)()>(lib.resolve("test_sharedlibrary_needs_dependency_answer"));
+        BOOST_REQUIRE(answer != nullptr);
+        BOOST_CHECK_EQUAL(answer(), 7); // reached through the dependency
+    }
+
+#ifdef _WIN32
+    // Without it the loader never looks there, so the dependency is missing and the module does
+    // not load. This is the half that says the hint is doing something.
+    {
+        SharedLibrary lib;
+        BOOST_CHECK(!lib.open(needsDependency()));
+        BOOST_CHECK(!lib.errorMessage().empty());
+    }
+#else
+    // POSIX finds it either way, through the $ORIGIN the module was linked with, so what the
+    // case asks here is that the hint changes nothing rather than that it is needed.
+    {
+        SharedLibrary lib;
+        BOOST_REQUIRE_MESSAGE(lib.open(needsDependency()), lib.errorMessage());
+        BOOST_CHECK(lib.resolve("test_sharedlibrary_needs_dependency_answer") != nullptr);
+    }
+#endif
 }
 
 // Released and then closed by hand, which is the other half: close() forgets the handle rather

@@ -88,6 +88,48 @@ set_target_properties(test_sharedlibrary_pinned PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
+# A module with a private dependency, both put in a directory of their own rather than beside the
+# test binary. That directory is on no search path the loader consults by default, which is the
+# whole point: without SearchLibraryLoadDirectoryHint the dependency is not found on Windows.
+#
+# On POSIX the module carries $ORIGIN in its rpath, which is how the same layout is made to work
+# there, so the case can ask whether the hint changes anything rather than whether it is needed.
+set(_private_dir ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/privatedeps)
+
+add_library(test_sharedlibrary_dependency SHARED plugins/test_sharedlibrary_dependency.cpp)
+target_include_directories(test_sharedlibrary_dependency PRIVATE ${stdcorelib_SOURCE_DIR}/include)
+set_target_properties(test_sharedlibrary_dependency PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    LIBRARY_OUTPUT_DIRECTORY ${_private_dir}
+    RUNTIME_OUTPUT_DIRECTORY ${_private_dir}
+)
+
+add_library(test_sharedlibrary_needs_dependency MODULE plugins/test_sharedlibrary_needs_dependency.cpp)
+target_include_directories(test_sharedlibrary_needs_dependency PRIVATE ${stdcorelib_SOURCE_DIR}/include)
+target_link_libraries(test_sharedlibrary_needs_dependency PRIVATE test_sharedlibrary_dependency)
+set_target_properties(test_sharedlibrary_needs_dependency PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    LIBRARY_OUTPUT_DIRECTORY ${_private_dir}
+    RUNTIME_OUTPUT_DIRECTORY ${_private_dir}
+)
+if(APPLE)
+    # dyld does not know $ORIGIN. @loader_path is the one that means the same thing.
+    set(_own_dir "@loader_path")
+else()
+    set(_own_dir "$ORIGIN")
+endif()
+if(NOT WIN32)
+    set_target_properties(test_sharedlibrary_needs_dependency PROPERTIES
+        BUILD_RPATH "${_own_dir}"
+        INSTALL_RPATH "${_own_dir}"
+        BUILD_WITH_INSTALL_RPATH ON
+    )
+endif()
+
 # A program for the popen tests to start. The shell covers most of what a child has to do, but
 # it cannot report the argument vector it was given, since it parses the command line a second
 # time before the program sees it.
@@ -100,12 +142,14 @@ set_target_properties(test_popen_child PROPERTIES
 )
 
 add_dependencies(${PROJECT_NAME}
-    test_any_plugin test_dynamicregistry_plugin test_sharedlibrary_unloadable test_sharedlibrary_pinned test_popen_child)
+    test_any_plugin test_dynamicregistry_plugin test_sharedlibrary_unloadable test_sharedlibrary_pinned test_popen_child
+    test_sharedlibrary_dependency test_sharedlibrary_needs_dependency)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
     TEST_DYNAMICREGISTRY_PLUGIN_PATH="$<TARGET_FILE:test_dynamicregistry_plugin>"
     TEST_SHAREDLIBRARY_UNLOADABLE_PATH="$<TARGET_FILE:test_sharedlibrary_unloadable>"
     TEST_SHAREDLIBRARY_PINNED_PATH="$<TARGET_FILE:test_sharedlibrary_pinned>"
+    TEST_SHAREDLIBRARY_NEEDS_DEPENDENCY_PATH="$<TARGET_FILE:test_sharedlibrary_needs_dependency>"
     TEST_POPEN_CHILD_PATH="$<TARGET_FILE:test_popen_child>"
 )
 

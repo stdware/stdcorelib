@@ -200,7 +200,15 @@ namespace stdc {
 #endif
         auto handle =
 #ifdef _WIN32
-            ::LoadLibraryW(absPath.c_str())
+            // Asking for any LOAD_LIBRARY_SEARCH_* flag turns the standard search order off
+            // whole, so the default directories have to be named again beside the one being
+            // added. Without the hint this stays LoadLibraryW, since the two do not search the
+            // same places and a caller that asked for nothing gets what it always got.
+            hints.test_flag(SearchLibraryLoadDirectoryHint)
+                ? ::LoadLibraryExW(absPath.c_str(), nullptr,
+                                   LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                                       LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
+                : ::LoadLibraryW(absPath.c_str())
 #else
             dlopen(absPath.c_str(), Impl::nativeLoadHints(hints))
 #endif

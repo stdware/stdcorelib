@@ -37,8 +37,9 @@ namespace stdc {
         SharedLibrary &operator=(SharedLibrary &&RHS) noexcept;
 
     public:
-        /// Passed to open(). These map onto the \c dlopen flags and are ignored where the
-        /// platform has no equivalent.
+        /// Passed to open(). Most of these name a \c dlopen flag, one or two name what the
+        /// platform's own loader is asked for instead, and any of them is ignored where the
+        /// platform has nothing to ask.
         enum LoadHint {
             /// Resolves all undefined symbols while loading the library. Maps to \c RTLD_NOW
             /// on POSIX.
@@ -55,6 +56,10 @@ namespace stdc {
             /// Prefers this library's symbols over previously loaded global symbols when
             /// resolving references. Maps to \c RTLD_DEEPBIND where available.
             DeepBindHint = 0x10,
+            /// Searches the directory the library sits in while resolving its own dependencies,
+            /// which is what a plugin keeping its private libraries beside it needs. Windows only,
+            /// asking for \c LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR.
+            SearchLibraryLoadDirectoryHint = 0x20,
         };
         STDC_DECLARE_FLAGS(LoadHints, LoadHint)
 
