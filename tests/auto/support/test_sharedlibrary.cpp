@@ -328,9 +328,9 @@ BOOST_AUTO_TEST_CASE(test_searching_the_directory_the_library_came_from) {
 
     {
         SharedLibrary lib;
-        BOOST_REQUIRE_MESSAGE(lib.open(needsDependency(),
-                                       SharedLibrary::SearchLibraryLoadDirectoryHint),
-                              lib.errorMessage());
+        const bool opened =
+            lib.open(needsDependency(), SharedLibrary::SearchLibraryLoadDirectoryHint);
+        BOOST_REQUIRE_MESSAGE(opened, lib.errorMessage());
         auto answer = reinterpret_cast<int (*)()>(lib.resolve("test_sharedlibrary_needs_dependency_answer"));
         BOOST_REQUIRE(answer != nullptr);
         BOOST_CHECK_EQUAL(answer(), 7); // reached through the dependency

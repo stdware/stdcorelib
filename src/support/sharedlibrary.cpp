@@ -193,6 +193,13 @@ namespace stdc {
             errorCode = ec;
             return false;
         }
+#ifdef _WIN32
+        // MinGW's filesystem::absolute() preserves forward slashes from a CMake target path.
+        // LoadLibraryExW can open that path, but LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR then fails to
+        // derive the directory used to find its dependencies. The native separators make both
+        // parts of the operation agree on the directory.
+        absPath.make_preferred();
+#endif
         clearSysError();
 
 #ifdef _WIN32
