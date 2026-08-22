@@ -1,28 +1,22 @@
-#[==[.rst:
-.. cmake:command:: stdc_add_install_rule
-
-  Add the common package configuration and export installation rules for a
-  CMake project.
-
-  .. code-block:: cmake
-
-    stdc_add_install_rule(
-        [NAME <name>]
-        [VERSION <version>]
-        [COMPATIBILITY <compatibility>]
-        [INSTALL_DIR <dir>]
-        [CONFIG_TEMPLATE <file>]
-        [NAMESPACE <namespace>]
-        [EXPORT <sets...>]
-
-        [WRITE_VERSION_OPTIONS <options...>]
-        [WRITE_CONFIG_OPTIONS <options...>]
-    )
-
-  Include ``GNUInstallDirs`` and ``CMakePackageConfigHelpers`` before calling
-  this function.
-#]==]
-function(stdc_add_install_rule)
+#[[
+# Adds common package configuration and export installation rules.
+#
+# stdc_add_install_package_rule(
+#     [NAME <name>]
+#     [VERSION <version>]
+#     [COMPATIBILITY <compatibility>]
+#     [INSTALL_DIR <dir>]
+#     [CONFIG_TEMPLATE <file>]
+#     [NAMESPACE <namespace>]
+#     [EXPORT <sets...>]
+#
+#     [WRITE_VERSION_OPTIONS <options...>]
+#     [WRITE_CONFIG_OPTIONS <options...>]
+# )
+#
+# Include GNUInstallDirs and CMakePackageConfigHelpers before calling this function.
+#]]
+function(stdc_add_install_package_rule)
     set(options)
     set(oneValueArgs NAME VERSION COMPATIBILITY INSTALL_DIR CONFIG_TEMPLATE NAMESPACE)
     set(multiValueArgs WRITE_VERSION_OPTIONS WRITE_CONFIG_OPTIONS EXPORT)

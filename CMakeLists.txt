@@ -64,7 +64,8 @@ set(STDC_INSTALL_NAME ${PROJECT_NAME})
 # ----------------------------------
 include(cmake/AddDoxygenDocs.cmake)
 include(cmake/AddWinRC.cmake)
-include(cmake/AddInstallRule.cmake)
+include(cmake/AddInstallPackageRule.cmake)
+include(cmake/AddInstallPDBRule.cmake)
 
 if(TRUE)
     file(GLOB _common_src src/*.cpp)
@@ -234,6 +235,14 @@ if(STDC_INSTALL)
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" OPTIONAL
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" OPTIONAL
     )
+
+    if(WIN32)
+        set(_debug_symbols_dir "${CMAKE_INSTALL_BINDIR}")
+    else()
+        set(_debug_symbols_dir "${CMAKE_INSTALL_LIBDIR}")
+    endif()
+
+    stdc_add_install_pdb_rule(${PROJECT_NAME} DESTINATION "${_debug_symbols_dir}")
 endif()
 
 if(NOT WIN32)
@@ -260,7 +269,7 @@ endif()
 if(STDC_INSTALL)
     set(_install_dir ${CMAKE_INSTALL_LIBDIR}/cmake/${STDC_INSTALL_NAME})
 
-    stdc_add_install_rule(
+    stdc_add_install_package_rule(
         NAME ${STDC_INSTALL_NAME}
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
