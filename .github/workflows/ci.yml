@@ -187,13 +187,15 @@ jobs:
 
   # The Windows sources against something other than the Microsoft toolchain. This is where a
   # header that MinGW spells differently shows up, which is how the strcasecmp macro was found.
+  # The no-exceptions shape also crosses that Windows implementation with GCC's enforcement of
+  # -fno-exceptions; neither the general Windows nor Linux jobs cover that combination.
   mingw:
     name: windows-mingw ${{ matrix.config }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        config: [ shared, static ]
+        config: [ shared, static, no-exceptions ]
     steps:
       - uses: actions/checkout@v4
 
@@ -213,6 +215,7 @@ jobs:
           case "${{ matrix.config }}" in
             shared) flags="-DSTDC_BUILD_SHARED=ON" ;;
             static) flags="-DSTDC_BUILD_STATIC=ON" ;;
+            no-exceptions) flags="-DSTDC_BUILD_SHARED=ON -DSTDC_ENABLE_EXCEPTIONS=OFF" ;;
           esac
           cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=ON $flags
           cmake --build build
