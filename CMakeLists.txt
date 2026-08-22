@@ -245,7 +245,9 @@ if(STDC_INSTALL)
     stdc_add_install_pdb_rule(${PROJECT_NAME} DESTINATION "${_debug_symbols_dir}")
 endif()
 
-if(NOT WIN32)
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE shell32)
+else()
     target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
