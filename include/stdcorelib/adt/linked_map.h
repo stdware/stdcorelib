@@ -9,6 +9,8 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
@@ -18,7 +20,10 @@
 #include <stdcorelib/stdc_global.h>
 
 #ifdef QT_CORE_LIB
+#  include <QHashFunctions>
 #  include <QList>
+#  include <QString>
+#  include <QStringView>
 #  include <QVector>
 #endif
 
@@ -26,6 +31,10 @@ namespace stdc {
 
     /// \addtogroup containers
     /// @{
+
+    /// Associates an owning key type with a non-owning view type.
+    template <class K>
+    struct linked_map_view_traits {};
 
     namespace detail {
 
@@ -46,65 +55,143 @@ namespace stdc {
         struct has_capacity<T, std::void_t<decltype(std::declval<const T &>().capacity())>>
             : std::true_type {};
 
-        template <class T>
-        struct linked_map_index_traits {
-            static_assert(dependent_false<T>::value,
-                          "linked_map supports std::map and std::unordered_map indexes");
+    }
+
+    /// Hashes an index key with its standard hash function.
+    struct linked_map_hash {
+        using is_transparent = void;
+
+        template <class Key>
+        size_t operator()(const Key &key) const noexcept(noexcept(std::hash<Key>()(key))) {
+            return std::hash<Key>()(key);
+        }
+
+#ifdef QT_CORE_LIB
+        size_t operator()(QStringView key) const noexcept {
+            return qHash(key);
+        }
+#endif
+    };
+
+    /// Stores a copy of each key in the lookup index.
+    template <class K>
+    struct linked_map_key_traits {
+        using key_type = K;
+        using index_key_type = K;
+
+        static const index_key_type &index_key(const key_type &key) noexcept {
+            return key;
+        }
+    };
+
+    namespace detail {
+
+        template <class K, class = void>
+        struct linked_map_default_key_traits {
+            using type = linked_map_key_traits<K>;
         };
 
-        template <class K, class V, class Compare, class Allocator>
-        struct linked_map_index_traits<std::map<K, V, Compare, Allocator>> {
-            template <class Mapped>
-            using allocator_for = typename std::allocator_traits<Allocator>::template rebind_alloc<
-                std::pair<const K, Mapped>>;
-
-            template <class Mapped>
-            using rebind = std::map<K, Mapped, Compare, allocator_for<Mapped>>;
-
-            template <class Mapped>
-            static rebind<Mapped> make(const Allocator &allocator) {
-                return rebind<Mapped>(Compare(), allocator_for<Mapped>(allocator));
-            }
-
-            template <class Mapped>
-            static rebind<Mapped> copy_configuration(const rebind<Mapped> &RHS,
-                                                     const Allocator &allocator) {
-                return rebind<Mapped>(RHS.key_comp(), allocator_for<Mapped>(allocator));
-            }
-        };
-
-        template <class K, class V, class Hash, class KeyEqual, class Allocator>
-        struct linked_map_index_traits<std::unordered_map<K, V, Hash, KeyEqual, Allocator>> {
-            template <class Mapped>
-            using allocator_for = typename std::allocator_traits<Allocator>::template rebind_alloc<
-                std::pair<const K, Mapped>>;
-
-            template <class Mapped>
-            using rebind = std::unordered_map<K, Mapped, Hash, KeyEqual, allocator_for<Mapped>>;
-
-            template <class Mapped>
-            static rebind<Mapped> make(const Allocator &allocator) {
-                return rebind<Mapped>(0, Hash(), KeyEqual(), allocator_for<Mapped>(allocator));
-            }
-
-            template <class Mapped>
-            static rebind<Mapped> copy_configuration(const rebind<Mapped> &RHS,
-                                                     const Allocator &allocator) {
-                rebind<Mapped> result(RHS.bucket_count(), RHS.hash_function(), RHS.key_eq(),
-                                      allocator_for<Mapped>(allocator));
-                result.max_load_factor(RHS.max_load_factor());
-                return result;
-            }
+        template <class K>
+        struct linked_map_default_key_traits<
+            K, std::void_t<typename linked_map_view_traits<K>::index_key_type>> {
+            using type = linked_map_view_traits<K>;
         };
 
     }
 
+    /// Configures an unordered lookup index independently of its key representation.
+    template <class Hash = linked_map_hash, class KeyEqual = std::equal_to<>,
+              class Allocator = std::allocator<std::byte>>
+    struct linked_map_unordered_traits {
+        template <class Value>
+        using allocator_type =
+            typename std::allocator_traits<Allocator>::template rebind_alloc<Value>;
+
+        template <class Key, class Mapped, class BaseAllocator>
+        using map_type =
+            std::unordered_map<Key, Mapped, Hash, KeyEqual,
+                               typename std::allocator_traits<BaseAllocator>::template rebind_alloc<
+                                   std::pair<const Key, Mapped>>>;
+
+        template <class Map, class BaseAllocator>
+        static Map make(const BaseAllocator &allocator) {
+            using map_allocator = typename Map::allocator_type;
+            return Map(0, typename Map::hasher(), typename Map::key_equal(),
+                       map_allocator(allocator));
+        }
+
+        template <class Map, class BaseAllocator>
+        static Map copy_configuration(const Map &RHS, const BaseAllocator &allocator) {
+            using map_allocator = typename Map::allocator_type;
+            Map result(RHS.bucket_count(), RHS.hash_function(), RHS.key_eq(),
+                       map_allocator(allocator));
+            result.max_load_factor(RHS.max_load_factor());
+            return result;
+        }
+    };
+
+    /// Configures an ordered lookup index independently of its key representation.
+    template <class Compare = std::less<>, class Allocator = std::allocator<std::byte>>
+    struct linked_map_ordered_traits {
+        template <class Value>
+        using allocator_type =
+            typename std::allocator_traits<Allocator>::template rebind_alloc<Value>;
+
+        template <class Key, class Mapped, class BaseAllocator>
+        using map_type =
+            std::map<Key, Mapped, Compare,
+                     typename std::allocator_traits<BaseAllocator>::template rebind_alloc<
+                         std::pair<const Key, Mapped>>>;
+
+        template <class Map, class BaseAllocator>
+        static Map make(const BaseAllocator &allocator) {
+            using map_allocator = typename Map::allocator_type;
+            return Map(typename Map::key_compare(), map_allocator(allocator));
+        }
+
+        template <class Map, class BaseAllocator>
+        static Map copy_configuration(const Map &RHS, const BaseAllocator &allocator) {
+            using map_allocator = typename Map::allocator_type;
+            return Map(RHS.key_comp(), map_allocator(allocator));
+        }
+    };
+
+    /// Combines an index container policy with an independently reusable key representation.
+    template <class MapTraits, class KeyTraits>
+    struct linked_map_index_traits {
+        using key_type = typename KeyTraits::key_type;
+        using index_key_type = typename KeyTraits::index_key_type;
+
+        template <class Value>
+        using allocator_type = typename MapTraits::template allocator_type<Value>;
+
+        template <class Mapped, class BaseAllocator>
+        using map_type =
+            typename MapTraits::template map_type<index_key_type, Mapped, BaseAllocator>;
+
+        static decltype(auto)
+            index_key(const key_type &key) noexcept(noexcept(KeyTraits::index_key(key))) {
+            return KeyTraits::index_key(key);
+        }
+
+        template <class Map, class BaseAllocator>
+        static Map make(const BaseAllocator &allocator) {
+            return MapTraits::template make<Map>(allocator);
+        }
+
+        template <class Map, class BaseAllocator>
+        static Map copy_configuration(const Map &RHS, const BaseAllocator &allocator) {
+            return MapTraits::template copy_configuration<Map>(RHS, allocator);
+        }
+    };
+
     /// An associative container that preserves insertion order.
     ///
-    /// Values live in a list so their order and iterators remain stable. A \c std::map or
-    /// \c std::unordered_map indexes the list by key. The index stores its own copy of each key.
-    template <class K, class V, template <class, class, class...> class Map = std::unordered_map,
-              class... Mods>
+    /// Values live in a list so their order and iterators remain stable. An independently
+    /// configured associative container indexes the list. Its key traits decide whether the
+    /// index owns another key or refers to the key in the list node.
+    template <class K, class V, class MapTraits = linked_map_unordered_traits<>,
+              class KeyTraits = typename detail::linked_map_default_key_traits<K>::type>
     class linked_map {
     public:
         using key_type = K;
@@ -112,15 +199,18 @@ namespace stdc {
         using value_type = std::pair<const K, V>;
 
     private:
-        using configured_map = Map<K, V, Mods...>;
-        using index_traits = detail::linked_map_index_traits<configured_map>;
-        using allocator_traits = std::allocator_traits<typename configured_map::allocator_type>;
+        using index_traits = linked_map_index_traits<MapTraits, KeyTraits>;
+        static_assert(std::is_same_v<K, typename index_traits::key_type>,
+                      "linked_map key and index key traits must have the same key type");
+
+        using allocator_type_impl = typename index_traits::template allocator_type<value_type>;
+        using allocator_traits = std::allocator_traits<allocator_type_impl>;
 
     public:
         using list_allocator_type = typename allocator_traits::template rebind_alloc<value_type>;
         using list_type = std::list<value_type, list_allocator_type>;
 
-        using allocator_type = typename configured_map::allocator_type;
+        using allocator_type = allocator_type_impl;
         using iterator = typename list_type::iterator;
         using const_iterator = typename list_type::const_iterator;
         using reverse_iterator = typename list_type::reverse_iterator;
@@ -133,14 +223,14 @@ namespace stdc {
         using const_pointer = typename list_type::const_pointer;
 
     public:
-        using map_type = typename index_traits::template rebind<iterator>;
+        using map_type = typename index_traits::template map_type<iterator, allocator_type>;
 
         linked_map() : linked_map(allocator_type()) {
         }
 
         explicit linked_map(const allocator_type &allocator)
             : _list(list_allocator_type(allocator)),
-              _map(index_traits::template make<iterator>(allocator)) {
+              _map(index_traits::template make<map_type>(allocator)) {
         }
 
         linked_map(const linked_map &RHS)
@@ -243,7 +333,7 @@ namespace stdc {
         }
 
         bool remove(const K &key) {
-            auto found = _map.find(key);
+            auto found = _map.find(index_traits::index_key(key));
             if (found == _map.end()) {
                 return false;
             }
@@ -263,29 +353,29 @@ namespace stdc {
 
         iterator erase(const_iterator position) {
             assert(position != _list.end());
-            auto found = _map.find(position->first);
+            auto found = _map.find(index_traits::index_key(position->first));
             assert(found != _map.end() && const_iterator(found->second) == position);
             _map.erase(found);
             return _list.erase(position);
         }
 
         iterator find(const K &key) {
-            auto found = _map.find(key);
+            auto found = _map.find(index_traits::index_key(key));
             return found == _map.end() ? end() : found->second;
         }
 
         const_iterator find(const K &key) const {
-            auto found = _map.find(key);
+            auto found = _map.find(index_traits::index_key(key));
             return found == _map.end() ? cend() : const_iterator(found->second);
         }
 
         V value(const K &key) const {
-            auto found = _map.find(key);
+            auto found = _map.find(index_traits::index_key(key));
             return found == _map.end() ? V() : found->second->second;
         }
 
         V value(const K &key, const V &defaultValue) const {
-            auto found = _map.find(key);
+            auto found = _map.find(index_traits::index_key(key));
             return found == _map.end() ? defaultValue : found->second->second;
         }
 
@@ -338,7 +428,7 @@ namespace stdc {
         }
 
         bool contains(const K &key) const {
-            return _map.find(key) != _map.end();
+            return _map.find(index_traits::index_key(key)) != _map.end();
         }
 
         size_type size() const noexcept {
@@ -441,7 +531,7 @@ namespace stdc {
 
         linked_map(empty_copy_t, const linked_map &RHS, const allocator_type &allocator)
             : _list(list_allocator_type(allocator)),
-              _map(index_traits::template copy_configuration<iterator>(RHS._map, allocator)) {
+              _map(index_traits::template copy_configuration<map_type>(RHS._map, allocator)) {
         }
 
         linked_map(const linked_map &RHS, const allocator_type &allocator)
@@ -454,22 +544,26 @@ namespace stdc {
         template <class... Args>
         std::pair<iterator, bool> emplace_impl(const_iterator position, const K &key,
                                                Args &&...args) {
-            auto indexed = _map.emplace(key, _list.end());
-            if (!indexed.second) {
-                return {indexed.first->second, false};
+            auto found = _map.find(index_traits::index_key(key));
+            if (found != _map.end()) {
+                return {found->second, false};
             }
 
+            auto inserted =
+                _list.emplace(position, std::piecewise_construct, std::forward_as_tuple(key),
+                              std::forward_as_tuple(std::forward<Args>(args)...));
 #ifdef STDC_HAS_EXCEPTIONS
             try {
 #endif
-                auto inserted =
-                    _list.emplace(position, std::piecewise_construct, std::forward_as_tuple(key),
-                                  std::forward_as_tuple(std::forward<Args>(args)...));
-                indexed.first->second = inserted;
-                return {inserted, true};
+                auto indexed = _map.emplace(index_traits::index_key(inserted->first), inserted);
+                if (!indexed.second) {
+                    _list.erase(inserted);
+                    return {indexed.first->second, false};
+                }
+                return {indexed.first->second, true};
 #ifdef STDC_HAS_EXCEPTIONS
             } catch (...) {
-                _map.erase(indexed.first);
+                _list.erase(inserted);
                 throw;
             }
 #endif
@@ -487,5 +581,25 @@ namespace stdc {
 
     /// @}
 }
+
+/// Declares the view type used by the default linked map index for the given key type.
+#define STDC_DECLARE_LINKED_MAP_KEY_VIEW(Key, View)                                                \
+    template <>                                                                                    \
+    struct stdc::linked_map_view_traits<Key> {                                                     \
+        using key_type = Key;                                                                      \
+        using index_key_type = View;                                                               \
+                                                                                                   \
+        static index_key_type index_key(const key_type &key) noexcept(                             \
+            std::is_nothrow_constructible_v<index_key_type, const key_type &>) {                   \
+            return index_key_type(key);                                                            \
+        }                                                                                          \
+    };
+
+STDC_DECLARE_LINKED_MAP_KEY_VIEW(std::string, std::string_view)
+STDC_DECLARE_LINKED_MAP_KEY_VIEW(std::wstring, std::wstring_view)
+
+#ifdef QT_CORE_LIB
+STDC_DECLARE_LINKED_MAP_KEY_VIEW(QString, QStringView)
+#endif
 
 #endif // STDCORELIB_LINKED_MAP_H

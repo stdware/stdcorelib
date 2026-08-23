@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -19,8 +20,15 @@ BOOST_AUTO_TEST_SUITE(test_linked_map)
 namespace {
 
     using Map = linked_map<std::string, int>;
-    using OrderedMap = linked_map<std::string, int, std::map>;
+    using OrderedMap = linked_map<std::string, int, linked_map_ordered_traits<>>;
+    using StringViewKey = linked_map_view_traits<std::string>;
+    using StringViewMap =
+        linked_map<std::string, int, linked_map_unordered_traits<>, StringViewKey>;
 
+    static_assert(std::is_same_v<Map::map_type::key_type, std::string_view>);
+    static_assert(std::is_same_v<OrderedMap::map_type::key_type, std::string_view>);
+    static_assert(
+        std::is_same_v<linked_map<std::wstring, int>::map_type::key_type, std::wstring_view>);
     static_assert(detail::has_reserve<Map::map_type>::value);
     static_assert(!detail::has_capacity<Map::map_type>::value);
     static_assert(!detail::has_reserve<OrderedMap::map_type>::value);
@@ -658,12 +666,77 @@ BOOST_AUTO_TEST_CASE(test_ordered_index) {
     BOOST_CHECK(moved == map);
 }
 
+BOOST_AUTO_TEST_CASE(test_view_index) {
+    static_assert(std::is_same_v<StringViewMap::map_type::key_type, std::string_view>);
+
+    std::string callerKey = "one";
+    StringViewMap map;
+    map.append(callerKey, 1);
+    callerKey.assign("changed");
+    BOOST_CHECK(map.contains("one"));
+    BOOST_CHECK(!map.contains("changed"));
+
+    map.append("two", 2);
+    StringViewMap copy = map;
+    map.clear();
+    BOOST_CHECK_EQUAL(copy.value("one"), 1);
+    BOOST_CHECK_EQUAL(copy.value("two"), 2);
+
+    StringViewMap moved = std::move(copy);
+    BOOST_CHECK_EQUAL(moved.erase("one"), 1u);
+    BOOST_CHECK(!moved.contains("one"));
+    BOOST_CHECK_EQUAL(moved.value("two"), 2);
+
+    StringViewMap assigned;
+    assigned.append("old", 0);
+    assigned = moved;
+    moved.clear();
+    BOOST_CHECK_EQUAL(assigned.value("two"), 2);
+    BOOST_CHECK(!assigned.contains("old"));
+
+    StringViewMap moveAssigned;
+    moveAssigned.append("old", 0);
+    moveAssigned = std::move(assigned);
+    BOOST_CHECK_EQUAL(moveAssigned.value("two"), 2);
+
+    StringViewMap swapped;
+    swapped.append("three", 3);
+    moveAssigned.swap(swapped);
+    BOOST_CHECK_EQUAL(moveAssigned.value("three"), 3);
+    BOOST_CHECK_EQUAL(swapped.value("two"), 2);
+
+    linked_map<std::string, int, linked_map_ordered_traits<>, StringViewKey> ordered;
+    ordered.append("b", 2);
+    ordered.prepend("a", 1);
+    BOOST_CHECK_EQUAL(ordered.begin()->first, "a");
+    BOOST_CHECK_EQUAL(ordered.value("b"), 2);
+}
+
+BOOST_AUTO_TEST_CASE(test_explicit_owning_index) {
+    using OwningMap = linked_map<std::string, int, linked_map_unordered_traits<>,
+                                 linked_map_key_traits<std::string>>;
+    static_assert(std::is_same_v<OwningMap::map_type::key_type, std::string>);
+
+    OwningMap map;
+    map.append("one", 1);
+    BOOST_CHECK_EQUAL(map.value("one"), 1);
+}
+
 BOOST_AUTO_TEST_CASE(test_list_and_index_share_the_allocator) {
     using Pair = std::pair<const std::string, int>;
     using Allocator = TrackingAllocator<Pair>;
-    using HashedMap = linked_map<std::string, int, std::unordered_map, std::hash<std::string>,
-                                 std::equal_to<std::string>, Allocator>;
-    using TreeMap = linked_map<std::string, int, std::map, std::less<std::string>, Allocator>;
+    using HashedMap = linked_map<
+        std::string, int,
+        linked_map_unordered_traits<std::hash<std::string>, std::equal_to<std::string>, Allocator>,
+        linked_map_key_traits<std::string>>;
+    using TreeMap =
+        linked_map<std::string, int, linked_map_ordered_traits<std::less<std::string>, Allocator>,
+                   linked_map_key_traits<std::string>>;
+    using ViewHashedMap =
+        linked_map<std::string, int,
+                   linked_map_unordered_traits<std::hash<std::string_view>,
+                                               std::equal_to<std::string_view>, Allocator>,
+                   StringViewKey>;
 
     auto firstState = std::make_shared<AllocatorState>();
     HashedMap source{Allocator(firstState)};
@@ -698,6 +771,15 @@ BOOST_AUTO_TEST_CASE(test_list_and_index_share_the_allocator) {
     tree.append("one", 1);
     BOOST_CHECK(tree.get_allocator().state == treeState);
     BOOST_CHECK(treeState->allocations >= 2u); // one list node and one tree node
+
+    ViewHashedMap viewSource{Allocator(firstState)};
+    viewSource.append("view", 1);
+    ViewHashedMap viewTarget{Allocator(secondState)};
+    viewTarget.append("old", 0);
+    viewTarget = std::move(viewSource);
+    BOOST_CHECK(viewSource.empty());
+    BOOST_CHECK_EQUAL(viewTarget.value("view"), 1);
+    BOOST_CHECK(!viewTarget.contains("old"));
 }
 
 BOOST_AUTO_TEST_CASE(test_existing_subscript_does_not_construct_a_value) {
