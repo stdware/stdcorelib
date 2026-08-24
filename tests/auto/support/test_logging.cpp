@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <stdcorelib/support/logging.h>
+#include <stdcorelib/support/popen.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -77,6 +78,15 @@ namespace {
     void recordingSink(int level, const LogContext &context, const std::string_view &message) {
         g_records.emplace_back(level, std::string(message));
         g_lastContext = context;
+    }
+
+    bool filteredFatalTerminates(const char *mode) {
+        Popen process;
+        process.args({TEST_LOGGING_FATAL_PATH, mode})
+            .standardOutput(Popen::DeviceNull)
+            .standardError(Popen::DeviceNull);
+        return process.start() && process.wait(5000) && process.returnCode() &&
+               *process.returnCode() != 0;
     }
 
     // Redirects stdout and stderr into a scratch file for as long as it lives, and hands back
@@ -348,6 +358,11 @@ BOOST_AUTO_TEST_CASE(test_disabled_level_never_reaches_the_callback) {
     BOOST_CHECK_EQUAL(afterDebug, 0);
     BOOST_CHECK_EQUAL(afterWarning, 1);
     BOOST_CHECK_EQUAL(lastLevel, int(Logger::Warning));
+}
+
+BOOST_AUTO_TEST_CASE(test_filtered_fatal_still_terminates) {
+    BOOST_CHECK(filteredFatalTerminates("log"));
+    BOOST_CHECK(filteredFatalTerminates("logf"));
 }
 
 // The macros resolve an in-scope category through stdcGetLogCategory(), and fall back to the

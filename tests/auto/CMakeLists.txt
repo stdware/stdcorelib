@@ -141,8 +141,18 @@ set_target_properties(test_popen_child PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
+# Fatal logging has to run in a child because the behavior under test terminates its process.
+add_executable(test_logging_fatal helpers/test_logging_fatal.cpp)
+target_link_libraries(test_logging_fatal PRIVATE stdcorelib)
+set_target_properties(test_logging_fatal PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
 add_dependencies(${PROJECT_NAME}
-    test_any_plugin test_dynamicregistry_plugin test_sharedlibrary_unloadable test_sharedlibrary_pinned test_popen_child
+    test_any_plugin test_dynamicregistry_plugin test_sharedlibrary_unloadable test_sharedlibrary_pinned test_popen_child test_logging_fatal
     test_sharedlibrary_dependency test_sharedlibrary_needs_dependency)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
@@ -151,6 +161,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_SHAREDLIBRARY_PINNED_PATH="$<TARGET_FILE:test_sharedlibrary_pinned>"
     TEST_SHAREDLIBRARY_NEEDS_DEPENDENCY_PATH="$<TARGET_FILE:test_sharedlibrary_needs_dependency>"
     TEST_POPEN_CHILD_PATH="$<TARGET_FILE:test_popen_child>"
+    TEST_LOGGING_FATAL_PATH="$<TARGET_FILE:test_logging_fatal>"
 )
 
 # One entry rather than one per suite. The whole binary is a second, and twenty five process

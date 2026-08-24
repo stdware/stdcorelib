@@ -128,6 +128,8 @@ namespace stdc {
     /// Each category registers itself on construction and picks up whatever filter rules are
     /// already in effect.
     ///
+    /// Disabling the fatal level suppresses its record but does not suppress process termination.
+    ///
     /// \sa setFilterRules()
     class STDC_EXPORT LogCategory {
     public:
@@ -187,11 +189,10 @@ namespace stdc {
         template <int Level, class... Args>
         void log(const char *fileName, int lineNumber, const char *functionName,
                  const std::string_view &format, Args &&...args) const {
-            if (!isLevelEnabled(Level)) {
-                return;
+            if (isLevelEnabled(Level)) {
+                Logger(fileName, lineNumber, functionName, _name)
+                    .log(Level, format, std::forward<Args>(args)...);
             }
-            Logger(fileName, lineNumber, functionName, _name)
-                .log(Level, format, std::forward<Args>(args)...);
             if constexpr (Level == stdc::Logger::Fatal) {
                 Logger::abort();
             }
@@ -200,11 +201,10 @@ namespace stdc {
         template <int Level, class... Args>
         void logf(const char *fileName, int lineNumber, const char *functionName, const char *fmt,
                   Args &&...args) const {
-            if (!isLevelEnabled(Level)) {
-                return;
+            if (isLevelEnabled(Level)) {
+                Logger(fileName, lineNumber, functionName, _name)
+                    .printf(Level, fmt, std::forward<Args>(args)...);
             }
-            Logger(fileName, lineNumber, functionName, _name)
-                .printf(Level, fmt, std::forward<Args>(args)...);
             if constexpr (Level == stdc::Logger::Fatal) {
                 Logger::abort();
             }
