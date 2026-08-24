@@ -1537,14 +1537,14 @@ namespace stdc::cli {
         ///      does not walk the tree before parsing.
         /// \note A program whose command tree is built dynamically, such as from plugins,
         ///       should call validate() explicitly before this even in a release build.
-        inline ParseResult parse(const std::vector<std::string> &args,
+        inline ParseResult parse(array_view<std::string> args,
                                  ParseOptions parseOptions = Standard) const {
             assert(!validate(parseOptions).has_value() && "the command tree is invalid");
             return parseImpl(args, parseOptions);
         }
         /// Parses and does everything a \c main does with the answer, reporting a failure and
         /// answering a Help or Version option before any handler runs. \sa ParseResult::invoke()
-        inline int invoke(const std::vector<std::string> &args, int errorCode = -1,
+        inline int invoke(array_view<std::string> args, int errorCode = -1,
                           ParseOptions parseOptions = Standard) const {
             return parse(args, parseOptions).invoke(errorCode);
         }
@@ -1565,8 +1565,7 @@ namespace stdc::cli {
         }
 
     private:
-        ParseResult parseImpl(const std::vector<std::string> &args,
-                              ParseOptions parseOptions) const;
+        ParseResult parseImpl(array_view<std::string> args, ParseOptions parseOptions) const;
 
         class Impl;
         std::unique_ptr<Impl> _impl;

@@ -1113,7 +1113,7 @@ namespace stdc::cli {
             ParserCore(detail::parse_data *out, Parser::ParseOptions flags) : r(out), flags(flags) {
             }
 
-            void run(const std::vector<std::string> &args);
+            void run(array_view<std::string> args);
 
         private:
             using Error = ParseResult::Error;
@@ -1799,7 +1799,7 @@ namespace stdc::cli {
             }
         }
 
-        void ParserCore::run(const std::vector<std::string> &args) {
+        void ParserCore::run(array_view<std::string> args) {
             // The first argument names the program rather than anything to parse.
             tokens.assign(args.begin() + (args.empty() ? 0 : 1), args.end());
             if (on(Parser::EnableResponseFile)) {
@@ -1999,8 +1999,7 @@ namespace stdc::cli {
                                      parseOptions.test_flag(IgnoreCommandCase));
     }
 
-    ParseResult Parser::parseImpl(const std::vector<std::string> &args,
-                                  ParseOptions parseOptions) const {
+    ParseResult Parser::parseImpl(array_view<std::string> args, ParseOptions parseOptions) const {
         stdc_impl_t;
         ParseResult result;
         auto &out = *result._impl;
