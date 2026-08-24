@@ -14,7 +14,8 @@
 /// stdc::array_view is a read-only view over any contiguous container, so one parameter replaces a
 /// pile of overloads. stdc::vlarray keeps its first N elements inline and stays off the heap while
 /// it is small. stdc::linked_map remembers insertion order, over \c std::unordered_map or
-/// \c std::map. stdc::any holds a value of any type and hands it back without RTTI.
+/// \c std::map. stdc::aligned_allocator gives a container storage with a fixed minimum alignment.
+/// stdc::any holds a value of any type and hands it back without RTTI.
 ///
 /// \code
 ///     stdc::vlarray<int, 16> v;   // nothing allocated until the seventeenth element
