@@ -58,10 +58,16 @@ namespace stdc {
     /// initialization, while the head and tail pointers here are constant-initialized and are
     /// therefore in place before any of the registrations run.
     ///
-    /// \note For a plugin to reach the host's list, the host has to export the symbols the macro
-    ///       defines: link it with \c -rdynamic, or instantiate with the EXPORT form of the
-    ///       macro on Windows. Without that the plugin quietly grows a list of its own and the
-    ///       host never sees the registration.
+    /// \note For a plugin to reach the host's list, the head and tail pointers have to be
+    ///       exported. The EXPORT form of the macro is what does that, and a host that is an
+    ///       executable rather than a shared library wants \c -rdynamic as well.
+    /// \note A plugin built with MSVC needs one thing more, on its side: \c "extern template
+    ///       class __declspec(dllimport) StaticRegistry<T>;", since exported data is reachable
+    ///       only through the import table. Guard that on \c _MSC_VER and not on \c _WIN32. It
+    ///       also suppresses the local instantiation of \c Entry, \c Node, \c Iterator and
+    ///       \c add_node, and MinGW ignores the class attribute that would have exported those.
+    /// \note Getting either of them wrong is a link error naming the head and tail pointers, not
+    ///       a registration that quietly lands somewhere else.
     /// \note A registration goes away when the object holding it is destroyed, which for a plugin
     ///       means the loader really did unload it. \c dlclose reports success either way, and
     ///       glibc keeps a library that defines a unique symbol.
