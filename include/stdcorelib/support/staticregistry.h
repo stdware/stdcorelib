@@ -31,10 +31,11 @@ namespace stdc {
     /// A registry that fills itself before \c main, so an implementation is available merely by
     /// having been linked in.
     ///
-    /// Every registration is a static object whose constructor links it into a list. Nothing
-    /// calls an initialization function and nothing keeps a list of what to initialize, which is
-    /// what makes it work across a shared library boundary: a plugin's own static object joins
-    /// the host's list as the plugin is loaded.
+    /// Every registration is a static object whose constructor links it into a list and whose
+    /// destructor takes it back out. Nothing calls an initialization function and nothing keeps a
+    /// list of what to initialize, which is what makes it work across a shared library boundary:
+    /// a plugin's own static object joins the host's list as the plugin is loaded, and leaves it
+    /// as the plugin unloads.
     ///
     /// \code
     ///   // in the host
@@ -61,9 +62,15 @@ namespace stdc {
     ///       defines: link it with \c -rdynamic, or instantiate with the EXPORT form of the
     ///       macro on Windows. Without that the plugin quietly grows a list of its own and the
     ///       host never sees the registration.
-    /// \warning Registration is not synchronized. Static initialization is single threaded, but
-    ///          loading a shared library from two threads at once is not, so serialize that
-    ///          yourself.
+    /// \note A registration goes away when the object holding it is destroyed, which for a plugin
+    ///       means the loader really did unload it. \c dlclose reports success either way, and
+    ///       glibc keeps a library that defines a unique symbol.
+    /// \warning Neither joining nor leaving the list is synchronized, and leaving it races with
+    ///          anyone iterating. Static initialization is single threaded, loading and unloading
+    ///          a shared library is not, so serialize that yourself.
+    /// \warning Leaving the list does not make an entry safe to keep. Its name and its
+    ///          constructor both live in the module that registered it, as does whatever
+    ///          \c instantiate() built, so those have to be gone before it unloads.
     /// \warning The names are not copied. Register with a literal, or with something that
     ///          outlives the program.
     ///
@@ -105,6 +112,9 @@ namespace stdc {
 
         /// A link in the list. Lives inside the Add object that registered it, so the registry
         /// itself never allocates.
+        ///
+        /// Doubly linked so that a registration can take itself out in constant time without
+        /// walking the list for its predecessor.
         class Node {
         public:
             explicit Node(const Entry &entry) : _entry(entry) {
@@ -115,6 +125,7 @@ namespace stdc {
             friend class Iterator;
 
             Node *_next = nullptr;
+            Node *_prev = nullptr;
             const Entry &_entry;
         };
 
@@ -181,12 +192,29 @@ namespace stdc {
         /// Appends \a node, keeping registration order. Called by Add, and by a plugin against
         /// the host's copy of this symbol.
         static void add_node(Node *node) {
+            node->_prev = _tail;
             if (_tail) {
                 _tail->_next = node;
             } else {
                 _head = node;
             }
             _tail = node;
+        }
+
+        /// Takes \a node back out, which is what a registration does when it is destroyed.
+        static void remove_node(Node *node) {
+            if (node->_prev) {
+                node->_prev->_next = node->_next;
+            } else {
+                _head = node->_next;
+            }
+            if (node->_next) {
+                node->_next->_prev = node->_prev;
+            } else {
+                _tail = node->_prev;
+            }
+            node->_next = nullptr;
+            node->_prev = nullptr;
         }
 
         /// Registers \a V, default constructed, for as long as this object lives. For a static
@@ -203,6 +231,10 @@ namespace stdc {
             Add(std::string_view name, std::string_view desc)
                 : _entry(name, desc, &construct), _node(_entry) {
                 add_node(&_node);
+            }
+
+            ~Add() {
+                remove_node(&_node);
             }
 
         private:
@@ -239,6 +271,10 @@ namespace stdc {
             AddFactory(std::string_view name, std::string_view desc, result_type (*factory)())
                 : _entry(name, desc, factory), _node(_entry) {
                 add_node(&_node);
+            }
+
+            ~AddFactory() {
+                remove_node(&_node);
             }
 
         private:
