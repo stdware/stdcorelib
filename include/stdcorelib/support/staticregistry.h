@@ -28,6 +28,19 @@ namespace stdc {
         }
     };
 
+    namespace detail {
+
+        /// Holds the type-erased links for one static registry.
+        struct StaticRegistryStorage {
+            void *head = nullptr;
+            void *tail = nullptr;
+        };
+
+        template <class T, class Traits>
+        StaticRegistryStorage &static_registry_storage();
+
+    }
+
     /// A registry that fills itself before \c main, so an implementation is available merely by
     /// having been linked in.
     ///
@@ -40,7 +53,7 @@ namespace stdc {
     ///   // in the host
     ///   class Codec { public: virtual ~Codec() = default; };
     ///   using CodecRegistry = stdc::StaticRegistry<Codec>;
-    ///   STDC_INSTANTIATE_STATIC_REGISTRY(Codec)   // once, in one .cpp
+    ///   STDC_STATIC_REGISTRY(Codec)   // once, in one .cpp
     ///
     ///   // in the host or in any plugin
     ///   static CodecRegistry::Add<FlacCodec> x("flac", "Free Lossless Audio Codec");
@@ -54,13 +67,13 @@ namespace stdc {
     ///
     /// The list is the only structure that can be built this way. A map or a vector has a
     /// constructor of its own, so touching one from a static constructor races with its own
-    /// initialization, while the head and tail pointers here are constant-initialized and are
-    /// therefore in place before any of the registrations run.
+    /// initialization. The storage accessor initializes its two pointers before returning them
+    /// to a registration.
     ///
-    /// \note For a plugin to reach the host's list, the host has to export the symbols the macro
-    ///       defines: link it with \c -rdynamic, or instantiate with the EXPORT form of the
-    ///       macro on Windows. Without that the plugin quietly grows a list of its own and the
-    ///       host never sees the registration.
+    /// \note For a plugin to reach the host's list, declare the registry with
+    ///       \c STDC_DECLARE_EXPORTED_STATIC_REGISTRY and define it with
+    ///       \c STDC_STATIC_REGISTRY. An executable host also has to export its symbols, such as
+    ///       by linking with \c -rdynamic on ELF platforms.
     /// \warning Registration is not synchronized. Static initialization is single threaded, but
     ///          loading a shared library from two threads at once is not, so serialize that
     ///          yourself.
@@ -161,7 +174,7 @@ namespace stdc {
         class Range {
         public:
             Iterator begin() const {
-                return Iterator(_head);
+                return StaticRegistry::begin();
             }
             Iterator end() const {
                 return Iterator(nullptr);
@@ -169,7 +182,7 @@ namespace stdc {
         };
 
         static Iterator begin() {
-            return Iterator(_head);
+            return Iterator(static_cast<Node *>(storage().head));
         }
         static Iterator end() {
             return Iterator(nullptr);
@@ -181,12 +194,14 @@ namespace stdc {
         /// Appends \a node, keeping registration order. Called by Add, and by a plugin against
         /// the host's copy of this symbol.
         static void add_node(Node *node) {
-            if (_tail) {
-                _tail->_next = node;
+            auto &data = storage();
+            auto *tail = static_cast<Node *>(data.tail);
+            if (tail) {
+                tail->_next = node;
             } else {
-                _head = node;
+                data.head = node;
             }
-            _tail = node;
+            data.tail = node;
         }
 
         /// Registers \a V, default constructed, for as long as this object lives. For a static
@@ -251,45 +266,38 @@ namespace stdc {
         StaticRegistry() = delete;
 
     private:
-        // Declared here and defined by STDC_INSTANTIATE_STATIC_REGISTRY, so one module
-        // owns the list and a plugin links against that one rather than growing a list of its
-        // own. Both are null-initialized, which is a constant initializer, so they are already
-        // in place when the static constructors that do the registering run.
-        //
-        // Two declarations rather than one: MSVC rejects several static members of a dllexport
-        // class in a single declaration with C2487.
-        static Node *_head;
-        static Node *_tail;
+        static detail::StaticRegistryStorage &storage() {
+            return detail::static_registry_storage<T, Traits>();
+        }
     };
 
     /// @}
 }
 
-/// Defines the storage for a \c StaticRegistry over \a TYPE, decorated with \a EXPORT.
+/// Declares the exported storage for a \c StaticRegistry over \a TYPE.
 ///
-/// Put this in exactly one translation unit of the module that owns the registry, which in a
-/// plugin arrangement is the host. \a EXPORT is what makes the list reachable from a plugin:
-/// \c __declspec(dllexport) on Windows, or nothing on the platforms where \c -rdynamic on the
-/// host is what does it.
-/// Since the macro defines the primary template's storage, use it only once in a translation
-/// unit; instantiate unrelated registry types in separate translation units.
-/// Both of these have to sit where they can name stdc, which is the global scope or inside stdc
-/// itself. Naming it rather than reopening it is what makes writing them anywhere else say so:
-/// the compiler answers "in namespace X, which does not enclose namespace stdc" instead of
-/// failing somewhere inside this header.
-#define STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                      \
-    template <class T, class Traits>                                                               \
-    typename ::stdc::StaticRegistry<T, Traits>::Node *                                             \
-        ::stdc::StaticRegistry<T, Traits>::_head = nullptr;                                        \
-    template <class T, class Traits>                                                               \
-    typename ::stdc::StaticRegistry<T, Traits>::Node *                                             \
-        ::stdc::StaticRegistry<T, Traits>::_tail = nullptr;                                        \
-    template class EXPORT ::stdc::StaticRegistry<TYPE>;
+/// Put this in a public header after any specialization of \c static_registry_traits for
+/// \a TYPE. Put \c STDC_STATIC_REGISTRY in one translation unit of the module that owns the
+/// registry. \a EXPORT must select export while building that module and import while using it.
+#define STDC_DECLARE_EXPORTED_STATIC_REGISTRY(TYPE, EXPORT)                                        \
+    template <>                                                                                    \
+    EXPORT ::stdc::detail::StaticRegistryStorage                                                   \
+        & ::stdc::detail::static_registry_storage<TYPE, ::stdc::static_registry_traits<TYPE>>();
 
-/// Defines the storage for a \c StaticRegistry over \a TYPE, undecorated.
+/// Declares the storage for a \c StaticRegistry over \a TYPE without an export decoration.
+#define STDC_DECLARE_STATIC_REGISTRY(TYPE) STDC_DECLARE_EXPORTED_STATIC_REGISTRY(TYPE, )
+
+/// Defines the storage for a \c StaticRegistry over \a TYPE.
 ///
-/// Enough for a registry that lives in one module. A host that means to accept registrations
-/// from a plugin wants the EXPORT form above instead.
-#define STDC_INSTANTIATE_STATIC_REGISTRY(TYPE) STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, )
+/// Put this in exactly one translation unit of the module that owns the registry. Put the
+/// corresponding declaration in a public header when registrations can come from another
+/// module. The macro must be used at global scope.
+#define STDC_STATIC_REGISTRY(TYPE)                                                                 \
+    template <>                                                                                    \
+    ::stdc::detail::StaticRegistryStorage                                                          \
+        & ::stdc::detail::static_registry_storage<TYPE, ::stdc::static_registry_traits<TYPE>>() {  \
+        static ::stdc::detail::StaticRegistryStorage storage;                                      \
+        return storage;                                                                            \
+    }
 
 #endif // STDCORELIB_STATICREGISTRY_H

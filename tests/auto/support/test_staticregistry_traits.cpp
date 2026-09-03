@@ -26,7 +26,7 @@ namespace stdc {
 
 }
 
-STDC_INSTANTIATE_STATIC_REGISTRY(Descriptor)
+STDC_STATIC_REGISTRY(Descriptor)
 
 namespace {
 

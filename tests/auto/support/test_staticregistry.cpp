@@ -48,7 +48,7 @@ namespace {
 
 }
 
-STDC_INSTANTIATE_STATIC_REGISTRY(Codec)
+STDC_STATIC_REGISTRY(Codec)
 
 namespace {
 
