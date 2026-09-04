@@ -1,6 +1,8 @@
 # STDCORELIB
 
-A small C++17 support library, for the things the standard library leaves to the platform.
+Portable C++ Application Infrastructure.
+
+## Introduction
 
 Most of it exists because the answer differs between Windows and the rest of the world: console color, UTF-8 that survives a Windows console, launching a child process, loading a shared object. The rest is a handful of containers and utilities that kept getting rewritten.
 
@@ -8,8 +10,8 @@ Header-only where it can be, compiled where it has to be. No dependencies beyond
 
 ## Requirements
 
-- C++17
-- CMake 3.16 or newer
+- A C++17 compiler.
+- CMake 3.16 or later.
 - Windows, Linux or macOS. MSVC, clang-cl, GCC and Clang are all built and tested.
 
 ## Building
@@ -24,7 +26,9 @@ cmake --build build --config Release
 cmake --install build --config Release
 ```
 
-## Integration with CMake Projects
+## Integration
+
+Install the library, make its installation prefix discoverable by CMake, and consume its exported target:
 
 ```cmake
 find_package(stdcorelib REQUIRED)

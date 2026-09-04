@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(stdcorelib
     VERSION 0.2.1.0
     LANGUAGES CXX
-    DESCRIPTION "C++ Auxiliary Core Library"
+    DESCRIPTION "Portable C++ Application Infrastructure."
     HOMEPAGE_URL "https://github.com/stdware/stdcorelib"
 )
 
