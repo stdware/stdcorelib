@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME} ${_src})
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::unit_test_framework)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE stdcorelib)
+target_link_libraries(${PROJECT_NAME} PRIVATE test_staticregistry_hub)
 
 # Some tests reach into private headers (src/*_p.h) to cover internals that the public API
 # cannot get at on its own.
@@ -130,6 +131,33 @@ if(NOT WIN32)
     )
 endif()
 
+# A shared library owns the registry while a module registers into it. Hidden visibility ensures
+# that only the registry declaration's export decoration makes the shared storage reachable.
+add_library(test_staticregistry_hub SHARED plugins/test_staticregistry_hub.cpp)
+target_include_directories(test_staticregistry_hub PUBLIC ${stdcorelib_SOURCE_DIR}/include)
+target_compile_definitions(test_staticregistry_hub PRIVATE TEST_STATICREGISTRY_HUB_LIBRARY)
+set_target_properties(test_staticregistry_hub PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
+add_library(test_staticregistry_plugin MODULE plugins/test_staticregistry_plugin.cpp)
+target_link_libraries(test_staticregistry_plugin PRIVATE test_staticregistry_hub)
+set_target_properties(test_staticregistry_plugin PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
 # A program for the popen tests to start. The shell covers most of what a child has to do, but
 # it cannot report the argument vector it was given, since it parses the command line a second
 # time before the program sees it.
@@ -153,7 +181,7 @@ set_target_properties(test_logging_fatal PROPERTIES
 
 add_dependencies(${PROJECT_NAME}
     test_any_plugin test_dynamicregistry_plugin test_sharedlibrary_unloadable test_sharedlibrary_pinned test_popen_child test_logging_fatal
-    test_sharedlibrary_dependency test_sharedlibrary_needs_dependency)
+    test_sharedlibrary_dependency test_sharedlibrary_needs_dependency test_staticregistry_plugin)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
     TEST_DYNAMICREGISTRY_PLUGIN_PATH="$<TARGET_FILE:test_dynamicregistry_plugin>"
@@ -162,6 +190,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_SHAREDLIBRARY_NEEDS_DEPENDENCY_PATH="$<TARGET_FILE:test_sharedlibrary_needs_dependency>"
     TEST_POPEN_CHILD_PATH="$<TARGET_FILE:test_popen_child>"
     TEST_LOGGING_FATAL_PATH="$<TARGET_FILE:test_logging_fatal>"
+    TEST_STATICREGISTRY_PLUGIN_PATH="$<TARGET_FILE:test_staticregistry_plugin>"
 )
 
 # One entry rather than one per suite. The whole binary is a second, and twenty five process
