@@ -14,7 +14,7 @@ Header-only where it can be, compiled where it has to be. No dependencies beyond
 - CMake 3.16 or later.
 - Windows, Linux or macOS. MSVC, clang-cl, GCC and Clang are all built and tested.
 
-## Building
+## Build & Install
 
 ```bash
 git clone https://github.com/stdware/stdcorelib.git
