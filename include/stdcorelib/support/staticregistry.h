@@ -28,19 +28,6 @@ namespace stdc {
         }
     };
 
-    namespace detail {
-
-        /// Holds the type-erased links for one static registry.
-        struct StaticRegistryStorage {
-            void *head = nullptr;
-            void *tail = nullptr;
-        };
-
-        template <class T, class Traits>
-        StaticRegistryStorage &static_registry_storage();
-
-    }
-
     /// A registry that fills itself before \c main, so an implementation is available merely by
     /// having been linked in.
     ///
@@ -182,7 +169,7 @@ namespace stdc {
         };
 
         static Iterator begin() {
-            return Iterator(static_cast<Node *>(storage().head));
+            return Iterator(storage().head);
         }
         static Iterator end() {
             return Iterator(nullptr);
@@ -266,9 +253,12 @@ namespace stdc {
         StaticRegistry() = delete;
 
     private:
-        static detail::StaticRegistryStorage &storage() {
-            return detail::static_registry_storage<T, Traits>();
-        }
+        struct Storage {
+            Node *head = nullptr;
+            Node *tail = nullptr;
+        };
+
+        static Storage &storage();
     };
 
     /// @}
@@ -281,8 +271,8 @@ namespace stdc {
 /// registry. \a EXPORT must select export while building that module and import while using it.
 #define STDC_DECLARE_EXPORTED_STATIC_REGISTRY(TYPE, EXPORT)                                        \
     template <>                                                                                    \
-    EXPORT ::stdc::detail::StaticRegistryStorage                                                   \
-        & ::stdc::detail::static_registry_storage<TYPE, ::stdc::static_registry_traits<TYPE>>();
+    EXPORT                                                                                         \
+        typename ::stdc::StaticRegistry<TYPE>::Storage & ::stdc::StaticRegistry<TYPE>::storage();
 
 /// Declares the storage for a \c StaticRegistry over \a TYPE without an export decoration.
 #define STDC_DECLARE_STATIC_REGISTRY(TYPE) STDC_DECLARE_EXPORTED_STATIC_REGISTRY(TYPE, )
@@ -294,9 +284,8 @@ namespace stdc {
 /// module. The macro must be used at global scope.
 #define STDC_STATIC_REGISTRY(TYPE)                                                                 \
     template <>                                                                                    \
-    ::stdc::detail::StaticRegistryStorage                                                          \
-        & ::stdc::detail::static_registry_storage<TYPE, ::stdc::static_registry_traits<TYPE>>() {  \
-        static ::stdc::detail::StaticRegistryStorage storage;                                      \
+    typename ::stdc::StaticRegistry<TYPE>::Storage & ::stdc::StaticRegistry<TYPE>::storage() {     \
+        static Storage storage;                                                                    \
         return storage;                                                                            \
     }
 
