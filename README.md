@@ -31,7 +31,7 @@ cmake --install build --config Release
 Install the library, make its installation prefix discoverable by CMake, and consume its exported target:
 
 ```cmake
-find_package(stdcorelib REQUIRED)
+find_package(stdcorelib CONFIG REQUIRED)
 target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 ```
 
