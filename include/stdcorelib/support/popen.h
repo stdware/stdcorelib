@@ -239,6 +239,9 @@ namespace stdc {
         /// args() keeps its usual argument-vector meaning when this is enabled. Each element is
         /// quoted for the platform shell so spaces, quotes, and shell metacharacters stay inside
         /// that argument.
+        ///
+        /// \note On Windows the shell's console is hidden unless startupInfo() sets
+        ///       \c STARTF_USESHOWWINDOW, which then decides.
         Popen &shell(bool shell);
 
         /// The child's working directory. Inherited if left unset.
@@ -303,6 +306,7 @@ namespace stdc {
         ///       as a reference to the caller's object.
         /// \note An \c lpAttributeList carrying \c handle_list decides for itself which handles
         ///       the child inherits, so it overrides closeFds() and says so in a warning.
+        /// \note \c dwFlags carrying \c STARTF_USESHOWWINDOW overrides shell()'s hidden console.
         Popen &startupInfo(std::optional<StartupInfo> startupInfo);
         Popen &creationFlags(int creationFlags); // windows only
 #else

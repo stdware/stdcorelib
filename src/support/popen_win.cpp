@@ -781,8 +781,11 @@ namespace stdc {
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1526
         // prepare shell arguments
         if (shell) {
-            si.dwFlags |= STARTF_USESHOWWINDOW;
-            si.wShowWindow = SW_HIDE;
+            // Python always hides it. Here startupInfo().dwFlags decides.
+            if (!(si.dwFlags & STARTF_USESHOWWINDOW)) {
+                si.dwFlags |= STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+            }
             if (child_executable.empty()) {
                 std::string errMsg;
                 child_executable = _get_command_prompt_path(errMsg);
