@@ -13,39 +13,39 @@ namespace stdc {
     /// \addtogroup text
     /// @{
 
-    /// Conversions between the three UTF encodings, without the standard library's help and
-    /// without the platform's.
+    /// Conversions between UTF-8, UTF-16 and UTF-32, implemented without the conversion
+    /// facilities of the standard library and of the platform.
     ///
-    /// The encodings are named in the function, not left to the width of a type. \c std::wstring
-    /// is UTF-16 on Windows and UTF-32 everywhere else, which is why the wide functions are a
-    /// convenience over the explicit ones rather than the other way round.
+    /// Each function names its encodings explicitly rather than deriving them from the width of a
+    /// type. \c std::wstring is UTF-16 on Windows and UTF-32 on other platforms. The wide-string
+    /// functions are therefore built on the explicit functions rather than the reverse.
     ///
-    /// \note Code pages are a separate matter and are not here. Converting to or from the local
-    ///       ANSI encoding is a Windows API call, and lives in \c str::conv<std::wstring>.
+    /// \note Code pages are not covered here. Conversion to and from the local ANSI encoding
+    ///       requires a Windows API call and is provided by \c str::conv<std::wstring>.
     namespace utf {
 
-        /// What to do about input that is not valid in its own encoding.
+        /// The handling of input that is invalid in its encoding.
         enum error_policy {
-            /// Put U+FFFD where the bad sequence was and carry on, so the conversion always
-            /// produces something. The default, because losing a whole log line or file name to
-            /// one bad byte is worse than losing the byte.
+            /// Each invalid sequence is replaced with U+FFFD and the conversion continues, so that
+            /// it always produces a result. This policy is the default, because losing a whole
+            /// log line or file name because of one invalid byte is worse than losing the byte.
             replace,
 
-            /// Give up and return an empty string.
+            /// The conversion stops and returns an empty string.
             fail,
         };
 
-        /// The character a \c replace conversion substitutes.
+        /// The character that a \c replace conversion inserts.
         constexpr char32_t replacement_character = 0xFFFD;
 
-        /// The largest code point Unicode defines.
+        /// The largest code point that Unicode defines.
         constexpr char32_t max_code_point = 0x10FFFF;
 
         /// \name Conversions
         ///
-        /// Each takes the policy for invalid input and, optionally, somewhere to report whether
-        /// the input was valid. \a ok is worth passing only under \c fail, where an empty result
-        /// otherwise says nothing about whether the input was empty or bad.
+        /// Each function accepts the policy for invalid input and, optionally, a flag that
+        /// receives whether the input was valid. \a ok is useful only with \c fail, because an
+        /// empty result does not indicate whether the input was empty or invalid.
         /// @{
 
         STDC_EXPORT std::u16string utf8_to_utf16(std::string_view s, error_policy policy = replace,
@@ -72,8 +72,8 @@ namespace stdc {
 
         /// \name Wide strings
         ///
-        /// The same conversions against whichever encoding \c wchar_t holds here, which is
-        /// UTF-16 on Windows and UTF-32 elsewhere.
+        /// The same conversions for the encoding of \c wchar_t on the current platform, which is
+        /// UTF-16 on Windows and UTF-32 on other platforms.
         /// @{
 
         STDC_EXPORT std::wstring utf8_to_wide(std::string_view s, error_policy policy = replace,
@@ -86,7 +86,7 @@ namespace stdc {
 
         /// \name Validation
         ///
-        /// Whether the input is well formed, without building the converted string.
+        /// Checks of well-formedness that do not build the converted string.
         /// @{
 
         STDC_EXPORT bool is_valid_utf8(std::string_view s);
@@ -95,8 +95,8 @@ namespace stdc {
 
         /// @}
 
-        /// Whether \a c is a code point that may appear in text: within range, and not one of
-        /// the surrogates, which exist only to encode a pair in UTF-16.
+        /// Returns whether \a c is a code point that may appear in text. Such a code point is
+        /// within range and is not a surrogate. Surrogates exist only to encode pairs in UTF-16.
         constexpr bool is_valid_code_point(char32_t c) {
             return c <= max_code_point && (c < 0xD800 || c > 0xDFFF);
         }

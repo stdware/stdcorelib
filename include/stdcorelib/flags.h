@@ -12,18 +12,19 @@
 
 /// \defgroup utility Utilities
 ///
-/// stdc::flags is type-safe bit flags over an enum, in the shape of \c QFlags. stdc::scope_guard
-/// runs something on the way out unless \c dismiss() says otherwise. stdc::VersionNumber parses,
-/// prints, compares and hashes a four part version, and answers with nothing for a string that is
-/// not one.
+/// stdc::flags provides type-safe bit flags over an enumeration, modeled on \c QFlags.
+/// stdc::scope_guard calls a function at the end of the scope unless \c dismiss() was called.
+/// stdc::VersionNumber parses, formats, compares and hashes a version of up to four components,
+/// and returns \c std::nullopt for a string that is not a version.
 ///
 /// \code
 ///     auto guard = stdc::make_scope_guard([&] { std::fclose(f); });
 ///     auto ver = stdc::VersionNumber::fromString("1.2.3").value_or(stdc::VersionNumber());
 /// \endcode
 ///
-/// \ref vla.h has \c STDC_VLA_ALLOC and \c STDC_VLA_NEW for stack arrays sized at run time, and
-/// \ref pimpl.h the \c stdc_impl_t boilerplate the library uses on itself.
+/// \ref vla.h provides \c STDC_VLA_ALLOC and \c STDC_VLA_NEW for stack arrays with a size
+/// determined at run time. \ref pimpl.h provides the \c stdc_impl_t macros that the library uses
+/// for its own classes.
 
 namespace stdc {
 

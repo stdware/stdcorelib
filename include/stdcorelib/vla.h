@@ -18,9 +18,10 @@
 /// Allocates an uninitialized buffer of \a SIZE elements of \a TYPE on the stack, and declares
 /// \a NAME as a pointer to it.
 ///
-/// \warning The storage dies with the enclosing function, not the enclosing scope, so a loop
-///          that allocates on every pass keeps growing the frame. Nothing frees it either, which
-///          is why the size has to be bounded by something the caller controls.
+/// \warning The storage is released when the enclosing function returns, not at the end of the
+///          enclosing scope. A loop that allocates in every iteration therefore enlarges the stack
+///          frame in every iteration. Because nothing releases the storage earlier, the caller
+///          must bound the size.
 #  define STDC_VLA_ALLOC(TYPE, NAME, SIZE) TYPE *NAME = (TYPE *) STDC_ALLOCA((SIZE) * sizeof(TYPE))
 
 namespace stdc::vla::detail {
@@ -47,8 +48,8 @@ namespace stdc::vla::detail {
 
 }
 
-/// Like STDC_VLA_ALLOC(), for a type that needs constructing. A guard in the same scope
-/// default constructs the elements and destroys them on the way out.
+/// Allocates like STDC_VLA_ALLOC(), for a type that requires construction. A guard in the same
+/// scope default-constructs the elements and destroys them at the end of the scope.
 ///
 /// \sa STDC_VLA_ALLOC()
 #  define STDC_VLA_NEW(TYPE, NAME, SIZE)                                                           \

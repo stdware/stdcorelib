@@ -21,38 +21,40 @@
 
 /// \defgroup text Text
 ///
-/// Strings, formatting, the console and UTF conversion.
+/// Strings, formatting, console output and UTF conversion.
 ///
 /// \code
 ///     using namespace stdc;
 ///
-///     auto msg  = formatN("%1 took %2 ms", name, elapsed);  // arguments carry their own types
+///     auto msg  = formatN("%1 took %2 ms", name, elapsed);  // each argument keeps its type
 ///     auto head = str::trim(str::split(line, ",").front());
 ///     auto path = str::join({"usr", "local", "bin"}, "/");
-///     auto full = str::varexp("${HOME}/config", env);       // ${VAR}, nested, $$ escapes
+///     auto full = str::varexp("${HOME}/config", env);       // ${VAR}, nesting, $$ escapes
 /// \endcode
 ///
-/// \c formatN takes anything \c str::to_string handles, which includes \c std::filesystem::path and
-/// wide strings, so there is nothing to convert at the call site.
+/// \c formatN accepts every type that \c str::to_string supports, including
+/// \c std::filesystem::path and wide strings. No conversion is therefore required at the call
+/// site.
 ///
-/// The console writes attributes, and writes UTF-8 that holds up on a Windows console. Whether
-/// escapes are emitted at all is decided per target file, so redirecting to a file gets the text
-/// alone rather than a pile of escape sequences.
+/// The console functions write attributes and write UTF-8 that a Windows console displays
+/// correctly. Whether escape sequences are emitted is determined per target file. Output
+/// redirected to a file therefore contains only the text.
 ///
 /// \code
 ///     console::printf(console::bold, console::lightgreen, console::nocolor, "%d passed\n", n);
 ///     console::warning("%1 is deprecated, use %2", old_name, new_name);
-///     u8println("plain UTF-8, transcoded for the console if it needs it");
+///     u8println("plain UTF-8, transcoded for the console if required");
 ///
-///     // Or with the attributes inside the string rather than beside it.
+///     // Alternatively, the attributes are written inside the string.
 ///     cprintln("${lightgreen}ok ${@blue bold}on blue ${reset}plain, 50$$ off");
 /// \endcode
 ///
-/// \c console::set_color_mode() is where a \c --color=always flag or \c NO_COLOR belongs, and
-/// \c console::width() answers how wide the terminal is.
+/// \c console::set_color_mode() applies a \c --color=always option or the \c NO_COLOR variable,
+/// and \c console::width() returns the width of the terminal.
 ///
-/// The conversions in \ref utf.h are what the rest of this is built on, and they follow the Unicode
-/// substitution rule: one replacement character per ill-formed maximal subpart, not one per byte.
+/// The conversions in \ref utf.h are the basis of this module. They follow the Unicode
+/// substitution rule: one replacement character per maximal subpart of an ill-formed sequence, not
+/// one per byte.
 
 namespace stdc {
 
@@ -98,11 +100,13 @@ namespace stdc {
 
             /// \name UTF-8
             ///
-            /// Text that is not valid in the encoding it claims converts to an empty string.
-            /// Pass \a size for text that is not null terminated.
+            /// Text that is invalid in its encoding converts to an empty string. \a size specifies
+            /// the length of text that is not null-terminated.
             ///
-            /// \sa utf::utf8_to_wide(), utf::wide_to_utf8(), which can put U+FFFD where the bad
-            ///     sequence was instead of giving up on the whole string
+            /// utf::utf8_to_wide() and utf::wide_to_utf8() can instead replace each invalid
+            /// sequence with U+FFFD rather than reject the whole string.
+            ///
+            /// \sa utf::utf8_to_wide(), utf::wide_to_utf8()
             /// @{
 
             STDC_EXPORT static std::wstring from_utf8(const char *s, int size = -1);
@@ -122,8 +126,9 @@ namespace stdc {
 #ifdef _WIN32
             /// \name ANSI
             ///
-            /// The same, against the process code page rather than UTF-8. This is a Windows
-            /// notion and a Windows API call, so it exists only there.
+            /// The same conversions for the process code page instead of UTF-8. The code page is
+            /// a Windows concept that requires a Windows API call. These functions therefore
+            /// exist only on Windows.
             /// @{
 
             STDC_EXPORT static std::wstring from_ansi(const char *s, int size = -1);
@@ -170,11 +175,11 @@ namespace stdc {
                                                                 bool native);
         };
 
-        /// Renders \a t as UTF-8.
+        /// Returns \a t as UTF-8 text.
         ///
-        /// Handles the arithmetic types, \c char and \c wchar_t, and anything \c str::conv has a
-        /// specialization for, which is how formatN() takes a path or a wide string without the
-        /// caller converting first.
+        /// The function supports the arithmetic types, \c char, \c wchar_t, and every type for
+        /// which \c str::conv has a specialization. formatN() therefore accepts a path or a wide
+        /// string without a conversion by the caller.
         template <class T>
         std::string to_string(T &&t) {
             using T1 = std::remove_reference_t<T>;
@@ -202,7 +207,7 @@ namespace stdc {
             }
         }
 
-        /// Concatenates \a v with \a delimiter between the pieces.
+        /// Concatenates the elements of \a v with \a delimiter between them.
         STDC_EXPORT std::string join(const array_view<std::string> &v,
                                      const std::string_view &delimiter);
 
@@ -216,12 +221,12 @@ namespace stdc {
             return join(array_view<std::string_view>(v.begin(), v.size()), delimiter);
         }
 
-        /// Splits \a s on every occurrence of \a delimiter, keeping empty pieces.
+        /// Splits \a s at every occurrence of \a delimiter and keeps empty fields.
         ///
-        /// \return the fields, always at least one. An empty \a s gives one empty field.
-        /// \warning The views point into \a s, which therefore has to outlive them. The overload
-        ///          taking an rvalue \c std::string returns copies instead, since there would be
-        ///          nothing left to point at.
+        /// \return the fields, at least one. An empty \a s produces one empty field.
+        /// \warning The views point into \a s, which must therefore outlive them. The overload
+        ///          that accepts an rvalue \c std::string returns copies instead, because its
+        ///          argument does not outlive the call.
         STDC_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                         const std::string_view &delimiter);
 
@@ -235,16 +240,16 @@ namespace stdc {
             return split(std::string_view(s), delimiter);
         }
 
-        /// Substitutes \c %1, \c %2, ... in \a fmt with \a args, counting from one.
+        /// Replaces \c %1, \c %2, ... in \a fmt with the elements of \a args, counting from one.
         ///
-        /// \note A placeholder with no argument behind it is left as it stands.
+        /// \note A placeholder without a corresponding argument remains unchanged.
         STDC_EXPORT std::string format(const std::string_view &fmt,
                                        const array_view<std::string> &args);
 
-        /// format() with the arguments spelled out, each run through to_string() first.
+        /// Calls format() with the given arguments, each converted by to_string() first.
         ///
-        /// The placeholders are \c %1, \c %2, not printf conversions, so the arguments carry
-        /// their own types and there is no conversion specifier to get wrong.
+        /// The placeholders are \c %1, \c %2 rather than printf conversions. Each argument
+        /// therefore keeps its own type, and no conversion specifier can mismatch it.
         ///
         /// \code
         ///   formatN("%1 took %2 ms", name, elapsed);
@@ -274,15 +279,16 @@ namespace stdc {
             return fmt;
         }
 
-        /// Expands \c ${name} in \a s, asking \a find for each name.
+        /// Expands every \c ${name} in \a s with the value that \a find returns for the name.
         ///
-        /// \c $$ writes one literal \c $, so \c $${A} leaves \c ${A} standing. A \c $ that no
-        /// brace follows is literal on its own. Names nest, and the inner ones resolve first, so
-        /// \c ${${A}_${B}} looks up the name the two of them spell.
+        /// \c $$ writes one literal \c $, so that \c $${A} remains \c ${A}. A \c $ without a
+        /// following brace is literal. Names can be nested, and inner names are expanded first.
+        /// \c ${${A}_${B}} therefore looks up the name that the two expansions form.
         ///
         /// \param s the text to expand
-        /// \param find asked for each name, and returning nothing is how a name goes away
-        /// \return the expanded text, or an empty string if a brace was left unbalanced
+        /// \param find the function that returns the value of each name. An empty value removes
+        ///        the reference from the text.
+        /// \return the expanded text, or an empty string if a brace is unbalanced
         STDC_EXPORT std::string
             varexp(const std::string_view &s,
                    const std::function<std::string(const std::string_view &)> &find);
@@ -313,14 +319,14 @@ namespace stdc {
         /// \defgroup ascii ASCII
         /// \ingroup text
         ///
-        /// Classifying and folding, for the ASCII range and nothing else.
+        /// Classification and case folding, restricted to the ASCII range.
         ///
-        /// The C library's answers follow the current locale, so what a program accepts would
-        /// follow the machine it runs on, and they are undefined for a plain \c char that is
-        /// negative. What this library reads is machine syntax rather than human text, and it
-        /// reads it as UTF-8, where every byte of a character outside ASCII is negative. Folding
-        /// those bytes one at a time is not something that can be made to work, so these leave
-        /// them alone.
+        /// The results of the C library depend on the current locale. The input that a program
+        /// accepts would then depend on the machine on which it runs, and the functions are
+        /// undefined for a negative plain \c char. This library reads machine syntax rather than
+        /// human text, and it reads it as UTF-8, in which every byte of a non-ASCII character is
+        /// negative. Folding these bytes individually cannot produce a correct result. These
+        /// functions therefore leave them unchanged.
         /// @{
 
         constexpr bool is_digit(char c) noexcept {
@@ -377,7 +383,8 @@ namespace stdc {
             return is_alpha(c) || is_digit(c);
         }
 
-        /// Space, tab, newline, vertical tab, form feed or carriage return.
+        /// Returns whether \a c is a space, tab, newline, vertical tab, form feed or carriage
+        /// return.
         constexpr bool is_space(char c) noexcept {
             return c == ' ' || (c >= '\t' && c <= '\r');
         }
@@ -387,7 +394,8 @@ namespace stdc {
             return c == L' ' || (c >= L'\t' && c <= L'\r');
         }
 
-        /// A character that takes a place of its own on the screen, the space included.
+        /// Returns whether \a c occupies a position of its own on the screen, including the
+        /// space.
         constexpr bool is_print(char c) noexcept {
             return c >= ' ' && c < '\x7F';
         }
@@ -397,7 +405,7 @@ namespace stdc {
             return c >= L' ' && c < L'\x7F';
         }
 
-        /// Printable, and neither a letter nor a digit nor the space.
+        /// Returns whether \a c is printable and is neither a letter, a digit, nor the space.
         constexpr bool is_punct(char c) noexcept {
             return is_print(c) && c != ' ' && !is_alnum(c);
         }
@@ -425,7 +433,8 @@ namespace stdc {
             return is_lower(c) ? wchar_t(c - L'a' + L'A') : c;
         }
 
-        /// The value a hexadecimal digit stands for, or -1 where \a c is not one.
+        /// Returns the value of the hexadecimal digit \a c, or -1 if \a c is not a hexadecimal
+        /// digit.
         constexpr int hex_value(char c) noexcept {
             if (is_digit(c)) {
                 return c - '0';
@@ -439,10 +448,10 @@ namespace stdc {
             return -1;
         }
 
-        /// \c strcasecmp() over views, folding the ASCII letters and nothing else.
+        /// Compares two views like \c strcasecmp(), folding only the ASCII letters.
         ///
-        /// \return a negative number, zero, or a positive number, as \a LHS sorts before \a RHS,
-        ///         the same as it, or after it
+        /// \return a negative number if \a LHS sorts before \a RHS, zero if both sort equally, or
+        ///         a positive number if \a LHS sorts after \a RHS
         STDC_EXPORT int compare_insensitive(const std::string_view &LHS,
                                             const std::string_view &RHS);
 
@@ -507,10 +516,10 @@ namespace stdc {
 
     namespace str {
 
-        /// Whether \a s begins with \a prefix.
+        /// Returns whether \a s begins with \a prefix.
         ///
-        /// With \a case_insensitive the ASCII letters of both are folded before comparing, and
-        /// every other byte is left as it is.
+        /// If \a case_insensitive is true, the ASCII letters of both strings are folded before the
+        /// comparison, and every other byte is compared unchanged.
         inline bool starts_with(const std::string_view &s, const std::string_view &prefix,
                                 bool case_insensitive = false) {
             if (case_insensitive) {
@@ -556,10 +565,10 @@ namespace stdc {
             return case_insensitive ? to_lower(s.front()) == to_lower(prefix) : s.front() == prefix;
         }
 
-        /// Whether \a s ends with \a suffix.
+        /// Returns whether \a s ends with \a suffix.
         ///
-        /// With \a case_insensitive the ASCII letters of both are folded before comparing, and
-        /// every other byte is left as it is.
+        /// If \a case_insensitive is true, the ASCII letters of both strings are folded before the
+        /// comparison, and every other byte is compared unchanged.
         inline bool ends_with(const std::string_view &s, const std::string_view &suffix,
                               bool case_insensitive = false) {
             if (case_insensitive) {
@@ -729,10 +738,10 @@ namespace stdc {
             return trim(std::string_view(s), chars);
         }
 
-        /// Whether \a sub appears anywhere in \a s.
+        /// Returns whether \a sub occurs anywhere in \a s.
         ///
-        /// With \a case_insensitive the ASCII letters of both are folded before comparing, and
-        /// every other byte is left as it is.
+        /// If \a case_insensitive is true, the ASCII letters of both strings are folded before the
+        /// comparison, and every other byte is compared unchanged.
         inline bool contains(const std::string_view &s, const std::string_view &sub,
                              bool case_insensitive = false) {
             if (!case_insensitive) {

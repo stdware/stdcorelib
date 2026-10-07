@@ -13,7 +13,7 @@
 
 /// \defgroup platform Platform and system
 ///
-/// What the program can ask about itself and about the machine, answered from the OS rather than
+/// Information about the program and the machine, obtained from the operating system rather than
 /// from \c argv[0].
 ///
 /// \code
@@ -21,14 +21,14 @@
 ///
 ///     auto dir  = system::application_directory();
 ///     auto args = system::command_line_arguments();    // UTF-8, from the wide command line
-///     auto env  = system::environment();               // UTF-8 too, however it is stored
-///     auto text = path::to_utf8(dir / "config.json");  // path::string() is the lossy one
-///     auto tidy = path::clean_path(messy);             // resolves . and .. without touching disk
+///     auto env  = system::environment();               // UTF-8 regardless of the native form
+///     auto text = path::to_utf8(dir / "config.json");  // path::string() can lose characters
+///     auto tidy = path::clean_path(messy);             // resolves . and .. lexically
 /// \endcode
 ///
 /// On Windows, stdc::windows::RegKey and stdc::windows::RegValue read and write the registry. Every
-/// operation comes in two forms: one taking an \c std::error_code and \c noexcept, one without that
-/// throws.
+/// operation exists in two forms: one that accepts an \c std::error_code and is \c noexcept, and
+/// one without it that throws.
 ///
 /// \code
 ///     using namespace stdc::windows;
@@ -51,18 +51,18 @@ namespace stdc {
         /// \name Program location
         /// @{
 
-        /// The executable's own path, taken from the OS rather than from \c argv[0], which the
-        /// parent process is free to have set to anything.
+        /// Returns the path of the executable, obtained from the operating system rather than
+        /// from \c argv[0], which the parent process can set to any value.
         STDC_EXPORT std::filesystem::path application_path();
 
-        /// The directory holding the executable, which is where to look for files shipped
-        /// alongside it.
+        /// Returns the directory that contains the executable. Files distributed with the
+        /// executable are usually located there.
         STDC_EXPORT std::filesystem::path application_directory();
 
-        /// The executable's file name, extension included.
+        /// Returns the file name of the executable, including the extension.
         STDC_EXPORT std::filesystem::path application_filename();
 
-        /// The file name with its extension removed, as UTF-8.
+        /// Returns the file name of the executable without its extension, as UTF-8.
         STDC_EXPORT std::string application_name();
 
         /// @}
@@ -70,49 +70,51 @@ namespace stdc {
         /// \name Command line
         /// @{
 
-        /// The arguments as UTF-8, including \c argv[0].
+        /// Returns the arguments as UTF-8, including \c argv[0].
         ///
-        /// \return a view over storage that lives as long as the process
-        /// \note On Windows these come from the wide command line, so a path \c main() could not
-        ///       spell survives intact.
+        /// \return a view of storage that exists for the lifetime of the process
+        /// \note On Windows, the arguments are read from the wide command line. A path that the
+        ///       narrow arguments of \c main() cannot represent is therefore preserved.
         STDC_EXPORT array_view<std::string> command_line_arguments();
 
-        /// Splits \a command the way the host would, undoing the quoting that
+        /// Splits \a command in the same way as the host platform, reversing the quoting that
         /// join_command_line() applies.
         ///
         /// \sa join_command_line()
         STDC_EXPORT std::vector<std::string> split_command_line(const std::string_view &command);
 
-        /// Joins \a args into one command line, quoting each so that the receiving program takes
-        /// it apart into the same pieces.
+        /// Joins \a args into one command line and quotes each argument, so that the receiving
+        /// program splits the line into the same arguments.
         ///
         /// \sa split_command_line()
         STDC_EXPORT std::string join_command_line(const std::vector<std::string> &args);
 
-        /// Whether \a args is short enough for the system to start a program with.
+        /// Returns whether \a args is short enough for the system to start a program with it.
         ///
-        /// Windows builds one string for \c CreateProcess and refuses it past 32767 characters,
-        /// so this quotes \a args the way a process launcher would and measures what comes out
-        /// rather than guessing at it. POSIX counts the arguments and the environment together
-        /// against \c ARG_MAX, so half of it is left for the environment, and no single argument
-        /// may reach the 128 KiB one of its own that Linux imposes.
+        /// Windows builds one string for \c CreateProcess and rejects it beyond 32767
+        /// characters. This function therefore quotes \a args in the same way as a process
+        /// launcher and measures the result rather than estimating it. POSIX counts the
+        /// arguments and the environment together against \c ARG_MAX. The function therefore
+        /// reserves half of that limit for the environment, and no single argument may reach the
+        /// per-argument limit of 128 KiB that Linux imposes.
         ///
-        /// This is what a response file is for. A build system generating one long command line
-        /// asks this first, and writes the arguments to a file and passes \c \@file instead when
-        /// the answer is no.
+        /// A build system that generates a long command line calls this function first. If the
+        /// function returns false, the build system writes the arguments to a response file and
+        /// passes \c \@file instead.
         ///
-        /// \note What Windows counts is the UTF-16 these become, and UTF-8 is never shorter
-        ///       than the UTF-16 of the same text, so counting bytes here can only refuse a
-        ///       line the system would have taken. It never accepts one the system would
-        ///       refuse, which is the direction that matters.
-        /// \note A yes is not a promise that starting the program will succeed, only that it
-        ///       will not fail for this reason. Both limits are approached conservatively.
-        /// \sa cli::Parser::EnableResponseFile, which is the other end of the same problem
+        /// \note Windows counts the UTF-16 code units of the converted arguments, and UTF-8 is
+        ///       never shorter than the UTF-16 form of the same text. Counting bytes can
+        ///       therefore reject a line that the system accepts, but it never accepts a line
+        ///       that the system rejects, which is the relevant direction.
+        /// \note A return value of true does not guarantee that the program starts, only that
+        ///       the start does not fail because of the length. Both limits are applied
+        ///       conservatively.
+        /// \sa cli::Parser::EnableResponseFile
         STDC_EXPORT bool command_line_fits(const std::vector<std::string> &args);
 
         /// @}
 
-        /// The environment of the current process, as UTF-8.
+        /// Returns the environment of the current process as UTF-8.
         STDC_EXPORT std::map<std::string, std::string> environment();
 
     }

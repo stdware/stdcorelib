@@ -48,16 +48,16 @@ namespace stdc {
     template <class F>
     scope_guard(F (&)()) -> scope_guard<F (*)()>;
 
-    /// A scope_guard over \a f, deducing what to hold it as.
+    /// Returns a scope_guard that calls \a f, with the stored type deduced from \a f.
     ///
     /// \code
     ///   auto guard = stdc::make_scope_guard([&] { std::fclose(file); });
     ///   ...
-    ///   guard.dismiss(); // where the close is no longer wanted
+    ///   guard.dismiss(); // if the file must remain open
     /// \endcode
     ///
-    /// \note Nodiscard, since a guard nobody keeps is destroyed at the end of the full
-    ///       expression and runs \a f there rather than at the end of the scope.
+    /// \note The function is nodiscard, because a guard that is not stored is destroyed at the
+    ///       end of the full expression and calls \a f there rather than at the end of the scope.
     template <typename F>
     [[nodiscard]] scope_guard<typename std::decay<F>::type> make_scope_guard(F &&f) {
         return scope_guard<typename std::decay<F>::type>(std::forward<F>(f));

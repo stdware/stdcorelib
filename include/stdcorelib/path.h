@@ -15,10 +15,11 @@ namespace stdc {
 
     namespace path {
 
-        /// Builds a path from UTF-8.
+        /// Returns the path that the UTF-8 string \a s denotes.
         ///
-        /// \note \c std::filesystem::path reads a narrow string in the ANSI code page on
-        ///       Windows, which mangles anything outside it. Go through here instead.
+        /// \note On Windows, \c std::filesystem::path interprets a narrow string in the ANSI code
+        ///       page and corrupts every character outside it. This function avoids that
+        ///       conversion.
         inline std::filesystem::path from_utf8(const std::string_view &s) {
 #ifdef _WIN32
             return wstring_conv::from_utf8(s);
@@ -27,7 +28,7 @@ namespace stdc {
 #endif
         }
 
-        /// The other direction. \c path::string() is the lossy one on Windows, for the same
+        /// Returns \a path as UTF-8. On Windows, \c path::string() loses characters for the same
         /// reason.
         inline std::string to_utf8(const std::filesystem::path &path) {
 #ifdef _WIN32
@@ -45,24 +46,26 @@ namespace stdc {
 #endif
         }
 
-        /// \c std::filesystem::canonical without the throw.
+        /// Returns the canonical form of \a path like \c std::filesystem::canonical, without
+        /// throwing. The function reads the file system and resolves symbolic links.
         ///
-        /// \return the resolved path, or an empty one on failure
-        /// \pre \a path exists. This one reads the file system and resolves symlinks.
-        /// \sa clean_path(), which does not
+        /// \return the resolved path, or an empty path on failure
+        /// \pre \a path exists.
+        /// \sa clean_path()
         inline std::filesystem::path canonical(const std::filesystem::path &path) {
             std::error_code ec;
             return std::filesystem::canonical(path, ec);
         }
 
-        /// Resolves <tt>\.</tt> and <tt>\.\.</tt> lexically, without reading the file system, so
-        /// it works on a path that does not exist.
+        /// Resolves <tt>\.</tt> and <tt>\.\.</tt> lexically, without reading the file system. The
+        /// function therefore also accepts a path that does not exist.
         ///
-        /// \warning A symlink followed by \c .. therefore lands somewhere canonical() would not,
-        ///          since the lexical answer ignores where the link actually pointed.
+        /// \warning For a symbolic link followed by \c .., the result can differ from the result
+        ///          of canonical(), because the lexical resolution ignores the target of the link.
         STDC_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
 
-        /// Rewrites the separators as \c /, or as the platform's own when \a native is set.
+        /// Returns \a path with every separator written as \c /, or as the native separator if
+        /// \a native is true.
         inline std::string normalize_separators(const std::filesystem::path &path,
                                                 bool native = false) {
             return str::conv<std::filesystem::path>::normalize_separators(to_utf8(path), native);

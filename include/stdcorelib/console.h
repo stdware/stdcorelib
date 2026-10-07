@@ -26,11 +26,12 @@ namespace stdc {
 
         /// The eight base colors, each with a brighter variant.
         ///
-        /// Unlike \ref style these do not combine. Pass one, not a bitwise or of several.
-        /// \c intensified is the exception, being the bit the \c light names already carry.
+        /// Unlike \ref style, colors do not combine. A parameter accepts one color, not a bitwise
+        /// or of several colors. \c intensified is the exception, because it is the bit that the
+        /// \c light names already contain.
         enum color {
-            nocolor = 0,        ///< leave the terminal's own color alone
-            intensified = 0x10, ///< the brightness bit, on its own
+            nocolor = 0,        ///< the current color of the terminal, unchanged
+            intensified = 0x10, ///< the brightness bit alone
 
             red = 0x1,
             green = 0x2,
@@ -53,31 +54,31 @@ namespace stdc {
         /// \name Color mode
         /// @{
 
-        /// How styling reaches the target.
+        /// The method by which styling is applied to the target.
         enum color_mode {
-            automatic,      ///< decide per target, styling it only when it is a terminal
-            never,          ///< never emit styling, whatever the target
-            vt,             ///< always emit ANSI escape sequences
-            windows_legacy, ///< always drive the Windows console API, meaning \c never elsewhere
+            automatic,      ///< determined per target, with styling only for a terminal
+            never,          ///< no styling for any target
+            vt,             ///< ANSI escape sequences for every target
+            windows_legacy, ///< the Windows console API, equivalent to \c never elsewhere
         };
 
-        /// Returns the mode the process is set to.
+        /// Returns the mode set for the process.
         /// \sa set_color_mode()
         STDC_EXPORT color_mode get_color_mode();
 
-        /// Overrides the mode process wide.
+        /// Overrides the mode for the whole process.
         ///
-        /// This is where a \c --color=always or \c NO_COLOR flag belongs.
+        /// A program applies a \c --color=always option or the \c NO_COLOR variable here.
         ///
-        /// \param mode the mode to force, or \c automatic to go back to deciding per target
-        /// \note Also drops what has been detected about the targets seen so far. Call this again
-        ///       with the current mode after a \c freopen() to force them to be probed anew.
+        /// \param mode the mode to force, or \c automatic to restore detection per target
+        /// \note The function also discards the detection results for the targets seen so far.
+        ///       After a \c freopen(), calling it again with the current mode forces the targets
+        ///       to be detected anew.
         STDC_EXPORT void set_color_mode(color_mode mode);
 
-        /// Returns the mode that will actually be used for \a file.
+        /// Returns the mode used for \a file.
         ///
-        /// \param file the target to resolve against, which is probed on the first call and
-        ///        remembered afterwards
+        /// \param file the target, which is examined on the first call and cached afterwards
         /// \return one of \c never, \c vt or \c windows_legacy, never \c automatic
         STDC_EXPORT color_mode resolve_color_mode(FILE *file);
 
@@ -86,27 +87,27 @@ namespace stdc {
         /// \name Geometry
         /// @{
 
-        /// How many columns wide the terminal behind \a file is.
+        /// Returns the width in columns of the terminal behind \a file.
         ///
-        /// \param file the target to ask about
-        /// \param fallback what to answer when there is no terminal there to ask, which is what
-        ///        a pipe and a file get
-        /// \note Asked afresh every call rather than remembered, since a terminal is resized
-        ///       while the program using it runs.
-        /// \note \c COLUMNS wins where it is set, which is how a shell says so and the only say
-        ///       a caller has when the output is not going to a terminal at all.
+        /// \param file the target
+        /// \param fallback the result if no terminal is behind \a file, as for a pipe or a file
+        /// \note The width is queried on every call rather than cached, because a terminal can be
+        ///       resized while the program runs.
+        /// \note \c COLUMNS takes precedence if it is set. It is the variable through which a
+        ///       shell reports the width, and the only means for a caller to specify the width
+        ///       if the output is not a terminal.
         STDC_EXPORT int width(FILE *file = stdout, int fallback = 80);
 
-        /// How many columns \a utf8 takes up when written to a terminal.
+        /// Returns the number of columns that \a utf8 occupies on a terminal.
         ///
-        /// Neither its length in bytes nor its length in characters: one CJK ideograph occupies
-        /// two columns, and a combining mark occupies none.
+        /// The result is neither the length in bytes nor the length in characters. A CJK
+        /// ideograph occupies two columns, and a combining mark occupies none.
         STDC_EXPORT int display_width(const std::string_view &utf8);
 
         /// \overload
         ///
-        /// For one code point, so that text can be measured while it is being walked rather than
-        /// a character at a time through the string form.
+        /// This overload measures one code point, so that text can be measured during a traversal
+        /// rather than one character at a time through the string form.
         STDC_EXPORT int display_width(char32_t c);
 
         /// @}
@@ -114,30 +115,31 @@ namespace stdc {
         /// \name General output
         /// @{
 
-        /// Writes \a buf to \a file with the given attributes, then puts them back.
+        /// Writes \a buf to \a file with the given attributes and then restores the previous
+        /// attributes.
         ///
-        /// The string is taken as UTF-8 and transcoded for a Windows console.
+        /// The string is interpreted as UTF-8 and transcoded for a Windows console.
         ///
         /// \param style a bitwise or of \ref style values, or \c nostyle
         /// \param fg one \ref color value, or \c nocolor
-        /// \param bg likewise, for the background
-        /// \param buf the text, which is written whether or not the attributes are
+        /// \param bg one \ref color value for the background, or \c nocolor
+        /// \param buf the text, which is written whether or not the attributes are applied
         /// \param file the target
-        /// \return the number of bytes of \a buf written, escape sequences not counted
-        /// \note Whether the attributes are emitted at all rests on resolve_color_mode() for
-        ///       \a file, so a redirected stream receives the text alone.
+        /// \return the number of bytes of \a buf written, excluding escape sequences
+        /// \note resolve_color_mode() for \a file determines whether the attributes are emitted.
+        ///       A redirected stream therefore receives only the text.
         STDC_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
 
         /// \overload
         STDC_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf, FILE *file);
 
-        /// Like fputs(), to \c stdout and followed by a newline.
+        /// Writes \a buf to \c stdout like fputs() and appends a newline.
         STDC_EXPORT int puts(int style, int fg, int bg, const char *buf);
 
         /// \overload
         STDC_EXPORT int puts(int style, int fg, int bg, const std::string_view &buf);
 
-        /// Like fputs(), with printf-style formatting.
+        /// Writes like fputs(), with printf-style formatting.
         STDC_EXPORT int fprintf(int style, int fg, int bg, FILE *file, const char *fmt, ...)
             STDC_PRINTF_FORMAT(5, 6);
 
@@ -149,7 +151,7 @@ namespace stdc {
 
         STDC_EXPORT int vprintf(int style, int fg, int bg, const char *fmt, va_list args);
 
-        /// Like fputs(), with formatN() placeholders (\c %1, \c %2, ...) rather than printf
+        /// Writes like fputs(), with formatN() placeholders (\c %1, \c %2, ...) rather than printf
         /// conversions.
         /// \sa formatN()
         template <class... Args>
@@ -174,10 +176,10 @@ namespace stdc {
         /// \name Plain output
         /// @{
 
-        /// The same writers with no attributes at all.
+        /// Writes \a buf to \a file without attributes.
         ///
-        /// \note Still worth preferring over \c std::fputs on Windows, where the console needs
-        ///       UTF-8 text transcoded before it will render.
+        /// \note The function is preferable to \c std::fputs on Windows, because the console
+        ///       renders UTF-8 text correctly only after transcoding.
         inline int u8fputs(const char *buf, FILE *file) {
             return console::fputs(nostyle, nocolor, nocolor, buf, file);
         }
@@ -224,11 +226,11 @@ namespace stdc {
         /// \name Messages
         /// @{
 
-        /// One line each in a conventional color, for programs that want the four usual
-        /// severities without picking colors themselves.
+        /// Writes one line in the conventional color of a severity, for a program that requires
+        /// the four usual severities without choosing colors itself.
         ///
-        /// All four go to \c stdout. For severities that route by destination, and for category
-        /// filtering, use the logging facility instead.
+        /// All four functions write to \c stdout. Severities with separate destinations and
+        /// filtering by category are provided by the logging facility.
         ///
         /// \sa formatN(), stdc::Logger
         template <class... Args>
@@ -264,48 +266,51 @@ namespace stdc {
         /// \name Inline color markup
         /// @{
 
-        /// Writes \a buf, reading \c ${...} as attribute changes rather than as text.
+        /// Writes \a buf and interprets \c ${...} as attribute changes rather than as text.
         ///
-        /// The alternative to threading \a style, \a fg and \a bg arguments through every call.
-        /// A group holds one or more names separated by spaces, and \c $$ writes a literal \c $.
-        /// Nested \c ${...} names are not supported and are ignored.
+        /// The markup is an alternative to passing \a style, \a fg and \a bg to every call. A group
+        /// contains one or more names separated by spaces, and \c $$ writes a literal \c $.
+        /// Nested \c ${...} groups are not supported and are ignored.
         /// The names are:
         ///   \li a color: \c red, \c green, \c blue, \c yellow, \c purple, \c cyan, \c white,
         ///       \c black or \c nocolor, each also available with a \c light prefix
-        ///   \li the same again behind \c @, which sets the background instead of the foreground
+        ///   \li a color preceded by \c @, which sets the background instead of the foreground
         ///   \li a style: \c bold, \c italic, \c underline, \c strikethrough or \c nostyle
-        ///   \li \c intensified, or \c \@intensified, to brighten whichever color is in effect
-        ///   \li \c reset, or \c clear, to drop back to plain text
+        ///   \li \c intensified or \c \@intensified, which brightens the current color
+        ///   \li \c reset or \c clear, which restores plain text
         ///
-        /// \param buf the text and the markup within it
+        /// \param buf the text and its markup
         /// \param file the target
-        /// \return the number of bytes written, the markup and any escape sequences not counted
-        /// \note A name that is none of the above is dropped and changes nothing, so a typo
-        ///       costs the styling rather than the text.
-        /// \note Attributes start out plain on every call and are restored when it returns, so
-        ///       they never leak into what is written next.
+        /// \return the number of bytes written, excluding the markup and any escape sequences
+        /// \note An unknown name is discarded and has no effect. A misspelled name therefore
+        ///       loses the styling rather than the text.
+        /// \note The attributes are plain at the start of every call and are restored when the
+        ///       call returns. They therefore never affect subsequent output.
         ///
         /// \code
         ///   cprintln("${lightgreen}ok ${@blue bold}on blue ${reset}plain, 50$$ off");
         /// \endcode
         ///
-        /// \sa fputs(), which takes the same attributes as arguments
+        /// fputs() accepts the same attributes as arguments.
+        ///
+        /// \sa fputs()
         STDC_EXPORT int cfputs(const char *buf, FILE *file);
 
         /// \overload
         STDC_EXPORT int cfputs(const std::string_view &buf, FILE *file);
 
-        /// Like cfputs(), to \c stdout and followed by a newline.
+        /// Writes \a buf to \c stdout like cfputs() and appends a newline.
         STDC_EXPORT int cputs(const char *buf);
 
         /// \overload
         STDC_EXPORT int cputs(const std::string_view &buf);
 
-        /// Like cfputs(), with printf-style formatting.
+        /// Writes like cfputs(), with printf-style formatting.
         ///
-        /// \warning The markup is read after the formatting, so a \c %s expanding to text that
-        ///          holds \c ${ or \c $$ has it eaten rather than printed. Write text you do not
-        ///          control with u8fprintf() instead.
+        /// \warning The markup is interpreted after the formatting. If a \c %s expands to text
+        ///          that contains \c ${ or \c $$, that text is interpreted as markup rather than
+        ///          printed. Text from an untrusted or unknown source must therefore be written
+        ///          with u8fprintf().
         STDC_EXPORT int cfprintf(FILE *file, const char *fmt, ...) STDC_PRINTF_FORMAT(2, 3);
 
         STDC_EXPORT int cvfprintf(FILE *file, const char *fmt, va_list args);
@@ -314,7 +319,7 @@ namespace stdc {
 
         STDC_EXPORT int cvprintf(const char *fmt, va_list args);
 
-        /// Like cfputs(), with formatN() placeholders (\c %1, \c %2, ...).
+        /// Writes like cfputs(), with formatN() placeholders (\c %1, \c %2, ...).
         template <class... Args>
         inline int cprint(const std::string_view &format, Args &&...args) {
             return cfputs(formatN(format, std::forward<Args>(args)...), stdout);

@@ -86,7 +86,7 @@ namespace stdc::pimpl::detail {
 /// The class stores its implementation in an \c _impl raw pointer, \c std::unique_ptr, or
 /// \c std::shared_ptr. The macro declares the reference as \c impl. These names can be changed
 /// with \c STDC_PIMPL_IMPL_MEMBER_VAR_NAME and \c STDC_PIMPL_IMPL_LOCAL_VAR_NAME. The reference
-/// is const when the member function is const.
+/// is const if the member function is const.
 ///
 /// \code
 ///     class Library {
@@ -114,7 +114,7 @@ namespace stdc::pimpl::detail {
 ///
 /// The implementation class names the public type as \c Decl and stores its address in \c _decl.
 /// The member and local reference names can be changed with \c STDC_PIMPL_DECL_MEMBER_VAR_NAME
-/// and \c STDC_PIMPL_DECL_LOCAL_VAR_NAME. The reference is const when the implementation member
+/// and \c STDC_PIMPL_DECL_LOCAL_VAR_NAME. The reference is const if the implementation member
 /// function is const.
 ///
 /// \code
