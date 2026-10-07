@@ -22,13 +22,15 @@ namespace stdc::windows {
     /// \addtogroup platform
     /// @{
 
-    /// A registry value together with its type, holding the data rather than pointing at it.
+    /// A registry value together with its type. The object stores a copy of the data rather than
+    /// a reference to it.
     ///
-    /// A value that failed to load has type \c Invalid, which isValid() reports.
+    /// A value that failed to load has the type \c Invalid, which isValid() reports.
     ///
-    /// \warning The \c toXxx() readers do not convert between types. Reading against the wrong
-    ///          one hands back a default, meaning 0 or an empty string, and says nothing went
-    ///          wrong, so check with isInt64(), isString() and the rest first.
+    /// \warning The \c toXxx() readers do not convert between types. A reader that does not match
+    ///          the type returns a default value, which is 0 or an empty string, and reports no
+    ///          error. The caller must therefore check the type with isInt64(), isString() or
+    ///          the other type queries first.
     class STDC_EXPORT RegValue {
     public:
         enum Type {
@@ -72,14 +74,14 @@ namespace stdc::windows {
             return t;
         }
 
-        /// The stored bytes, or an empty vector when this is not binary.
+        /// Returns the stored bytes, or an empty vector if the value is not binary.
         const std::vector<uint8_t> &toBinary() const;
         int32_t toInt32() const;
         inline uint32_t toUInt32() const;
         int64_t toInt64() const;
         inline uint64_t toUInt64() const;
         const std::wstring &toString() const;
-        /// The stored strings, or an empty vector when this is not a string list.
+        /// Returns the stored strings, or an empty vector if the value is not a string list.
         const std::vector<std::wstring> &toStringList() const;
         std::wstring toExpandString() const;
         std::wstring toLink() const;
@@ -191,17 +193,17 @@ namespace stdc::windows {
             RegValue value;
         };
 
-        /// Adopts an existing \c HKEY.
+        /// Constructs a key that wraps an existing \c HKEY.
         ///
         /// \param hkey the handle to wrap, or null for an invalid key
-        /// \param owns whether the destructor closes it, so wrapping a handle somebody else
-        ///        manages is safe
+        /// \param owns whether the destructor closes the handle. A handle that other code manages
+        ///        can therefore be wrapped safely.
         inline RegKey(HKEY hkey = nullptr, bool owns = false) noexcept : _hkey(hkey), _owns(owns) {
         }
 
-        /// One of the predefined roots.
+        /// Constructs a key for one of the predefined roots.
         ///
-        /// \note These are never closed, since they do not belong to us.
+        /// \note A predefined root is never closed, because the process does not own it.
         RegKey(ReservedKey key) noexcept;
 
         ~RegKey();
@@ -214,9 +216,9 @@ namespace stdc::windows {
             return _hkey;
         }
 
-        /// Hands the handle over and gives up ownership.
+        /// Releases ownership of the handle and returns it.
         ///
-        /// \return the handle, which the caller is now responsible for closing
+        /// \return the handle, which the caller must close
         inline HKEY take() {
             HKEY hkey = _hkey;
             _hkey = nullptr;
@@ -228,16 +230,16 @@ namespace stdc::windows {
             return _hkey != nullptr;
         }
 
-        /// Opens a subkey below this one.
+        /// Opens a subkey of this key.
         ///
-        /// \param path the subkey, relative to this one
+        /// \param path the subkey, relative to this key
         /// \param access a bitwise or of \ref DesiredAccess values
-        /// \return the subkey, owning its handle and closing it when it goes out of scope. Check
-        ///         isValid() to see whether it opened.
+        /// \return the subkey, which owns its handle and closes it at the end of its lifetime.
+        ///         isValid() indicates whether the subkey was opened.
         /// \throws std::system_error from the overload that takes no \a ec
-        /// \note Every operation on this class comes in these two forms. The one taking an \a ec
-        ///       sets it to the failure reason and is \c noexcept, the one without throws. Only
-        ///       the \a ec form is there in a translation unit compiled without exceptions.
+        /// \note Every operation of this class exists in these two forms. The form with \a ec
+        ///       sets it to the reason of a failure and is \c noexcept. The form without \a ec
+        ///       throws. A translation unit compiled without exceptions has only the \a ec form.
 #ifdef STDC_HAS_EXCEPTIONS
         inline RegKey open(const std::wstring &path, int access = DA_Read);
 #endif
@@ -345,7 +347,7 @@ namespace stdc::windows {
             using pointer = const value_type *;
             using reference = const value_type &;
 
-            // default constructor creates an invalid iterator
+            // Constructs an invalid iterator.
             inline key_iterator() noexcept : _key(nullptr), _ec(nullptr), _index(0), _count(0) {
             }
 
@@ -418,8 +420,8 @@ namespace stdc::windows {
             }
 
         private:
-            // Not noexcept: fetch() reads the first entry, and the form with no \a ec reports a
-            // failure by throwing.
+            // The constructor is not noexcept, because fetch() reads the first entry, and the form
+            // without ec reports a failure by throwing.
             inline key_iterator(const RegKey *key, int index, int count, std::error_code *ec)
                 : _key(key), _ec(ec), _index(index), _count(count) {
                 fetch();
@@ -492,7 +494,7 @@ namespace stdc::windows {
             using pointer = const value_type *;
             using reference = const value_type &;
 
-            // default constructor creates an end iterator
+            // Constructs an end iterator.
             inline value_iterator() noexcept
                 : _key(nullptr), _ec(nullptr), _query(false), _index(0), _count(0) {
             }
@@ -566,7 +568,8 @@ namespace stdc::windows {
             }
 
         private:
-            // Not noexcept, for the same reason as key_iterator's.
+            // The constructor is not noexcept, for the same reason as the constructor of
+            // key_iterator.
             inline value_iterator(const RegKey *key, int index, int count, std::error_code *ec,
                                   bool query)
                 : _key(key), _ec(ec), _query(query), _index(index), _count(count) {
@@ -631,16 +634,18 @@ namespace stdc::windows {
             bool _query;
         };
 
-        /// A range over the subkeys, readable with a range-for or through its random access
-        /// iterators.
+        /// Returns a range over the subkeys, for use in a range-based for loop or through its
+        /// random access iterators.
         ///
-        /// Each step reads the next name from the registry rather than from a snapshot, so the
-        /// range is only worth walking once.
+        /// Each step reads the next name from the registry rather than from a snapshot. The range
+        /// is therefore intended for a single traversal.
         ///
-        /// \warning An error stops the traversal where it stands and the loop simply ends, so a
-        ///          partial listing reads exactly like a complete one. Check \a ec after the
-        ///          loop, not inside it.
-        /// \warning The range borrows this key and, when supplied, \a ec. Both must outlive it.
+        /// \warning An error ends the traversal at its current position, and the loop ends
+        ///          without any other indication. A partial listing therefore cannot be
+        ///          distinguished from a complete one inside the loop. The caller checks \a ec
+        ///          after the loop.
+        /// \warning The range refers to this key and, if given, to \a ec. Both must outlive the
+        ///          range.
         ///
         /// \code
         ///   std::error_code ec;
@@ -665,11 +670,12 @@ namespace stdc::windows {
         }
         key_enumerator enumKeys(std::error_code &ec) const && = delete;
 
-        /// The same over the values.
+        /// Returns a range over the values, with the same error handling as enumKeys().
         ///
-        /// \param query whether to read each value along with its name, which costs a second
-        ///        registry call per entry and is wasted when only the names are wanted
-        /// \sa enumKeys(), for the error handling this shares
+        /// \param query whether to read each value together with its name. Reading the value
+        ///        costs a second registry call per entry, which is unnecessary if only the names
+        ///        are required.
+        /// \sa enumKeys()
 #ifdef STDC_HAS_EXCEPTIONS
         inline value_enumerator enumValues(bool query = false) const & {
             return value_enumerator(this, query);
@@ -696,9 +702,9 @@ namespace stdc::windows {
 
     /// @}
 
-    // Everything below is a definition of something declared above, and sits outside the group
-    // on purpose. A member defined out of line inside a group block is listed as a function of
-    // the group, beside the classes rather than under the one it belongs to.
+    // The definitions below belong to declarations above and are deliberately placed outside the
+    // group. Doxygen lists a member defined out of line inside a group block as a function of the
+    // group, next to the classes rather than under its own class.
 
     inline RegValue::RegValue(const uint8_t *data, int size)
         : RegValue(array_view<uint8_t>(data, size)) {
@@ -728,10 +734,10 @@ namespace stdc::windows {
         return result;
     }
 
-    // The overloads that report a failure by throwing, which is every one below. An inline
-    // function that is not a template is compiled in every translation unit that includes it,
-    // called or not, so leaving these here without exceptions does not merely make them
-    // unusable, it stops the header compiling at all.
+    // The overloads below report a failure by throwing. An inline function that is not a template
+    // is compiled in every translation unit that includes it, whether or not it is called. Without
+    // exceptions, these overloads would therefore prevent the header from compiling, not only be
+    // unusable.
 #ifdef STDC_HAS_EXCEPTIONS
 
     inline RegKey RegKey::open(const std::wstring &path, int access) {

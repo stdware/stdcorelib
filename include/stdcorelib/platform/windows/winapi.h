@@ -44,7 +44,7 @@ namespace stdc::winapi {
     };
 
     struct STDC_EXPORT user32 {
-        // To be added...
+        // Functions are added as required.
     };
 
 }
