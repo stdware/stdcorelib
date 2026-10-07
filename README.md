@@ -4,9 +4,9 @@ Portable C++ Application Infrastructure.
 
 ## Introduction
 
-Most of it exists because the answer differs between Windows and the rest of the world: console color, UTF-8 that survives a Windows console, launching a child process, loading a shared object. The rest is a handful of containers and utilities that kept getting rewritten.
+Most components exist because their implementation differs between Windows and other platforms: console color, UTF-8 output on a Windows console, starting a child process, and loading a shared object. The remaining components are containers and utilities that projects otherwise reimplement repeatedly.
 
-Header-only where it can be, compiled where it has to be. No dependencies beyond the standard library, and Boost.Test for the test suite alone.
+Components are header-only if possible and compiled otherwise. The library depends only on the standard library. The test suite additionally requires Boost.Test.
 
 ## Requirements
 
@@ -46,21 +46,21 @@ target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 
 | Component | |
 | --- | --- |
-| Command line | Declaring what a program takes, and reading back what it was given |
-| Processes and libraries | Starting a child process, loading a shared object |
-| Text | Strings, formatting, the console, UTF conversion |
+| Command line | Declaration of the command line syntax, and access to the parsed values |
+| Processes and libraries | Child processes and shared libraries |
+| Text | Strings, formatting, console output, UTF conversion |
 | Containers and views | `array_view`, `vlarray`, `linked_map`, `any` |
-| Type identity | Naming a type without RTTI, and registries built on that |
+| Type identity | Type names without RTTI, and registries based on them |
 | Logging | Named categories with per-level switches and filter rules |
-| JSON and CBOR | One tree, both encodings |
+| JSON and CBOR | One document tree with both encodings |
 | Platform and system | Program and machine information, the Windows registry |
 | Utilities | Flags, scope guards, version numbers |
 
-Each carries its own description and an example. Build the `stdcorelib_docs` target with `-DSTDC_BUILD_DOCS=ON`, or read the headers, which is where that text lives.
+The documentation of each component, including an example, is in its header. The `stdcorelib_docs` target, enabled with `-DSTDC_BUILD_DOCS=ON`, generates the same documentation as HTML.
 
 ## Credits
 
-Code derived from these is cited where it is used:
+Code derived from the following projects is cited at the place of use:
 
 - [CPython](https://github.com/python/cpython)
 - [qtbase](https://github.com/qt/qtbase)

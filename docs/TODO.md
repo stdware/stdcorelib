@@ -1,19 +1,19 @@
 # Status
 
-Released as v1.1.0.0, and used by qmsetup's `qmcorecmd`. What the version promises is written down: the headers stay source compatible across a major version, and the soname carries the minor as well, so a minor bump is free to change what the binary exports.
+Released as v1.1.0.0 and used by `qmcorecmd` of qmsetup. The headers remain source compatible within a major version, and the soname includes the minor version. A minor version may therefore change the symbols that the binary exports.
 
 ## Known gaps
 
-- `vlarray::get_allocator()` returns a `const` reference to the allocator it holds. A standard container answers by value, and there is nothing about an allocator that wants borrowing.
-- `support/commandline.h` is over a thousand lines of inline code, paid for by every translation unit that includes it
-- `DynamicRegistry::remove_listener()` waits for every notification in flight, not only the ones that reach the listener being removed. It is safe and it is conservative: with other threads registering steadily the count may not be seen at zero, and there is no timeout, so a caller can be made to wait far longer than the callbacks it actually has to outlive. A per-listener count, or a generation number, would bound it.
-- `processMemoryUsage()` in `src/system.cpp` has never had a caller. It is `[[maybe_unused]] static`, is declared in no header, and carries `<Psapi.h>` and `<mach/mach.h>` in with it. Either delete it or promote it to `system::` with a comment and a case, since nothing can cover it as it stands.
+- `vlarray::get_allocator()` returns a `const` reference to the stored allocator. A standard container returns its allocator by value, and no property of an allocator requires returning a reference.
+- `support/commandline.h` contains more than a thousand lines of inline code, which every translation unit that includes the header compiles.
+- `DynamicRegistry::remove_listener()` waits for every notification in progress, not only for the notifications that reach the listener being removed. This behavior is safe but conservative. If other threads register continuously, the count may never be observed at zero, and no timeout exists. A caller can therefore wait far longer than the callbacks that it must outlive. A per-listener count or a generation number would bound the wait.
+- `processMemoryUsage()` in `src/system.cpp` has no caller. It is `[[maybe_unused]] static`, is declared in no header, and requires `<Psapi.h>` and `<mach/mach.h>`. It should be either deleted or promoted to `system::` with documentation and a test, because no test can cover it in its current form.
 
 ## Wanted
 
-- Mutually exclusive option groups for `cli`, so that `--json` and `--xml` can rule each other out. SysCmdLine's version of this interacts with its option priority ladder, so decide what the semantics should be rather than copying its shape.
-- `communicate()` on **Windows** starts one worker thread per open pipe, and with a single pipe there is nothing to interleave with, so the thread is only there to make a timeout interruptible. CPython skips it in that case (`Lib/subprocess.py:1199`, at most one pipe and no timeout). POSIX here has nothing to fix: it is one `poll()` loop and no threads, which is what CPython does on that side too. Probably not worth doing at all, since a thread costs tens of microseconds against the milliseconds of `CreateProcessW` beside it, and it buys a second path through the one function in this library whose deadlock reasoning is subtle. Measure before writing it.
+- Mutually exclusive option groups for `cli`, so that `--json` and `--xml` can exclude each other. The SysCmdLine implementation of this feature interacts with its option priority levels. The semantics should therefore be designed rather than copied.
+- On **Windows**, `communicate()` starts one worker thread per open pipe. With a single pipe, no interleaving is required, and the thread exists only to make a timeout interruptible. CPython omits the thread in that case (`Lib/subprocess.py:1199`, at most one pipe and no timeout). The POSIX implementation requires no change, because it is one `poll()` loop without threads, as in CPython. The change is probably not worthwhile. A thread costs tens of microseconds compared with the milliseconds of `CreateProcessW`, and the change adds a second code path to the function of this library with the most subtle deadlock reasoning. A measurement must precede any implementation.
 
 ## Unverified
 
-- `console::width()` reading a Windows console is checked against the console the suite is attached to, and skipped where there is none. That it reads the visible window rather than the scrollback buffer is not: Windows Terminal gives the buffer the same width as the window, so reading `dwSize.X` instead passes, measured. It would fail on a console whose buffer somebody widened, which is the case the code is written for.
+- On Windows, `console::width()` is tested against the console to which the test suite is attached, and the test is skipped if no console exists. The test does not verify that the function reads the visible window rather than the scrollback buffer. Windows Terminal gives the buffer the same width as the window, and a measurement showed that an implementation reading `dwSize.X` also passes. Such an implementation fails only on a console whose buffer a user has widened, which is the case that the current code handles.

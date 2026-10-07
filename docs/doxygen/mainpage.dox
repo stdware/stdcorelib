@@ -1,30 +1,34 @@
 // SPDX-License-Identifier: MIT
 //
-// The landing page. Every topic is defined by the header that owns it. Prose only: nothing here is
-// compiled, and nothing in the headers repeats it.
+// The landing page of the documentation. Each topic is defined by the header that declares it.
+// This file contains prose only. Nothing here is compiled, and the headers do not repeat it.
 
 /// \mainpage STDCORELIB
 ///
-/// A small C++17 support library, for the things the standard library leaves to the platform.
+/// A C++17 support library for functionality that the standard library leaves to the platform.
 ///
-/// Most of it exists because the answer differs between Windows and the rest of the world: console
-/// color, UTF-8 that survives a Windows console, launching a child process, loading a shared
-/// object. The rest is a handful of containers and utilities that kept getting rewritten.
+/// Most components exist because their implementation differs between Windows and other
+/// platforms: console color, UTF-8 output on a Windows console, starting a child process, and
+/// loading a shared object. The remaining components are containers and utilities that projects
+/// otherwise reimplement repeatedly.
 ///
 /// \section main_conventions Conventions
 ///
-/// \li <b>Every \c std::string is UTF-8.</b> Arguments, environment, log messages, what a child
-///     process wrote. On Windows they are converted at the system call rather than through the
-///     system code page, so text written in any script survives the round trip. A
-///     \c std::filesystem::path is the exception: it carries whatever its platform gives it.
-/// \li <b>A failure is a return value.</b> \c std::optional where there is nothing to say about why,
-///     \c std::error_code where there is. What throws says so.
-/// \li <b>No RTTI is needed.</b> stdc::type_id and stdc::any name a type without \c typeid, and the
-///     library builds with \c -fno-rtti to keep that honest.
-/// \li Header-only where it can be, compiled where it has to be. Nothing outside the standard
-///     library is required.
+/// \li <b>Every \c std::string is UTF-8.</b> This applies to arguments, environment variables, log
+///     messages and the output of a child process. On Windows, strings are converted at the system
+///     call rather than through the system code page. Text in any script therefore survives the
+///     round trip. A \c std::filesystem::path is the exception, because it uses the native
+///     encoding of its platform.
+/// \li <b>A failure is reported through the return value.</b> A function returns \c std::optional
+///     if a failure has no further description, and \c std::error_code if it has one. A function
+///     that throws documents the exception.
+/// \li <b>RTTI is not required.</b> stdc::type_id and stdc::any identify a type without \c typeid,
+///     and the library is built with \c -fno-rtti to verify this property.
+/// \li Components are header-only if possible and compiled otherwise. The library depends only on
+///     the standard library.
 ///
 /// \section main_organization Organization
 ///
-/// Components lists every part of the library, each with a description and an example, and each
-/// defined by the header that owns it. Building it and linking against it are in the README.
+/// The Components page lists every part of the library, each with a description and an example
+/// and each defined by the header that declares it. The README describes building the library
+/// and linking against it.
