@@ -23,13 +23,14 @@ namespace stdc::cli {
 
         namespace {
 
-            /// Whether \a token is entirely made of what \c from_chars consumed. A number that
-            /// stops short of the end of the token, \c 12abc, is not a number.
+            /// Returns whether \c from_chars consumed all of \a token. A token with characters
+            /// after the number, such as \c 12abc, is not a number.
             bool consumed_all(std::string_view token, const char *end) {
                 return end == token.data() + token.size();
             }
 
-            /// \c from_chars refuses a leading plus, which a command line will hand over anyway.
+            /// Removes a leading plus sign, which a command line may contain and \c from_chars
+            /// rejects.
             std::string_view drop_leading_plus(std::string_view token) {
                 if (token.size() > 1 && token.front() == '+') {
                     token.remove_prefix(1);
@@ -78,10 +79,11 @@ namespace stdc::cli {
             if (token.empty()) {
                 return false;
             }
-            // No sign to refuse by hand: from_chars into an unsigned rejects a minus outright.
-            // Checked on all three of MSVC, libstdc++ and libc++, each answering invalid_argument
-            // and leaving the output alone. The test says so too, since it is their promise this
-            // relies on rather than ours.
+            // No explicit sign check is required, because from_chars into an unsigned type
+            // rejects a minus sign. MSVC, libstdc++ and libc++ were each verified to return
+            // invalid_argument and to leave the output unmodified. A test covers this as well,
+            // because the code relies on a guarantee of the standard libraries rather than of
+            // this library.
             uint64_t v = 0;
             auto res = std::from_chars(token.data(), token.data() + token.size(), v);
             if (res.ec != std::errc{} || !consumed_all(token, res.ptr)) {
@@ -132,13 +134,13 @@ namespace stdc::cli {
 
     namespace {
 
-        /// The tokens one declared argument took. More than one only where the argument said it
-        /// accepts more than one.
+        /// The tokens assigned to one declared argument. The vector contains more than one token
+        /// only if the argument accepts more than one.
         using ArgumentValues = std::vector<std::string>;
 
-        /// One appearance of an option, holding a slot per argument it declares.
-        /// Named for what it holds rather than for what it is one of, OptionResult::Occurrence
-        /// being the public thing that reads it.
+        /// One occurrence of an option, with one slot per declared argument. The type is named
+        /// after its contents rather than as an occurrence, because the name Occurrence belongs
+        /// to the public type OptionResult::Occurrence, which provides read access to it.
         using ArgumentSlots = std::vector<ArgumentValues>;
 
         struct OptionData {
@@ -146,15 +148,15 @@ namespace stdc::cli {
             std::vector<ArgumentSlots> occurrences;
         };
 
-        /// Which option a token names, and what the token itself said.
+        /// The option that a token names, and the value and spelling written in the token.
         struct OptionMatch {
             OptionData *data = nullptr;
-            /// What was written against the spelling, by an equals sign or by being stuck to
-            /// it. Absent where the token was the spelling and nothing else, which is not the
-            /// same as present and empty: \c --prefix= sets an empty string.
+            /// The value written against the spelling, after an equals sign or joined to the
+            /// spelling. Absent if the token consists of the spelling alone. An absent value is
+            /// distinct from an empty value: \c --prefix= sets an empty string.
             std::string_view value;
-            /// The spelling as it was written, so that a complaint about the option names it
-            /// the way the reader typed it rather than the way it was declared.
+            /// The spelling as written in the token, so that an error message names the option
+            /// as the user typed it rather than as it was declared.
             std::string_view spelling;
 
             explicit operator bool() const {
@@ -162,18 +164,19 @@ namespace stdc::cli {
             }
         };
 
-        /// How many of \a available tokens the \a index'th of \a declared may take, given
-        /// whether it \a has_one already.
+        /// Returns how many of \a available tokens the argument at \a index in \a declared
+        /// consumes. \a has_one indicates whether the argument already holds a value.
         ///
-        /// One each for the required arguments still to come, since a greedy one that took the
-        /// lot would leave \c copy \c \<src\>... \c \<dest\> with nothing for the destination.
-        /// The rule is the same whether the arguments belong to a command or to an option, so it
-        /// is written once and both ask.
+        /// One token is reserved for each required argument that follows, because a greedy
+        /// argument that consumed every token would leave no token for the destination of
+        /// \c copy \c \<src\>... \c \<dest\>. Because the rule is the same for the arguments of a
+        /// command and of an option, it is implemented once and used by both.
         ///
-        /// Where there are not enough to go round, a greedy argument still takes one, since one
-        /// or more is what it promised and the argument that goes without says so itself. That
-        /// is the one thing \a has_one changes: a value written against the option has already
-        /// kept the promise, so there is nothing left to force and the reservation stands.
+        /// If too few tokens remain for every argument, a greedy argument still consumes one
+        /// token, because it accepts one or more, and the required argument left without a token
+        /// reports its own error. This is the only effect of \a has_one: because a value written
+        /// against the option already satisfies the one-or-more requirement, no token is forced
+        /// and the reservation applies.
         size_t take_for(const std::vector<Argument> &declared, size_t index, size_t available,
                         bool has_one = false) {
             const auto &argument = declared[index];
@@ -206,27 +209,28 @@ namespace stdc::cli {
 
     class detail::parse_data {
     public:
-        /// Shared with the parser rather than copied, so that the pointers below stay good and
-        /// the tree is walked once.
+        /// Shared with the parser rather than copied, so that the pointers below remain valid and
+        /// the tree is traversed only once.
         std::shared_ptr<const Command> root;
         const Command *target = nullptr;
         /// The commands from the root to the target, in that order.
         std::vector<const Command *> path;
 
-        /// Per positional argument of the command that was reached.
+        /// The tokens of each positional argument of the target, indexed by argument.
         std::vector<ArgumentValues> arguments;
-        /// Every option in scope, its own and whatever was inherited.
+        /// Every option in scope: the target's own options and the inherited options.
         std::vector<OptionData> options;
         std::unordered_map<std::string, size_t> by_token;
 
-        /// Copied from the parser, so that a result can print its own help without being handed
-        /// the parser that made it.
+        /// Copied from the parser, so that a result can print its help without access to the
+        /// parser that produced it.
         std::string prologue;
         std::string epilogue;
         HelpLayout help_layout = HelpLayout::defaultLayout();
-        /// Shared with the parser rather than copied, since the parser goes on using it for the
-        /// next parse while this may outlive it. The same reason root is shared, and the reason
-        /// it is not a unique_ptr: there is no one owner to give it to.
+        /// Shared with the parser rather than copied, because the parser continues to use the
+        /// formatter for subsequent parses and this result may outlive the parser. The same
+        /// reason applies to root. A unique_ptr is not used because the formatter has no single
+        /// owner.
         std::shared_ptr<HelpFormatter> formatter;
         Parser::DisplayOptions display_options;
         int text_width = 0;
@@ -236,9 +240,9 @@ namespace stdc::cli {
         ParseResult::Error error = ParseResult::NoError;
         std::string error_text;
 
-        /// What was typed where a declared name belongs, and the names it might have meant.
-        /// Kept rather than measured here, so a program that never prints a correction does not
-        /// pay for one.
+        /// The token typed in place of a declared name, and the declared names that the token
+        /// may be a misspelling of. Edit distances are computed on request rather than here, so
+        /// that a program that never prints a correction does not pay for the computation.
         std::string error_token;
         std::vector<std::string> error_candidates;
 
@@ -247,8 +251,9 @@ namespace stdc::cli {
             return it == by_token.end() ? nullptr : &options[it->second];
         }
 
-        /// The same, for the parser, which fills these in. Writing it out beats a const_cast
-        /// admitting the const above was never true of this data.
+        /// Returns the same entry as find(), for writing by the parser, which fills the entries
+        /// in. A separate function is preferred to a const_cast, which would imply that the const
+        /// qualifier of find() never held for this data.
         OptionData *findForWriting(std::string_view token) {
             auto it = by_token.find(std::string(token));
             return it == by_token.end() ? nullptr : &options[it->second];
@@ -259,8 +264,8 @@ namespace stdc::cli {
     // OptionResult
     // ---------------------------------------------------------------------------------------
 
-    // Everything here reaches through _data without checking it. ParseResult::option() is the
-    // only thing that makes one of these, and it makes one only where there is data to point at.
+    // These functions dereference _data without checking it. ParseResult::option() is the only
+    // function that constructs an OptionResult, and it does so only if data exists to point to.
     int OptionResult::count() const {
         return int(static_cast<const OptionData *>(_data)->occurrences.size());
     }
@@ -276,8 +281,9 @@ namespace stdc::cli {
 
     namespace {
 
-        /// The slots of one occurrence. Which occurrence is at()'s precondition, so there is
-        /// nothing left to check here and nothing to answer with where there is no such one.
+        /// Returns the slots of occurrence \a n. Because the validity of \a n is a precondition of
+        /// at(), no check is required here and no result is defined for a nonexistent
+        /// occurrence.
         const ArgumentSlots &slots_of(const void *data, int n) {
             const auto &occurrences = static_cast<const OptionData *>(data)->occurrences;
             assert(n >= 0 && size_t(n) < occurrences.size());
@@ -286,9 +292,9 @@ namespace stdc::cli {
 
     }
 
-    // The slot is a vector of the tokens that argument took. Whether that vector is empty and
-    // whether the token in it is empty are different questions, which is why nothing here is
-    // reported as empty text.
+    // The slot is a vector of the tokens assigned to the argument. An empty vector and an empty
+    // token in the vector are different conditions. Therefore, an absent value is never reported
+    // as empty text.
     std::optional<std::string_view> OptionResult::Occurrence::rawValue(int index) const {
         const auto &slots = slots_of(_data, _n);
         if (index < 0 || size_t(index) >= slots.size() || slots[size_t(index)].empty()) {
@@ -349,9 +355,12 @@ namespace stdc::cli {
 
     namespace {
 
-        /// How many single character insertions, deletions and substitutions it takes to turn
-        /// one into the other. Two rows rather than the whole table, since only the previous one
-        /// is ever read.
+        /// Returns the number of single-character insertions, deletions and substitutions that
+        /// transform \a a into \a b. Only one row of the table is kept, together with one
+        /// diagonal value, because each cell reads only the cell to its left, the cell above it
+        /// and the cell diagonally above-left. The row is overwritten in place from left to
+        /// right. \c diagonal preserves the value of the cell above-left, because the row entry
+        /// at that position already holds the current row.
         size_t edit_distance(const std::string &a, const std::string &b) {
             std::vector<size_t> row(b.size() + 1);
             for (size_t j = 0; j <= b.size(); ++j) {
@@ -379,12 +388,12 @@ namespace stdc::cli {
             return {};
         }
 
-        // Half of what was typed. Looser than that and every short name is a candidate for every
-        // short typo, which is worse than saying nothing.
+        // The threshold is half the length of the typed token. A looser threshold makes every
+        // short name a candidate for every short typo, which is worse than no suggestion.
         const size_t threshold = input.size() / 2;
 
-        // Set in as far as the help text sets a section body in, since this is a list under a
-        // line that introduces it and reads as one.
+        // Indented by the same amount as a section body of the help text, because the
+        // suggestions form a list under an introductory line and read as a section body.
         const std::string margin(size_t(impl.indent < 0 ? 0 : impl.indent), ' ');
         std::string suggestions;
         for (const auto &item : impl.error_candidates) {
@@ -408,8 +417,9 @@ namespace stdc::cli {
         return impl.path;
     }
 
-    // The innermost command on the path that was given one, so a subcommand may say a version of
-    // its own and everything under a root that says one inherits it.
+    // Returns the version of the innermost command on the path that specifies a version. A
+    // subcommand may therefore specify its own version, and every command under a root that
+    // specifies a version inherits it.
     std::string ParseResult::versionText() const {
         stdc_impl_t;
         // A parse that fails while expanding a response file ends before the root is added to
@@ -440,8 +450,8 @@ namespace stdc::cli {
         return false;
     }
 
-    // Nothing rather than an empty result, so that there is one way to ask whether an option
-    // was given and one kind of OptionResult to hold.
+    // Returns std::nullopt rather than an empty result, so that there is one way to test whether
+    // an option was given and one kind of OptionResult to handle.
     std::optional<OptionResult> ParseResult::option(std::string_view token) const {
         stdc_impl_t;
         auto data = impl.find(token);
@@ -487,12 +497,14 @@ namespace stdc::cli {
         return impl.help_layout;
     }
 
-    // Gathered by walking down the path the way the parser did. What it gathered on the way is
-    // what it demands at the end, so this is where the help text has to agree with it.
+    // Collected by traversing the path in the same way as the parser. Because the options that
+    // the parser collects during the traversal are the options it checks at the end, this
+    // function is the point at which the help text must agree with the parser.
     std::vector<const Option *> ParseResult::inheritedOptions() const {
         stdc_impl_t;
         std::vector<const Option *> res;
-        // The commands above the target. The target is the last element of the path.
+        // Iterates over the commands above the target. The target is the last element of the
+        // path.
         for (size_t i = 0; i + 1 < impl.path.size(); ++i) {
             for (const auto &option : impl.path[i]->options()) {
                 if (option.isRecursive()) {
@@ -509,16 +521,17 @@ namespace stdc::cli {
             HelpSizes res;
             res.indent = data->indent;
             res.spacing = data->spacing;
-            // Zero means ask, and the answer is whatever stdout is: a terminal's width, or 80
-            // columns for a pipe or a file, so help captured into one reads the same everywhere.
+            // Zero selects the width of stdout: the width of a terminal, or 80 columns for a pipe
+            // or a file, so that help captured into a file is identical on every system.
             res.textWidth = data->text_width > 0 ? data->text_width : console::width(stdout);
             res.displayOptions = data->display_options;
             return res;
         }
 
-        /// The whole help text, laid out but not yet joined. The sizes are worked out once and
-        /// used for both halves, so a terminal resized between them cannot lay the usage line
-        /// out to one width and the descriptions to another.
+        /// Returns the whole help text as runs, laid out but not yet concatenated. The sizes are
+        /// computed once and used for both stages, so that a terminal resized between the stages
+        /// cannot cause the usage line to be laid out at one width and the descriptions at
+        /// another.
         std::vector<HelpFormatter::Run> helpRuns(const ParseResult &result,
                                                  const detail::parse_data *data) {
             if (!data->target || !data->formatter) {
@@ -549,9 +562,9 @@ namespace stdc::cli {
 
     void ParseResult::showHelp() const {
         stdc_impl_t;
-        // Through the library's own console rather than fwrite, so that one program does not
-        // talk to the terminal two different ways, and so a Windows console gets the transcoding
-        // it needs.
+        // Writes through the library's console rather than fwrite, so that one program does not
+        // write to the terminal in two different ways, and so that a Windows console receives the
+        // required transcoding.
         for (const auto &run : helpRuns(*this, &impl)) {
             console::fputs(run.style.style, run.style.foreground, run.style.background, run.text,
                            stdout);
@@ -563,8 +576,8 @@ namespace stdc::cli {
             return;
         }
         stdc_impl_t;
-        // What went wrong is worth a color where there is one to be had, and console works out
-        // for itself whether stderr is somewhere escapes belong.
+        // The error text is printed in color if color is available. console determines whether
+        // stderr is a destination that accepts escape sequences.
         console::fputs(console::bold, console::red, console::nocolor, impl.error_text + "\n",
                        stderr);
         if (!impl.display_options.test_flag(Parser::SkipCorrection)) {
@@ -574,16 +587,17 @@ namespace stdc::cli {
                                correction + "\n", stderr);
             }
         }
-        // How this program spells asking for help rather than how most of them do. A tree that
-        // does not offer it at all gets no line, since pointing at something nobody declared is
-        // worse than saying nothing.
+        // Uses the help spelling that this program declares rather than a common convention. A
+        // tree that declares no help option receives no hint line, because a reference to an
+        // undeclared option is worse than no hint.
         std::string help;
         for (const auto &item : impl.options) {
             if (item.option->role() != Option::Help) {
                 continue;
             }
             for (const auto &token : item.option->tokens()) {
-                // The long spelling where there is one, since that is the one worth reading.
+                // Prefers a long spelling if the option declares a long spelling, because a long
+                // spelling is the most readable.
                 if (help.empty() || (help.rfind("--", 0) != 0 && token.rfind("--", 0) == 0)) {
                     help = token;
                 }
@@ -606,8 +620,8 @@ namespace stdc::cli {
 
     namespace {
 
-        /// However narrow the terminal, a description gets at least this much. Below it the text
-        /// is broken into a column too thin to read, which is worse than running over.
+        /// The minimum width of a description, regardless of the terminal width. A narrower column
+        /// is too thin to read, which is worse than exceeding the terminal width.
         constexpr int min_description = 20;
 
     }
@@ -616,9 +630,9 @@ namespace stdc::cli {
 
     HelpFormatter::~HelpFormatter() = default;
 
-    // At spaces where there are any, and between characters where there are none, which is what
-    // a language that writes without spaces needs. Measured in columns rather than in bytes or
-    // characters, so a CJK description breaks where it looks like it should.
+    // Breaks at spaces if the text contains any, and between characters otherwise, as required by
+    // languages written without spaces. Widths are measured in columns rather than in bytes or
+    // characters, so that a CJK description breaks at the visually expected position.
     std::vector<std::string> HelpFormatter::wrapped(const std::string &text, int columns) {
         std::vector<std::string> lines;
         if (columns < 1) {
@@ -652,9 +666,8 @@ namespace stdc::cli {
             }
             int w = console::display_width(c);
             if (width + w > columns && !line.empty()) {
-                // Back up to the last space, so a word is not cut in half. A word longer than
-                // the whole column has no space to back up to and is broken where it reached
-                // the edge.
+                // Backs up to the last space, so that a word is not split. A word longer than the
+                // whole column contains no space to back up to and is broken at the column edge.
                 auto space = line.find_last_of(U' ');
                 if (space == std::u32string::npos) {
                     emit(line);
@@ -690,8 +703,8 @@ namespace stdc::cli {
         } else {
             res = option.token();
         }
-        // Through this rather than straight to the one above, so that a formatter overriding
-        // only the argument rung reaches every metavar there is.
+        // Calls the virtual displayed() rather than the base implementation above, so that a
+        // formatter overriding only the argument level affects every metavar.
         for (const auto &argument : option.arguments()) {
             res += " " + displayed(argument);
         }
@@ -700,18 +713,19 @@ namespace stdc::cli {
 
     namespace {
 
-        /// Whether \a option can be printed and typed at all.
+        /// Returns whether \a option can be printed and typed.
         ///
-        /// One with no spelling has nothing to show and nothing to be looked up by, and
-        /// token() is front() on an empty vector. Command::addOption() asserts on one, so this
-        /// only answers false in a release build, where the assert is gone and the option is in
-        /// the tree regardless. Asked wherever an option's name is read, so the two places
-        /// cannot come to disagree about what counts.
+        /// An option without a spelling has no text to display and no key to look up, and
+        /// token() calls front() on an empty vector. Command::addOption() asserts on such an
+        /// option. Therefore, this function returns false only in a release build, in which the
+        /// assertion is removed and the option remains in the tree. Every place that reads the
+        /// name of an option calls this function, so that these places cannot disagree about
+        /// which options qualify.
         inline bool spelled(const Option &option) {
             return !option.tokens().empty();
         }
 
-        /// A block that prints the way \a slot asks for, with \a title over it.
+        /// Returns an empty block with the role and styles of \a slot and the title \a title.
         HelpBlock blockLike(const HelpBlock &slot, std::string title) {
             HelpBlock res;
             res.role = slot.role;
@@ -722,9 +736,9 @@ namespace stdc::cli {
             return res;
         }
 
-        /// Puts \a items into the groups \a groups asks for, in the order it gives them, with
-        /// whatever it does not mention left under \a fallback at the end. One block per group,
-        /// all printed the way \a slot asks for.
+        /// Distributes \a items into the groups specified by \a groups, in the specified order,
+        /// and places the items that no group lists under \a fallback at the end. Returns one
+        /// block per group, each with the styles of \a slot.
         template <class T, class Name, class Line>
         std::vector<HelpBlock>
             grouped(const std::vector<T> &items, const std::vector<CommandCatalogue::Group> &groups,
@@ -760,8 +774,9 @@ namespace stdc::cli {
             return res;
         }
 
-        /// Runs that print the same way are one run, so that a plain help text comes out of
-        /// showHelp() in a single write rather than in one per column.
+        /// Appends \a text to \a out, merging it into the last run if the styles are equal, so
+        /// that showHelp() writes a plain help text in a single write rather than in one write
+        /// per column.
         void appendRun(std::vector<HelpFormatter::Run> &out, const TextStyle &style,
                        const std::string &text) {
             if (text.empty()) {
@@ -781,8 +796,8 @@ namespace stdc::cli {
             }
         }
 
-        // Broken into as many lines as the room a section body gets, with the breaks written into
-        // the text.
+        // Returns the usage text broken into as many lines as the width of a section body
+        // requires, with the line breaks written into the text.
         std::string usage_text(const HelpFormatter &formatter, const Command &command,
                                const std::vector<const Command *> &path,
                                const std::vector<Option> &inherited, int indent, int text_width) {
@@ -791,12 +806,12 @@ namespace stdc::cli {
                 head += (i ? " " : "") + path[i]->name();
             }
 
-            // An option that has to be given is not optional information, so it is spelled out
-            // where a reader looks first rather than left inside "[options]". The hint stays for
-            // whatever is left, and goes away when nothing is.
-            // A subcommand's name comes first or not at all, so it is written first here. An
-            // option before it ends the command path, which is why the other order was the one
-            // arrangement the parser refuses.
+            // Because a required option is not optional information, it is spelled out where a
+            // reader looks first rather than hidden inside "[options]". The "[options]" hint
+            // covers the other options and is omitted if there are no other options.
+            // Because a subcommand name either comes first or does not appear, "[commands]" is
+            // written first. An option before a subcommand name ends the command path. Therefore,
+            // the reverse order is the only arrangement that the parser rejects.
             std::vector<std::string> parts;
             if (!command.commands().empty()) {
                 parts.push_back("[commands]");
@@ -834,8 +849,8 @@ namespace stdc::cli {
                     res += "\n";
                     line_width = 0;
                 }
-                // At the margin the piece goes straight down under the one above. Anywhere else
-                // it needs the space that separates it from what came before.
+                // At the margin, a part is placed directly below the part above it. Elsewhere a
+                // space separates the part from the previous part.
                 res += line_width == 0 ? part : " " + part;
                 line_width += line_width == 0 ? part_width : 1 + part_width;
             }
@@ -848,9 +863,9 @@ namespace stdc::cli {
         return command.name();
     }
 
-    // What an argument adds to the right hand column beyond its description. The same for an
-    // argument of a command and an argument of an option, since a default value is worth as much
-    // in either place.
+    // Returns the text that an argument adds to the right-hand column after its description. The
+    // text is the same for an argument of a command and an argument of an option, because a
+    // default value is equally useful in both places.
     static std::string argument_extras(const Argument &argument, const HelpSizes &sizes) {
         auto flags = sizes.displayOptions;
         std::string res;
@@ -903,24 +918,26 @@ namespace stdc::cli {
         const auto &catalogue = command.catalogue();
         auto flags = sizes.displayOptions;
 
-        // A row at a time, through the rung that makes one, so that a formatter changing what a
-        // row says does not have to take over this whole function to do it.
+        // Each row is built through the level that produces a row, so that a formatter changing
+        // the content of a row does not have to override this whole function.
         auto argument_line = [this, &sizes](const Argument &item) { return entry(item, sizes); };
         auto option_line = [this, &sizes](const Option &item) { return entry(item, sizes); };
         auto command_line = [this, &sizes](const Command &item) { return entry(item, sizes); };
 
-        // Only the ones that can be printed, which is spelled() and why. The help text is not
-        // the place to find out that a tree holds an option nobody can type.
+        // Lists only the options that can be printed, as defined and explained at spelled().
+        // The help text is not the place to reveal that a tree contains an option that cannot
+        // be typed.
         std::vector<Option> own;
         for (const auto &item : command.options()) {
             if (spelled(item)) {
                 own.push_back(item);
             }
         }
-        // What the commands above declared recursive is in scope here and is demanded here, so
-        // it is listed here. Under a heading of its own, since it belongs to the program rather
-        // than to this command, and since the catalogue's groups were written for this
-        // command's own options and have nothing to say about these.
+        // The options that the commands above declared recursive are in scope here and are
+        // checked here. Therefore, they are listed here. They are listed under a separate
+        // heading, because they belong to the program rather than to this command, and because
+        // the groups of the catalogue were written for this command's own options and do not
+        // cover these options.
         std::vector<Option> inherited_options;
         for (const auto *option : result.inheritedOptions()) {
             if (spelled(*option)) {
@@ -929,8 +946,8 @@ namespace stdc::cli {
         }
 
         std::vector<HelpBlock> out;
-        // A block with nothing in it is not printed and not handed out, so a command with no
-        // subcommands says nothing about subcommands rather than showing an empty heading.
+        // An empty block is neither printed nor returned, so that the help of a command without
+        // subcommands omits the subcommand section rather than showing an empty heading.
         const auto push = [&out](HelpBlock block) {
             if (!block.isEmpty()) {
                 out.push_back(std::move(block));
@@ -968,16 +985,18 @@ namespace stdc::cli {
                         [](const Argument &item) { return item.name(); }, argument_line));
                     break;
                 }
-                // ###QUESTION: a recursive option is listed here on the page of the command
-                // that declared it and under "Global options" on the pages below, so the same
-                // spelling sits under two headings depending on which page is being read. That
-                // is what Cobra does with a persistent flag. The other two answers are to list
-                // it under "Global options" everywhere, which splits the declaring command's
-                // list by something a reader there cannot act on, and to drop the second block
-                // altogether, which is System.CommandLine's and loses the one thing worth
-                // saying on a subcommand's page: this is not mine, read the program's help.
-                // Should it be the same heading on both? Four lines here if so, filtering the
-                // recursive ones out of own and adding them to the block below.
+                // ###QUESTION: A recursive option is listed here on the page of the declaring
+                // command and under "Global options" on the pages below it. The same spelling
+                // therefore appears under two headings depending on the page. Cobra handles a
+                // persistent flag in the same way. The two alternatives are listing the option
+                // under "Global options" everywhere, which splits the list of the declaring
+                // command by a distinction that a reader of that page cannot act on, and
+                // omitting the second block entirely, which is the System.CommandLine behavior
+                // and loses the only useful statement on the page of a subcommand: the option
+                // belongs to the program and is documented in the help of the program. It is
+                // undecided whether both pages should use the same heading. That change would
+                // require four lines here, which filter the recursive options out of own and add
+                // them to the block below.
                 case HelpBlock::Options: {
                     pushAll(grouped(
                         own, catalogue.optionGroups(), slot, "Options",
@@ -1018,16 +1037,17 @@ namespace stdc::cli {
                                                                size_t widest) const {
         std::vector<Run> out;
         if (!block.title.empty()) {
-            // The newline is outside the styling, so that the escape putting it back is the last
-            // thing on the line rather than the first thing on the next one. A background color
-            // painted to the end of the line is what shows this up.
+            // The newline is outside the styled run, so that the reset escape sequence is the
+            // last item on the title line rather than the first item on the next line. A
+            // background color painted to the end of the line makes the difference visible.
             appendRun(out, block.titleStyle, block.title + ":");
             appendRun(out, {}, "\n");
         }
 
         if (!block.entries.empty()) {
-            // Where a description starts, and therefore where the lines under the first one are
-            // indented to, so a wrapped entry stays one block instead of drifting left.
+            // The column at which a description starts, which is therefore also the indentation
+            // of its continuation lines, so that a wrapped entry remains one block instead of
+            // drifting left.
             size_t column = size_t(sizes.indent) + widest + size_t(sizes.spacing);
             int room = std::max(sizes.textWidth - int(column), min_description);
             for (const auto &entry : block.entries) {
@@ -1049,8 +1069,8 @@ namespace stdc::cli {
             return out;
         }
 
-        // Prose under a heading is set in under it. Prose without one sits at the margin, which
-        // is what a prologue and an epilogue want.
+        // Prose under a heading is indented under the heading. Prose without a heading starts at
+        // the margin, as required for a prologue and an epilogue.
         size_t margin = block.title.empty() ? 0 : size_t(sizes.indent);
         int room = std::max(sizes.textWidth - int(margin), min_description);
         for (const auto &line : wrapped(block.text, room)) {
@@ -1063,8 +1083,8 @@ namespace stdc::cli {
 
     std::vector<HelpFormatter::Run> HelpFormatter::render(const std::vector<HelpBlock> &blocks,
                                                           const HelpSizes &sizes) const {
-        // Measured across every list rather than across each on its own, so that a catalogue
-        // reads as one table instead of as several.
+        // Measured across every list rather than across each list separately, so that a
+        // catalogue reads as one table instead of several.
         bool align_all = sizes.displayOptions.test_flag(Parser::AlignAllCatalogues);
         size_t shared = align_all ? widestOf(blocks) : 0;
 
@@ -1082,32 +1102,31 @@ namespace stdc::cli {
     // ---------------------------------------------------------------------------------------
     // Parsing
     //
-    // The command path is a prefix. The run of subcommand names at the front of the line is the
-    // whole of it, and the first token that is not one settles what was reached. Everything
-    // after that belongs to the command reached: its own options, the ones its ancestors
-    // declared recursive, and its arguments. This is SysCmdLine's rule.
+    // The command path is a prefix. The run of subcommand names at the front of the line forms
+    // the whole path, and the first token that is not a subcommand name ends it and fixes the
+    // target. Every later token belongs to the target: its own options, the options its ancestors
+    // declared recursive, and its arguments.
     //
-    // So there is one scope and it is known before a single option is read. An option written
-    // between two command names is not read against whichever command the walk had got to, and
-    // that is the point: what a ParseResult can be asked is exactly what a line can say.
+    // There is therefore exactly one scope, and it is known before any option is read. An option
+    // written between two command names is not read against the command that the traversal had
+    // reached at that point. This is intentional: the queries that a ParseResult supports
+    // correspond exactly to the content that a command line can express.
     //
-    // Two rules below differ from SysCmdLine, which this replaces. Each is a line SysCmdLine
-    // accepts and this refuses. Both were measured against it.
+    // Two further rules reject command lines that a lenient parser accepts without a report.
     //
-    // Positional tokens a command cannot take are an error. SysCmdLine drops them, so a mistyped
-    // subcommand succeeds silently. Measured: a root declaring no arguments accepted four
-    // surplus tokens and did nothing with them.
+    // Positional tokens that the target cannot accept are an error. If such tokens were
+    // discarded, a mistyped subcommand would succeed without a report.
     //
-    // An option that needs a value will not take a token that is a declared option of the same
-    // command. Reporting it beats swallowing --force and leaving the reader to find out where it
-    // went. Only a declared option counts, so a negative number or an undeclared name is still a
-    // value.
+    // An option that requires a value does not accept a token that is a declared option of the
+    // same command. Reporting the error is preferable to consuming --force and leaving the user
+    // to find where it went. Only a declared option counts. Therefore, a negative number or an
+    // undeclared name is still a value.
     // ---------------------------------------------------------------------------------------
 
     namespace {
 
-        /// Everything one call to parse needs, kept together so the steps can hand off to each
-        /// other without a dozen parameters.
+        /// The state of one call to parse, held in one object so that the steps share it without
+        /// passing a dozen parameters.
         class ParserCore {
         public:
             ParserCore(detail::parse_data *out, Parser::ParseOptions flags) : r(out), flags(flags) {
@@ -1122,20 +1141,23 @@ namespace stdc::cli {
             Parser::ParseOptions flags;
             std::vector<std::string> tokens;
             size_t pos = 0;
-            /// The positional tokens, gathered first and handed to the arguments afterwards,
-            /// since how many each takes depends on how many there are.
+            /// The positional tokens, collected first and assigned to the arguments afterwards,
+            /// because the number of tokens each argument consumes depends on the total number.
             std::vector<std::string> positional;
-            /// The highest priority option given, which is what decides whether the checks at
-            /// the end are worth making.
+            /// The given option with the highest priority, which determines whether the final
+            /// checks are performed.
             const Option *prior_option = nullptr;
-            /// What every command walked through declared recursive, in scope below it.
+            /// The options that the commands on the traversed path declared recursive, which are
+            /// in scope below the declaring command.
             std::vector<const Option *> inherited;
-            /// Where the target's Remainder argument sits among its arguments, if it has one.
-            /// Once that many positional tokens are in hand the rest of the line is its, options
-            /// and all, which is how a program says where option reading stops.
+            /// The index of the Remainder argument among the arguments of the target, if the
+            /// target declares a Remainder argument. Once that many positional tokens have been
+            /// collected, the rest of the line belongs to the Remainder argument, including
+            /// options. A program uses this to specify where option reading stops.
             size_t remainder_at = size_t(-1);
-            /// Whether the Remainder has taken its first token, which only matters where it is
-            /// the first argument and the options in front of it are still being read.
+            /// Whether the Remainder argument has received its first token. This matters only if
+            /// the Remainder argument is the first argument and the options in front of it are
+            /// still being read.
             bool remainder_started = false;
 
             bool on(Parser::ParseOption flag) const {
@@ -1144,10 +1166,10 @@ namespace stdc::cli {
             bool failed() const {
                 return r->error != ParseResult::NoError;
             }
-            /// What can be written at the command that was reached: its own options first, then
-            /// the ones it inherited. That is all r->options holds, the path having been settled
-            /// before any of it was collected, so what is writable and what is readable are the
-            /// same list.
+            /// Returns the options that can be written at the target: its own options first, then
+            /// the inherited options. r->options contains exactly these options, because the path
+            /// was settled before any option was collected. Therefore, the writable options and
+            /// the readable options form the same list.
             std::vector<const Option *> inScope() const {
                 std::vector<const Option *> res;
                 for (const auto &option : r->target->options()) {
@@ -1156,8 +1178,8 @@ namespace stdc::cli {
                 res.insert(res.end(), inherited.begin(), inherited.end());
                 return res;
             }
-            /// Whether any option in scope was written. Asked beside an empty positional list to
-            /// tell a bare command from one that was given something.
+            /// Returns whether any option in scope was written. Used together with an empty
+            /// positional list to distinguish a bare command from a command with input.
             bool anythingGiven() const {
                 for (const auto &item : r->options) {
                     if (!item.occurrences.empty()) {
@@ -1172,8 +1194,8 @@ namespace stdc::cli {
                     r->error_text = std::move(text);
                 }
             }
-            /// The same, for a failure that is a name spelled wrong, where the names that were
-            /// declared are worth offering back.
+            /// Records a failure like fail(), for a misspelled name, together with the declared
+            /// names to suggest as corrections.
             void failFor(Error error, std::string text, std::string token,
                          std::vector<std::string> candidates) {
                 if (failed()) {
@@ -1192,15 +1214,15 @@ namespace stdc::cli {
             bool readOption(const std::string &token);
             bool readOneOption(OptionData *data, std::string_view inline_value);
             OptionData *lookup(std::string_view token) const;
-            /// Which option a token names and what was written against it, in every spelling
-            /// readOption() accepts. Grouped flags are not here, naming a list rather than one
-            /// option, and are groupedFlagsFor() instead.
+            /// Returns the option that a token names and the value written against it, for every
+            /// spelling that readOption() accepts. Grouped flags are excluded because they name a
+            /// list of options rather than one option. groupedFlagsFor() handles grouped flags.
             OptionMatch optionFor(const std::string &token) const;
             bool groupedFlagsFor(const std::string &token, std::vector<OptionData *> *found) const;
-            /// Whether the token names an option at all, which is where a run of values stops.
-            /// Asking this and reading the token have to give one answer, so both go through
-            /// the two above: a run that stops at --out and not at --out=x would take the
-            /// second for a value of whatever it was reading.
+            /// Returns whether the token names an option, which is the condition that ends a run
+            /// of values. Because this query and the reading of the token must agree, both use
+            /// the two functions above. A run that stopped at --out but not at --out=x would
+            /// consume --out=x as a value of the option being read.
             bool namesAnOption(const std::string &token) const;
             bool readGroupedFlags(const std::string &token);
             void assignPositional();
@@ -1231,8 +1253,8 @@ namespace stdc::cli {
             }
         }
 
-        /// Whitespace at either end, gone. The carriage return of a CRLF line is whitespace, so
-        /// a file written on Windows needs no step of its own.
+        /// Returns \a text without leading and trailing whitespace. Because the carriage return of
+        /// a CRLF line is whitespace, a file written on Windows requires no separate step.
         std::string_view trimmed(std::string_view text) {
             const auto space = [](char c) {
                 return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\v' || c == '\f';
@@ -1246,17 +1268,18 @@ namespace stdc::cli {
             return text;
         }
 
-        // A line of a response file is not a token until three things are taken off it. What
-        // writes these files is a build system rather than a shell, and none of the three is
-        // something a shell would have left behind.
+        // A line of a response file becomes a token only after three items are removed from it.
+        // These files are written by a build system rather than by a shell, and a shell would
+        // not have left any of the three items in place.
         //
-        //  - blanks at either end, since a generator lines its arguments up
-        //  - one pair of quotes, since a path with a space in it has to be written somehow, and
-        //    CMake writes every path that way
-        //  - a byte order mark, since a Windows editor puts one on the first line
+        //  - blanks at either end, because a generator aligns its arguments
+        //  - one pair of quotes, because a path containing a space requires quoting, and CMake
+        //    quotes every path
+        //  - a byte order mark, because a Windows editor writes a byte order mark at the start
+        //    of the first line
         //
-        // A line that is only a pair of quotes is an empty argument and is kept. A line that is
-        // empty or only blanks is not an argument at all and is dropped.
+        // A line that consists only of a pair of quotes is an empty argument and is retained. A
+        // line that is empty or contains only blanks is not an argument and is dropped.
         void ParserCore::expandResponseFiles() {
             std::vector<std::string> out;
             for (const auto &token : tokens) {
@@ -1264,13 +1287,14 @@ namespace stdc::cli {
                     out.push_back(token);
                     continue;
                 }
-                // The name is UTF-8 like everything else here, and on Windows handing that to
-                // ifstream as a narrow string reads it in the system code page.
+                // The name is UTF-8 like every other string here. Because ifstream on Windows
+                // interprets a narrow string in the system code page, the name is converted with
+                // path::from_utf8().
                 //
-                // Read as bytes, so that nothing in the file is interpreted. A Windows text
-                // stream takes a Ctrl-Z for the end of the file and drops the rest. The
-                // carriage returns of a CRLF file are not the reason: those are whitespace and
-                // come off in the trim below, on every platform and whichever mode this is.
+                // The file is read in binary mode, so that no content is interpreted. A Windows
+                // text stream treats a Ctrl-Z as the end of the file and discards the remainder.
+                // The carriage returns of a CRLF file are not the reason: they are whitespace and
+                // are removed by the trim below, on every platform and in either mode.
                 std::ifstream file(path::from_utf8(std::string_view(token).substr(1)),
                                    std::ios::binary);
                 if (!file) {
@@ -1284,8 +1308,8 @@ namespace stdc::cli {
                     std::string_view text = line;
                     if (first) {
                         first = false;
-                        // Only the first line can carry one, and only whole. Two of its three
-                        // bytes are not a mark.
+                        // Only the first line can carry a byte order mark, and only the complete
+                        // three-byte sequence is removed. Two of the three bytes are not a mark.
                         if (text.substr(0, 3) == "\xEF\xBB\xBF") {
                             text.remove_prefix(3);
                         }
@@ -1303,8 +1327,8 @@ namespace stdc::cli {
             tokens = std::move(out);
         }
 
-        /// The subcommand \a token names, or null. Only worth asking before the first positional
-        /// token, since after that a name is a value.
+        /// Returns the subcommand that \a token names, or null if there is none. Returns null
+        /// after the first positional token, because a name in that position is a value.
         const Command *ParserCore::subcommandFor(const std::string &token) const {
             if (!positional.empty()) {
                 return nullptr;
@@ -1317,11 +1341,13 @@ namespace stdc::cli {
             return nullptr;
         }
 
-        /// Moves into \a next, keeping whatever the command being left declared recursive.
+        /// Moves into \a next and adds the recursive options of the command being left to the
+        /// inherited options.
         ///
-        /// The options are not collected here. Nothing may be written until the path is over, so
-        /// there is one scope to collect and it is the target's, and collecting at every level
-        /// would leave each ancestor's own options in the table for the rest of the parse.
+        /// The options are not collected here. Because no option may be written before the path
+        /// ends, there is one scope to collect, which is the scope of the target. Collecting
+        /// at every level would leave the own options of each ancestor in the table for the rest
+        /// of the parse.
         void ParserCore::enter(const Command *next) {
             for (const auto &option : r->target->options()) {
                 if (option.isRecursive()) {
@@ -1332,9 +1358,10 @@ namespace stdc::cli {
             r->path.push_back(next);
         }
 
-        /// What can be written here: the target's own options, plus the recursive ones of every
-        /// command above it. Called once, after the path is settled, so this is the only scope
-        /// there ever is and what a result can be asked for is exactly what could be written.
+        /// Collects the options that can be written at the target: its own options and the
+        /// recursive options of every command above it. Called once, after the path is settled.
+        /// Therefore, this is the only scope, and the options that a result can be queried for
+        /// are exactly the options that could be written.
         void ParserCore::collectOptions() {
             r->options.clear();
             r->by_token.clear();
@@ -1404,8 +1431,8 @@ namespace stdc::cli {
         }
 
         /// Reads the arguments of one option occurrence, starting at \c pos. \a inline_value is
-        /// what came after an equals sign or was joined to a short token, and stands in for the
-        /// first argument when there is one.
+        /// the text after an equals sign or joined to a short token, and supplies the first
+        /// value of the first argument if present.
         bool ParserCore::readOneOption(OptionData *data, std::string_view inline_value) {
             const Option *option = data->option;
 
@@ -1424,10 +1451,10 @@ namespace stdc::cli {
                 const auto &argument = option->arguments()[i];
                 const std::string where = "\"" + option->token() + "\"";
 
-                // What was written after the equals sign or stuck to the spelling is the first
-                // value of the first argument, not the whole of it. An argument that takes one
-                // is finished by it, and one that takes more goes on reading from where the
-                // token ended, so that --opt=a b and --opt a b are the same line said twice.
+                // The text after the equals sign or joined to the spelling is the first value of
+                // the first argument, not the whole argument. A Single argument is complete with
+                // this value, and an argument that accepts more values continues reading after
+                // the token, so that --opt=a b and --opt a b are equivalent.
                 if (i == 0 && have_inline) {
                     std::string token(inline_value);
                     if (!accepts(argument, token, where)) {
@@ -1439,17 +1466,18 @@ namespace stdc::cli {
                     }
                 }
 
-                // How many are here to be had, which is up to the next token that is somebody's
-                // option, and then how many of those are this argument's to take.
-                // A token that is somebody's option is never quietly eaten as a value, not
-                // even by an argument that has to have one: saying "-o needs a value" is worth
-                // more than taking --force and leaving the reader to work out where it went.
-                // Only a declared option counts, so a negative number is a value like any other
-                // rather than an option nobody has heard of.
+                // Counts the available tokens, up to the next token that names a declared option,
+                // and then the number of those tokens that this argument consumes.
+                // A token that names a declared option is never silently consumed as a value, not
+                // even by a required argument: reporting "-o needs a value" is preferable to
+                // consuming --force and leaving the user to find where it went. Only a declared
+                // option counts. Therefore, a negative number is an ordinary value rather than an
+                // unknown option.
                 //
-                // A Remainder is the exception and the whole of its meaning: it takes the rest
-                // of the line as it stands. That is how a program says where option reading
-                // stops, and what token it stops at is the program's own to choose.
+                // A Remainder argument is the exception, and this exception is its entire
+                // meaning: it consumes the rest of the line unchanged. A program uses a Remainder
+                // argument to specify where option reading stops, and the token at which reading
+                // stops is the choice of the program.
                 bool remainder = argument.arity() == Argument::Remainder;
                 const auto &ends_the_run = [this](const std::string &token) {
                     return namesAnOption(token);
@@ -1497,13 +1525,13 @@ namespace stdc::cli {
             if (token.empty()) {
                 return {};
             }
-            // The whole token, which is the ordinary case.
+            // The whole token is a spelling, which is the ordinary case.
             if (auto data = lookup(token)) {
                 return {data, {}, token};
             }
 
-            // A value joined by an equals sign. The value is empty rather than absent where
-            // nothing follows the sign, since --prefix= sets an empty string.
+            // The token contains a value joined by an equals sign. The value is empty rather than
+            // absent if nothing follows the sign, because --prefix= sets an empty string.
             auto equals = token.find('=');
             if (equals != std::string::npos) {
                 if (auto data = lookup(token.substr(0, equals))) {
@@ -1512,11 +1540,11 @@ namespace stdc::cli {
                 }
             }
 
-            // A short option with its value stuck to it. Which spellings can be one is
-            // detail::sticky_spellings(), the same answer the whole-tree check asks for, so a
-            // configuration refused as ambiguous is refused about the spellings that would
-            // really have been tried. The prefix is compared the way a whole token is, or
-            // IgnoreOptionCase would hold for -d foo and not for -dfoo.
+            // The token is a short option with its value joined to it. The spellings that qualify
+            // are returned by detail::sticky_spellings(), which the whole-tree check also uses,
+            // so that a configuration rejected as ambiguous is rejected for the spellings that
+            // would actually be tried. The prefix is compared in the same way as a whole token,
+            // because otherwise IgnoreOptionCase would apply to -d foo but not to -dfoo.
             for (auto &item : r->options) {
                 for (auto spelling : detail::sticky_spellings(*item.option)) {
                     if (spelling.size() >= token.size()) {
@@ -1530,7 +1558,7 @@ namespace stdc::cli {
                 }
             }
 
-            // A DOS token spelled the other way round.
+            // The token is a DOS short option, looked up under its Unix spelling.
             if (token[0] == '/' && on(Parser::AllowDosShortOptions)) {
                 if (auto data = lookup("-" + token.substr(1))) {
                     return {data, {}, token};
@@ -1545,8 +1573,8 @@ namespace stdc::cli {
                 token[1] == '-') {
                 return false;
             }
-            // Every letter has to be an option of its own that wants no value, or the whole
-            // token is something else and is left alone.
+            // Every letter must be a separate option that accepts no value. Otherwise the token
+            // is not a group of flags and is not handled here.
             for (size_t i = 1; i < token.size(); ++i) {
                 auto data = lookup(std::string("-") + token[i]);
                 if (!data || !data->option->arguments().empty()) {
@@ -1607,13 +1635,14 @@ namespace stdc::cli {
         }
 
         void ParserCore::readTokens() {
-            // The path first, and nothing but. A command line names its command by naming each
-            // one down to it and nothing in between, so the run of subcommand names at the front
-            // is the whole of it and the first token that is not one ends it.
+            // Reads the path first and nothing else. A command line names its target by naming
+            // each command down to the target with nothing in between. Therefore, the run of
+            // subcommand names at the front forms the whole path, and the first token that is not
+            // a subcommand name ends the path.
             //
-            // This is what makes a scope out of the target rather than out of wherever the
-            // reader happened to be. An option belongs to one command, it is written after that
-            // command, and the only way it reaches a command below is recursive().
+            // This makes the scope that of the target rather than that of the command at the
+            // current read position. An option belongs to one command and is written after that
+            // command, and recursive() is the only way for the option to reach a command below.
             while (pos < tokens.size()) {
                 const auto &token = tokens[pos];
                 if (looksLikeOption(token)) {
@@ -1628,9 +1657,10 @@ namespace stdc::cli {
             }
             collectOptions();
 
-            // Where the target's own Remainder argument begins, if it declares one. Everything
-            // before it takes a token each, since nothing greedy may come before a Remainder, so
-            // the count of positional tokens in hand says when it has started.
+            // Locates the Remainder argument of the target, if the target declares a Remainder
+            // argument. Every argument before it consumes one token, because no greedy argument may
+            // precede a Remainder argument. Therefore, the number of positional tokens collected
+            // indicates when the Remainder argument has started.
             const auto &declared = r->target->arguments();
             for (size_t i = 0; i < declared.size(); ++i) {
                 if (declared[i].arity() == Argument::Remainder) {
@@ -1641,16 +1671,18 @@ namespace stdc::cli {
 
             while (pos < tokens.size() && !failed()) {
                 const auto &token = tokens[pos];
-                // Once the Remainder has started, nothing is an option any more. This is what
-                // the arity means and what lets a program choose the word it stops at, rather
-                // than every program stopping at the one word a parser picked.
+                // Once the Remainder argument has started, no token is an option. This is the
+                // meaning of the arity, and it allows a program to choose the token at which
+                // option reading stops, rather than every program stopping at a single token
+                // chosen by the parser.
                 if (remainder_at != size_t(-1) && positional.size() >= remainder_at) {
-                    // Filling the argument before it is what says option reading is over.
-                    // Where the Remainder is the first argument there is no such argument, so
-                    // what says it is the first token that is not written as an option. This is
-                    // sudo: sudo -u root ls -l reads -u root and runs ls -l. A token that looks
-                    // like an option and is not one is still reported, since a wrapper is not
-                    // improved by silently passing on its own misspelt flags.
+                    // Filling the argument before the Remainder argument ends option reading. If
+                    // the Remainder argument is the first argument, no such preceding argument
+                    // exists. Therefore, option reading ends at the first token that is not
+                    // written as an option. This matches sudo: sudo -u root ls -l reads -u root
+                    // and runs ls -l. A token that looks like an option but is not a declared
+                    // option is still reported, because silently passing on misspelled flags of
+                    // the wrapper itself does not improve the wrapper.
                     if (remainder_at == 0 && !remainder_started && looksLikeOption(token)) {
                         ++pos;
                         readOption(token);
@@ -1666,14 +1698,15 @@ namespace stdc::cli {
                     readOption(token);
                     continue;
                 }
-                // The path is over, so a name that would have gone into it was written too late.
-                // Said as that rather than as a stray value, since "unknown argument" for a word
-                // the reader can see is a subcommand is the least useful thing to answer with.
+                // Because the path has ended, a subcommand name at this position was written too
+                // late. The error reports exactly that rather than a stray value, because
+                // "unknown argument" for a word that the user can see is a subcommand is the
+                // least useful report.
                 //
-                // Only where the target takes no arguments of its own. Where it takes some, this
-                // token is one of them: a program that has a subcommand called \c copy can still
-                // be handed a file called copy, and guessing otherwise would make the name
-                // unusable as a value.
+                // This applies only if the target accepts no arguments of its own. Otherwise this
+                // token is a value of those arguments: a program that has a subcommand named
+                // \c copy can still receive a file named copy, and treating the token otherwise
+                // would make the name unusable as a value.
                 if (r->target->arguments().empty() && subcommandFor(token)) {
                     failFor(ParseResult::UnknownCommand,
                             "command \"" + token + "\" has to come before the options of \"" +
@@ -1708,9 +1741,9 @@ namespace stdc::cli {
             }
 
             if (taken < positional.size()) {
-                // Nothing placed at all, on a command that has subcommands, means the token sat
-                // where a subcommand goes. Saying so beats counting arguments at somebody who
-                // mistyped a name.
+                // If no token was assigned and the target has subcommands, the first token
+                // occupied the position of a subcommand. Reporting an unknown command is more
+                // useful than an argument count error for a user who mistyped a name.
                 if (taken == 0 && !r->target->commands().empty()) {
                     std::vector<std::string> declared;
                     for (const auto &command : r->target->commands()) {
@@ -1748,21 +1781,21 @@ namespace stdc::cli {
         }
 
         void ParserCore::checkRequired() {
-            // An option high enough on the ladder answers the command line by itself, so what is
-            // missing elsewhere is no longer a complaint worth making.
+            // Because an option with a sufficiently high priority level satisfies the command line
+            // by itself, missing items elsewhere are not reported.
             auto level = prior_option ? prior_option->prior() : Option::NoPrior;
 
-            // The three exclusive levels each forbid their own thing rather than everything
-            // below them. Only the ladder's lower half is a ladder.
+            // Each of the three exclusive levels forbids its own category rather than everything
+            // below it. Only the lower levels are cumulative.
             bool forbids_arguments =
                 level == Option::ExclusiveToArguments || level == Option::ExclusiveToAll;
             bool forbids_options =
                 level == Option::ExclusiveToOptions || level == Option::ExclusiveToAll;
 
-            // What was given rather than what is in hand. r->arguments has had the defaults
-            // applied by now, and a default is what stands in where nothing was given, so
-            // reading them here would have an option that forbids arguments refuse a line that
-            // carried none.
+            // Checks the given tokens rather than the stored values. r->arguments already
+            // contains the applied defaults, and a default substitutes for an omitted value.
+            // Therefore, checking r->arguments here would make an option that forbids arguments
+            // reject a line that contains no arguments.
             if (forbids_arguments && !positional.empty()) {
                 fail(ParseResult::PriorOptionWithArguments,
                      "option \"" + prior_option->token() + "\" takes no arguments beside it");
@@ -1800,7 +1833,7 @@ namespace stdc::cli {
         }
 
         void ParserCore::run(array_view<std::string> args) {
-            // The first argument names the program rather than anything to parse.
+            // The first argument is the program name and is not parsed.
             tokens.assign(args.begin() + (args.empty() ? 0 : 1), args.end());
             if (on(Parser::EnableResponseFile)) {
                 expandResponseFiles();
@@ -1815,18 +1848,19 @@ namespace stdc::cli {
                 return;
             }
 
-            // An option that stands in for an empty command line, which is what makes a bare
-            // command print its help rather than complain.
+            // Applies an option that substitutes for an empty command line, which makes a bare
+            // command print its help rather than report an error.
             //
-            // What counts is what the command that was reached was given, not how many tokens
-            // there were. A subcommand's name is a token, so counting them left "prog build"
-            // looking like a line with something in it and a subcommand's own auto option never
-            // fired at all.
+            // The condition is whether the target was given any input, not the number of
+            // tokens. Because a subcommand name is a token, counting tokens would treat
+            // "prog build" as a nonempty line, and the AutoSetWhenNoSymbols option of a
+            // subcommand would never apply.
             //
-            // Looked for among what is in scope here rather than among everything collected on
-            // the way, since an option of a command already left behind cannot be written here
-            // and has no business standing in for a line written here. The command's own come
-            // before the ones it inherited, so the innermost answer wins.
+            // The option is searched for among the options in scope at the target rather than
+            // among every option collected during the traversal, because an option of a command
+            // already left cannot be written here and must not substitute for a line written
+            // here. Because the own options of the target precede the inherited options, the
+            // innermost option takes precedence.
             if (!prior_option && positional.empty() && !anythingGiven()) {
                 for (const auto *option : inScope()) {
                     if (option->prior() != Option::AutoSetWhenNoSymbols ||
@@ -1859,8 +1893,9 @@ namespace stdc::cli {
 
     namespace {
 
-        /// What a parser starts with. Shared rather than one per parser, since a plain formatter
-        /// keeps nothing between calls and every method on it is const.
+        /// Returns the initial formatter of a parser. One instance is shared rather than one per
+        /// parser, because a plain formatter holds no state between calls and all its methods
+        /// are const.
         const std::shared_ptr<HelpFormatter> &defaultFormatter() {
             static const std::shared_ptr<HelpFormatter> instance =
                 std::make_shared<HelpFormatter>();
@@ -1899,10 +1934,11 @@ namespace stdc::cli {
     void Parser::setRootCommand(Command root) {
         stdc_impl_t;
 
-        // A new tree rather than new contents for the old one. Every ParseResult already handed
-        // out shares this pointer and holds raw pointers into what it addresses, so assigning
-        // through it leaves them all reading freed vectors. Checked: assigning through it dies
-        // under ASAN in test_a_parser_is_reusable_and_its_tree_can_be_replaced.
+        // Creates a new tree rather than assigning new contents to the old tree. Every
+        // ParseResult already returned shares this pointer and holds raw pointers into the tree.
+        // Therefore, assigning through the pointer would leave every such result reading freed
+        // vectors. Assigning through the pointer was verified to fail under ASAN in
+        // test_a_parser_is_reusable_and_its_tree_can_be_replaced.
         impl.root = std::make_shared<Command>(std::move(root));
     }
 
@@ -1981,8 +2017,8 @@ namespace stdc::cli {
         return impl.help_layout;
     }
 
-    // Null puts the plain one back rather than leaving a parser that cannot answer for its own
-    // help text, which every rung above this one still goes through.
+    // Null restores the default formatter rather than leaving the parser without a formatter for
+    // its help text, because every higher level still calls the formatter.
     void Parser::setHelpFormatter(std::shared_ptr<HelpFormatter> formatter) {
         stdc_impl_t;
         impl.formatter = formatter ? std::move(formatter) : defaultFormatter();
