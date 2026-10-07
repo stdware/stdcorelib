@@ -2,10 +2,11 @@
 
 /// \file commandline.h
 ///
-/// Declaring what a program takes on its command line, and reading back what it was given.
+/// Declaration of the command line syntax of a program, and access to the parsed values.
 ///
-/// The shape of the API comes from SysCmdLine, https://github.com/SineStriker/syscmdline, which
-/// this replaces. Everything it declares is in the \ref cli module, which carries the prose.
+/// The API is modeled on SysCmdLine, https://github.com/SineStriker/syscmdline, which this header
+/// replaces. Every declaration of this header belongs to the \ref cli module, which contains the
+/// documentation.
 
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
@@ -30,13 +31,12 @@
 
 /// \defgroup cli Command line
 ///
-/// Declaring what a program takes on its command line, and reading back what it was given. Replaces
-/// SysCmdLine, https://github.com/SineStriker/syscmdline.
+/// Declaration of the command line syntax of a program, and access to the parsed values.
 ///
-/// A tree of stdc::cli::Command, each carrying its stdc::cli::Argument and stdc::cli::Option, is
-/// handed to a stdc::cli::Parser. What comes back is a stdc::cli::ParseResult, and everything read
-/// out of one answers with \c std::optional, so a value that is not there and a value that is empty
-/// are different answers.
+/// A program declares its syntax as a tree of stdc::cli::Command objects, each containing its
+/// stdc::cli::Argument and stdc::cli::Option objects, and passes the tree to a stdc::cli::Parser.
+/// The parser returns a stdc::cli::ParseResult. Because every accessor of the result returns
+/// \c std::optional, an absent value and an empty value are distinguishable.
 ///
 /// \code
 ///     using namespace stdc;
@@ -51,30 +51,32 @@
 ///     return parser.invoke(system::command_line_arguments());
 /// \endcode
 ///
-/// \c invoke() reports a parse that failed, answers \c --help and a \c --version with text to
-/// print, and otherwise runs the handler of the command that was reached. Its return value is
-/// what \c main returns.
+/// \c invoke() reports a parse failure, prints the help text for \c --help and the version text
+/// for \c --version, and otherwise runs the handler of the reached command. The return value of
+/// \c invoke() is the return value of \c main.
 ///
-/// \section cli_shape What a command line looks like
+/// \section cli_shape Command line structure
 ///
 /// \verbatim
 ///     prog  remote add   --force file.txt -j 4
 ///           \________/   \_____________________/
-///            the path      everything it takes, in any order among themselves
+///          command path    options and arguments, in any order
 /// \endverbatim
 ///
-/// The names come first and nothing goes between them. A command line names the command it
-/// wants by naming each one down to it, and the first token that is not one of those names ends
-/// the path and settles what was reached. Everything after belongs to that command: its own
-/// options, the ones marked Option::recursive() by the commands above it, and its arguments,
-/// with no order among them beyond what a greedy argument forces.
+/// Subcommand names come first, and no other token may appear between them. A command line
+/// selects a command by naming every command from the root down to it. This sequence of names is
+/// the command path. The first token that is not a subcommand name ends the command path. The
+/// reached command is the last command named, or the root if no subcommand is named. Every later
+/// token belongs to the reached command. These tokens are its own options, the options marked
+/// Option::recursive() by its ancestors, and its arguments. They may appear in any order, subject
+/// only to the constraints of a greedy argument.
 ///
-/// So \c prog \c --plain \c sub is an error rather than a way to reach \c sub, even where the
-/// root declares \c --plain. This is SysCmdLine's rule and it is not git's, whose root options
-/// go before the subcommand name. Option::recursive() is how an option of one command is
-/// written on a line that reached another.
+/// The command line \c prog \c --plain \c sub is therefore an error rather than a way to reach
+/// \c sub, even if the root declares \c --plain. This rule differs from the rule of git, which
+/// places root options before the subcommand name. Option::recursive() allows an option of one
+/// command to be written on a command line that reaches another command.
 ///
-/// \subsection cli_shape_lines What parses and what does not
+/// \subsection cli_shape_lines Accepted and rejected command lines
 ///
 /// \code
 ///   cli::Command("prog")
@@ -86,24 +88,26 @@
 /// \endcode
 ///
 /// \verbatim
-///   prog --plain                 the root was reached, and --plain is the root's own
-///   prog sub -f a                sub was reached, -f is its own, a is its argument
-///   prog sub --wide -f a         --wide came down from the root, being recursive
-///   prog sub a -f --wide         no order among options and arguments once the path is over
+///   prog --plain                 reaches the root, and --plain is an option of the root
+///   prog sub -f a                reaches sub, -f is an option of sub, a is its argument
+///   prog sub --wide -f a         --wide is in scope at sub because it is recursive
+///   prog sub a -f --wide         options and arguments follow the path in any order
 ///
-///   prog --plain sub             no: an option ends the path, so sub is written too late
-///   prog --wide sub              no: the same. Recursive says where an option may be
-///                                written, not that the path stops coming first
-///   prog sub --plain             no: --plain is the root's and was not marked recursive
-///   prog -f sub                  no: -f is sub's, and the root is what --f was written after
+///   prog --plain sub             rejected: sub is too late because an option ends the path
+///   prog --wide sub              rejected for the same reason. Option::recursive() specifies
+///                                where an option may be written. It does not relax the rule
+///                                that the path comes first.
+///   prog sub --plain             rejected: --plain belongs to the root and is not recursive
+///   prog -f sub                  rejected: -f ends the path at the root, which does not declare -f
 /// \endverbatim
 ///
-/// \subsection cli_shape_greedy Arguments that take more than one
+/// \subsection cli_shape_greedy Greedy arguments
 ///
-/// Argument::Multiple leaves a token for each required argument after it, so
-/// \c copy \c \<src\>... \c \<dest\> works wherever arguments are declared. Argument::Remainder
-/// leaves nothing and stops option reading where it starts, which is how a program says what its
-/// own terminator is spelled. Nothing is reserved for \c -- : a program that wants the usual word
+/// An Argument::Multiple argument reserves one token for each required argument after it.
+/// Therefore, \c copy \c \<src\>... \c \<dest\> is valid in the arguments of a command and in the
+/// arguments of an option. An Argument::Remainder argument reserves no token and ends option
+/// recognition at its first token. A program defines its own terminator through such an argument.
+/// The library does not reserve \c -- . A program that requires the conventional terminator
 /// declares it.
 ///
 /// \code
@@ -117,20 +121,22 @@
 /// \endcode
 ///
 /// \verbatim
-///   copy a b c                   src took a and b, dest the one reserved for it
-///   copy a b c -f x y            the arguments first, then -f to the end of the line
-///   copy a b c -f x -- y         -f's run ended at --, that being a declared option
-///   copy a b c -- -f x           -- reads no options, so -f is one of its values
+///   copy a b c                   src receives a and b, dest receives the token reserved for it
+///   copy a b c -f x y            the arguments first, then -f up to the end of the line
+///   copy a b c -f x -- y         the values of -f end at --, because -- is a declared option
+///   copy a b c -- -f x           -f is a value of -- because -- recognizes no options
 ///
-///   copy -f x y a b c            no: -f took all five and left <src> and <dest> nothing
+///   copy -f x y a b c            rejected: -f consumes all five tokens, <src> and <dest> none
 /// \endverbatim
 ///
-/// A greedy run ends at the next declared option, so a command that has arguments of its own and
-/// an option that is greedy wants the arguments written first, or the option takes them.
+/// The values of a greedy argument end at the next declared option. If a command has arguments
+/// of its own and an option with a greedy argument, the command arguments must be written first,
+/// because the option otherwise consumes them.
 ///
-/// A Remainder starts where the argument before it was filled. Where it is a command's first
-/// argument there is none, so it starts at the first token not written as an option, which is
-/// what lets a wrapper take options of its own and hand the rest on:
+/// An Argument::Remainder argument starts after the last token of the preceding argument. If it
+/// is the first argument of a command, no preceding argument exists, and it starts at the first
+/// token that is not written as an option. This rule allows a wrapper program to accept options of
+/// its own and to pass the remaining tokens on:
 ///
 /// \code
 ///   cli::Command("run")
@@ -139,101 +145,106 @@
 /// \endcode
 ///
 /// \verbatim
-///   run -u root ls -u x          -u root is run's, ls -u x is the tail's, one spelling twice
-///   run ls -u x                  nothing of run's was written, so all of it is the tail
+///   run -u root ls -u x          -u root belongs to run, ls -u x to the remainder, one spelling
+///                                twice
+///   run ls -u x                  every token is in the remainder because no option of run is
+///                                written
 ///
-///   run -w ls                    no: written as an option and not declared, so not passed on
+///   run -w ls                    rejected: -w is written as an option and is not declared, and
+///                                is therefore not passed on
 /// \endverbatim
 ///
-/// A value may be written against its option, \c --opt=v or \c -Ov, and it is the first value
-/// of the option's first argument rather than the whole of it, so \c --opt=a \c b reads as
-/// \c --opt \c a \c b wherever that argument takes more than one. The joined spelling
-/// Option::shortMatch() allows is the exception: one token carries one value, so it is offered
-/// only where the option's one argument takes exactly one.
+/// A value may be attached to its option, as in \c --opt=v or \c -Ov. An attached value is the
+/// first value of the first argument of the option, not the complete argument. The command line
+/// \c --opt=a \c b is therefore read as \c --opt \c a \c b if that argument accepts more than one
+/// value. The attached spelling that Option::shortMatch() permits is an exception. Because one
+/// token contains one value, this spelling is available only if the option has exactly one
+/// argument and that argument accepts exactly one value.
 ///
-/// \subsection cli_shape_trees What a tree should not be
+/// \subsection cli_shape_trees Invalid command trees
 ///
-/// These are mistakes in the program rather than in what a user typed. parse() asserts that the
-/// whole tree is valid in a debug build. A program that builds one dynamically may call
-/// Parser::validate() and report the reason itself.
+/// The following conditions are errors of the program, not of the user input. In a debug build,
+/// parse() asserts that the whole tree is valid. A program that builds its command tree
+/// dynamically may call Parser::validate() and report the reason itself.
 ///
 /// An argument should not
-/// \li have no name, or share a name with another argument beside it, a command's own and an
-///     option's being two lists
-/// \li be required where one before it may be left out, since one token could be meant for
-///     either
-/// \li follow an Argument::Remainder, which leaves nothing to follow it with
-/// \li follow an Argument::Multiple unless it is a required Argument::Single, that being the one
-///     thing the reservation rule leaves room for
-/// \li expect() a value its own type() cannot read
-/// \li carry a defaultValue() that its type(), its expect() or its validate() turns down, or
-///     carry one at all while being required, a default being what stands in where nothing was
-///     given
+/// \li have an empty name, or share its name with another argument in the same list. The
+///     arguments of a command and the arguments of an option are separate lists.
+/// \li be required if a preceding argument is optional, because one token could then belong to
+///     either argument
+/// \li follow an Argument::Remainder argument, which consumes every remaining token
+/// \li follow an Argument::Multiple argument unless it is a required Argument::Single argument,
+///     because the token reservation of Argument::Multiple covers only that case
+/// \li list in expect() a value that its type() cannot parse
+/// \li have a defaultValue() that its type(), its expect() or its validate() rejects, or have any
+///     defaultValue() while being required, because a default value replaces only an absent value
 ///
 /// An option should not
-/// \li have no spelling, or one shorter than two characters, or one starting with neither \c -
-///     nor \c /
+/// \li have no spelling, a spelling shorter than two characters, or a spelling that starts with
+///     neither \c - nor \c /
 /// \li repeat one of its own spellings
 /// \li share a spelling with another option of the same command
-/// \li be required or take arguments where its prior() is Option::AutoSetWhenNoSymbols, since
-///     nobody writes one of those and there is nothing to give it
-/// \li be told by multi() that it may be given a negative number of times
+/// \li be required or have arguments if its prior() is Option::AutoSetWhenNoSymbols, because such
+///     an option is set without being written and therefore receives no values
+/// \li receive a negative maximum occurrence count from multi()
 ///
 /// A command should not
-/// \li hold a subcommand with no name, or two subcommands sharing one
-/// \li hold an Argument::Remainder and an option whose argument is greedy, both wanting the rest
-///     of the line where only one of them can be written first
+/// \li contain a subcommand with an empty name, or two subcommands with the same name
+/// \li contain both an Argument::Remainder argument and an option with a greedy argument, because
+///     both consume the rest of the line and only one of them can be written first
 ///
-/// A CommandCatalogue should not name something its command does not contain, or name one thing
-/// twice, in one group or across two of the same kind.
+/// A CommandCatalogue should not name an item that its command does not contain, or name one item
+/// twice, either in one group or in two groups of the same kind.
 ///
-/// And a tree should not, which is only visible once it is one
-/// \li have two options in scope at one command answering to one spelling, the recursive ones of
-///     every command above it included
-/// \li have two names in one scope that differ only in case, where the parse ignores case
-/// \li have two spellings a value may be stuck to where one is the start of the other, \c -D and
-///     \c -Da against \c -Dabc, which no rule can settle
+/// The following conditions are detectable only on the complete tree. A command tree should not
+/// \li have two options in scope at one command that match one spelling. The recursive options of
+///     every ancestor command are included.
+/// \li have two names in one scope that differ only in case, if the parse ignores case
+/// \li have two spellings that accept an attached value if one spelling is a prefix of the other,
+///     as \c -D and \c -Da are for \c -Dabc, because no rule can resolve the ambiguity
 ///
-/// \section cli_help Changing the help text
+/// \section cli_help Help text customization
 ///
-/// Five rungs, and a program climbs only as far as it needs to. Each one is written in terms of
-/// the one below it, so nothing is reimplemented to change one thing.
+/// Help text customization has five levels. A program proceeds only to the level that its change
+/// requires. Because each level is implemented in terms of the level below it, a single change
+/// requires no reimplementation.
 ///
 /// \verbatim
-///   1  how much room it has          parser.setIndent(2)
+///   1  dimensions                    parser.setIndent(2)
 ///                                    parser.setSpacing(1)
 ///                                    parser.setTextWidth(100)
 ///
-///   2  how it is printed             layout.setTitleStyle({console::bold})
+///   2  styles                        layout.setTitleStyle({console::bold})
 ///                                    layout.setBodyStyle(HelpBlock::Epilogue, {...})
 ///
-///   3  which blocks, in what order   HelpLayout().add(HelpBlock::Usage)
+///   3  blocks and their order        HelpLayout().add(HelpBlock::Usage)
 ///                                                .add(HelpBlock::Options)
 ///                                                .add(myOwnBlock)
 ///
-///   4  how a block is made or laid   struct Mine : HelpFormatter {
-///      out, one rung at a time           std::vector<HelpBlock> blocks(...) const override {
+///   4  block construction and        struct Mine : HelpFormatter {
+///      layout, one method at a time      std::vector<HelpBlock> blocks(...) const override {
 ///                                            auto res = HelpFormatter::blocks(...);
 ///                                            ...
 ///                                        }
 ///                                    };
 ///
-///   5  none of the above             for (auto &block : result.helpBlocks()) { ... }
+///   5  direct use of the blocks      for (auto &block : result.helpBlocks()) { ... }
 /// \endverbatim
 ///
-/// Rungs 1 to 3 are settings on the Parser and need no type of your own. Rung 4 is
-/// HelpFormatter, which is a ladder of its own and carries the diagram of it. Rung 5 hands the
-/// blocks over and gets out of the way.
+/// Levels 1 to 3 are settings of the Parser and require no program-defined type. Level 4 is
+/// HelpFormatter, whose methods form a hierarchy of levels of their own, shown by the diagram in
+/// its documentation. At level 5 the library provides the blocks, and the program processes them
+/// without further involvement of the library.
 
 namespace stdc::cli {
 
     /// \addtogroup cli
     /// @{
 
-    /// How a token is turned into a \c T, and what to call \c T in the help text.
+    /// The conversion of a token to \c T, and the name of \c T in the help text.
     ///
-    /// A command line is text, so everything here is stored as text and converted when it is
-    /// read. Specialize this to accept a type of your own:
+    /// Because a command line consists of text, every value is stored as text and converted when
+    /// it is read. A program specializes this template to accept a type of its own:
     ///
     /// \code
     ///   template <>
@@ -248,20 +259,21 @@ namespace stdc::cli {
     ///   };
     /// \endcode
     ///
-    /// \c parse returns false for a token the type cannot represent, which is what turns
-    /// \c --count=x into a diagnostic rather than a zero.
+    /// \c parse returns false for a token that the type cannot represent. This return value
+    /// causes \c --count=x to produce a diagnostic instead of the value zero.
     template <class T, class Enable = void>
     struct value_traits;
 
     namespace detail {
 
-        /// A type's check and its name, as function pointers, so that Argument can hold a
-        /// type without being a template.
+        /// The check function and the name of a type, stored as pointers so that Argument can
+        /// record a type without being a template.
         struct value_type_info {
-            /// Whether the token is a \c T. Null means anything goes, which is the default.
+            /// Returns whether the token is a valid \c T. A null pointer, which is the default,
+            /// accepts every token.
             bool (*check)(std::string_view) = nullptr;
-            /// The name used in diagnostics and in the help text. Must be a literal, since
-            /// it is held rather than copied.
+            /// The name used in diagnostics and in the help text. It must be a string literal,
+            /// because the pointer is stored without copying the string.
             const char *name = nullptr;
         };
 
@@ -276,7 +288,7 @@ namespace stdc::cli {
             return {&check_value<T>, value_traits<T>::type_name()};
         }
 
-        /// What a ParseResult holds.
+        /// The data of a ParseResult.
         class parse_data;
 
         STDC_EXPORT bool parse_signed(std::string_view token, int64_t *out, int64_t min,
@@ -289,7 +301,7 @@ namespace stdc::cli {
 
     }
 
-    /// Text, which is what a command line already is.
+    /// Text, which requires no conversion because a command line consists of text.
     template <>
     struct value_traits<std::string> {
         static inline bool parse(std::string_view token, std::string *out) {
@@ -301,7 +313,7 @@ namespace stdc::cli {
         }
     };
 
-    /// A view into the result's own storage, which outlives the read.
+    /// A view into the storage of the result, which remains valid after the read.
     template <>
     struct value_traits<std::string_view> {
         static inline bool parse(std::string_view token, std::string_view *out) {
@@ -313,7 +325,7 @@ namespace stdc::cli {
         }
     };
 
-    /// \c true, \c false, \c yes, \c no, \c on, \c off, \c 1 and \c 0, in any case.
+    /// Accepts \c true, \c false, \c yes, \c no, \c on, \c off, \c 1 and \c 0, case-insensitively.
     template <>
     struct value_traits<bool> {
         static inline bool parse(std::string_view token, bool *out) {
@@ -324,8 +336,8 @@ namespace stdc::cli {
         }
     };
 
-    /// Every integer type except \c bool, which has its own above. The range of the target
-    /// type is part of the check, so \c 300 is not a \c uint8_t.
+    /// Every integer type except \c bool, which has a separate specialization. The check includes
+    /// the range of the target type. Therefore, \c 300 is not a valid \c uint8_t.
     template <class T>
     struct value_traits<T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>>> {
         static inline bool parse(std::string_view token, T *out) {
@@ -350,9 +362,9 @@ namespace stdc::cli {
         }
     };
 
-    /// \c float, \c double and \c long double. Uses the matching function from the \c strto*
-    /// family rather than \c from_chars, which libc++ did not implement for floating point for
-    /// a long time.
+    /// \c float, \c double and \c long double. The conversion uses the matching function of the
+    /// \c strto* family instead of \c from_chars, because older libc++ versions do not implement
+    /// \c from_chars for floating-point types.
     template <class T>
     struct value_traits<T, std::enable_if_t<std::is_floating_point_v<T>>> {
         static inline bool parse(std::string_view token, T *out) {
@@ -366,34 +378,38 @@ namespace stdc::cli {
     class ParseResult;
     class HelpFormatter;
 
-    /// One positional value a command or an option takes.
+    /// A positional value of a command or an option.
     class Argument {
     public:
-        /// How many tokens it takes.
+        /// The number of tokens that an argument consumes.
         enum Arity {
-            /// Exactly one.
+            /// Exactly one token.
             Single,
-            /// One or more, also called greedy. Leaves enough tokens for the required arguments
-            /// after it, so \c copy \c \<src\>... \c \<dest\> works.
+            /// One or more tokens. An argument of this arity is called greedy. It leaves enough
+            /// tokens for the required arguments after it. Therefore,
+            /// \c copy \c \<src\>... \c \<dest\> is valid.
             Multiple,
-            /// Everything left, options included, which is why nothing may follow one. Where it
-            /// starts is where option reading stops, so this is how a program spells its own
-            /// terminator.
+            /// Every remaining token, options included. No argument may follow an argument of
+            /// this arity. Because option recognition stops at its first token, a program
+            /// defines its own terminator through such an argument.
             ///
-            /// Where it starts is where the argument before it was filled. Where it is the
-            /// first argument there is none, so it starts at the first token not written as
-            /// an option, which is what lets a wrapper take options of its own:
-            /// \c run \c -u \c root \c ls \c -l gives \c -u to \c run and \c -l to \c ls.
+            /// It starts after the last token of the preceding argument. If it is the first
+            /// argument, no preceding argument exists, and it starts at the first token that is
+            /// not written as an option. This rule allows a wrapper program to accept options of
+            /// its own: \c run \c -u \c root \c ls \c -l assigns \c -u to \c run and \c -l to
+            /// \c ls.
             ///
-            /// \note Required like any other argument, so an empty tail wants optional().
+            /// \note Such an argument is required like any other argument. An empty remainder
+            ///       requires optional().
             Remainder,
         };
 
-        /// Answers whether \a token is acceptable, and says why in \a error when it is not.
+        /// Returns whether \a token is acceptable, and stores the reason in \a error if it is not.
         ///
-        /// It may be called repeatedly with the same token, including while the command tree is
-        /// validated. It should have no observable side effects and should give the same answer
-        /// without depending on how many times it has been called or on mutable external state.
+        /// The parser may call a validator repeatedly with the same token, including during
+        /// validation of the command tree. A validator should have no observable side effects,
+        /// and its result should depend neither on the number of previous calls nor on mutable
+        /// external state.
         using Validator = std::function<bool(std::string_view token, std::string *error)>;
 
         Argument() = default;
@@ -402,7 +418,7 @@ namespace stdc::cli {
             : _name(std::move(name)), _desc(std::move(desc)), _required(required) {
         }
 
-        /// The name to show in the help text, when it should differ from name().
+        /// Sets the name shown in the help text, if that name differs from name().
         inline Argument &metavar(std::string displayName) {
             _displayName = std::move(displayName);
             return *this;
@@ -415,29 +431,31 @@ namespace stdc::cli {
             _required = !on;
             return *this;
         }
-        /// The value the result gives when the argument was not given. Stored as text and
-        /// converted when read.
+        /// Sets the value that the result returns if the argument is absent from the command
+        /// line. The value is stored as text and converted when read.
         ///
-        /// \pre It is readable as whatever type<T>() declared, and is one of the values
-        ///      expect() allows, if either was given.
+        /// \pre The value is readable as the type declared by type<T>(), and is one of the
+        ///      values allowed by expect(), if either was declared.
         inline Argument &defaultValue(std::string value) {
             _default = std::move(value);
             _hasDefault = true;
             return *this;
         }
-        /// The only values this accepts, for an argument that is a choice between a few
+        /// Sets the complete list of accepted values, for an argument that selects one of a few
         /// words.
         ///
-        /// \pre Every one of them is readable as whatever type<T>() declared.
+        /// \pre Every value is readable as the type declared by type<T>(), if a type was
+        ///      declared.
         inline Argument &expect(std::vector<std::string> values) {
             _expected = std::move(values);
             return *this;
         }
-        /// What this argument accepts beyond being readable as its type.
+        /// Sets an additional acceptance check, applied to tokens that are readable as the type
+        /// of the argument.
         ///
-        /// \pre It accepts defaultValue(), where there is one. Only what a command line wrote is
-        ///      put past it while parsing, so a default it refuses would be handed back without
-        ///      ever being asked about.
+        /// \pre The validator accepts defaultValue(), if a default value exists. Because the
+        ///      parser applies the validator only to tokens written on the command line, a
+        ///      default value that the validator rejects would be returned without any check.
         inline Argument &validate(Validator validator) {
             _validator = std::move(validator);
             return *this;
@@ -450,10 +468,10 @@ namespace stdc::cli {
             _arity = on ? Multiple : Single;
             return *this;
         }
-        /// Declares the type. Tokens are checked against it while parsing, and its name
-        /// appears in the help text. Without it any token is accepted.
+        /// Declares the type. The parser checks tokens against it, and its name appears in the
+        /// help text. Without a declared type, every token is accepted.
         ///
-        /// \pre Whatever expect() was given, if anything, is readable as a \c T.
+        /// \pre Every value given to expect() is readable as a \c T.
         template <class T>
         inline Argument &type() {
             _type = detail::type_info_for<T>();
@@ -466,7 +484,7 @@ namespace stdc::cli {
         inline const std::string &description() const {
             return _desc;
         }
-        /// The metavar if one was given, and the name otherwise.
+        /// Returns the metavar if a metavar was set, and name() otherwise.
         inline const std::string &displayName() const {
             return _displayName.empty() ? _name : _displayName;
         }
@@ -505,56 +523,59 @@ namespace stdc::cli {
         bool _hasDefault = false;
     };
 
-    /// A named switch, with any number of arguments of its own.
+    /// A named switch with any number of arguments.
     class Option {
     public:
-        /// What the option means, for the two the library answers by itself. A role brings the
-        /// usual spellings and description, and lets a caller ask by role rather than by
-        /// spelling.
+        /// The meaning of an option, for the two options that the library handles itself. A role
+        /// provides the conventional spellings and description, and allows a caller to query an
+        /// option by role instead of by spelling.
         ///
-        /// The set is closed, and it is these two because these two are what the library does
-        /// something with. A role for a switch it only carries the spelling of would be a
-        /// second way of writing Option({"-V", "--verbose"}, "Print more information").
+        /// The set is closed and contains exactly these two roles, because the library acts on
+        /// these two only. A role for a switch for which the library supplies only the spelling
+        /// would be a second way of writing
+        /// Option({"-V", "--verbose"}, "Print more information").
         ///
-        /// \note A role says nothing about scope, which is recursive(), nor about where an option
-        ///       sits in the help text, which is where it was declared.
+        /// \note A role does not specify the scope, which recursive() controls, nor the position
+        ///       of an option in the help text, which is the declaration order.
         enum Role {
             NoRole,
             Version,
             Help,
         };
 
-        /// How much of a short token the parser may take for this option, so that \c -O2 or
-        /// \c -DKEY=VALUE can be one token rather than two.
+        /// The portion of a short token that the parser may match as this option, so that
+        /// \c -O2 or \c -DKEY=VALUE can be one token instead of two.
         enum ShortMatch {
             /// \c -D and its value are separate tokens.
             NoShortMatch,
             /// A single letter may be followed by the value, as in \c -O2.
             ShortMatchSingleLetter,
-            /// A single character, letter or not.
+            /// A single character, letter or not, may be followed by the value.
             ShortMatchSingleChar,
-            /// The whole token after the option's own, as in \c -DKEY=VALUE.
+            /// The complete rest of the token after the spelling is the value, as in
+            /// \c -DKEY=VALUE.
             ShortMatchAll,
         };
 
-        /// The highest level among the options given decides. This is what lets \c --help be
-        /// answered on a command line that is missing everything it requires.
+        /// The priority level of an option. The highest level among the given options determines
+        /// the behavior. This rule allows \c --help to take effect on a command line that lacks
+        /// every required item.
         ///
         /// ###QUESTION: Should automatic activation and exclusivity be split from missing-value
         /// priority? This enum prevents combining those policies and orders unrelated values.
         enum Prior {
             NoPrior,
-            /// Its own missing arguments are not an error.
+            /// Missing arguments of this option are not an error.
             IgnoreMissingArguments,
-            /// Nothing missing anywhere is an error.
+            /// No missing item anywhere on the command line is an error.
             IgnoreMissingSymbols,
-            /// Set it when nothing else was given at all.
+            /// The option is set if the command line contains no other token.
             AutoSetWhenNoSymbols,
-            /// Giving it means no arguments may be given.
+            /// If the option is given, no argument may be given.
             ExclusiveToArguments,
-            /// Giving it means no other options may be given.
+            /// If the option is given, no other option may be given.
             ExclusiveToOptions,
-            /// Giving it means nothing else may be given.
+            /// If the option is given, no other token may be given.
             ExclusiveToAll,
         };
 
@@ -569,14 +590,15 @@ namespace stdc::cli {
         inline Option(std::string token, std::string desc = {})
             : Option(std::vector<std::string>{std::move(token)}, std::move(desc)) {
         }
-        /// Deliberately not explicit, so that \c addOptions({Option::Help}) reads the way it
-        /// does. Empty tokens take the usual spelling for the role.
+        /// Constructs an option with \a role. The constructor is not explicit, so that
+        /// \c addOptions({Option::Help}) is well-formed. If \a tokens is empty, the option uses
+        /// the conventional spellings of the role.
         inline Option(Role role, std::vector<std::string> tokens = {}, std::string desc = {})
             : _tokens(tokens.empty() ? defaultTokens(role) : std::move(tokens)),
               _desc(desc.empty() ? defaultDescription(role) : std::move(desc)), _role(role) {
         }
 
-        /// Adds an argument. An option's argument needs no description of its own.
+        /// Adds an argument. The argument of an option requires no description.
         inline Option &arg(std::string name, bool required = true) {
             return arg(Argument(std::move(name), {}, required));
         }
@@ -588,12 +610,14 @@ namespace stdc::cli {
             _required = on;
             return *this;
         }
-        /// Whether a value may be stuck to the spelling, \c -Dfoo rather than \c -D \c foo.
+        /// Sets whether a value may be attached to the spelling, as in \c -Dfoo instead of
+        /// \c -D \c foo.
         ///
-        /// \note A permission rather than a promise. One token carries one value, so an option
-        ///       that takes no argument, takes an optional one, takes more than one, or whose
-        ///       one argument is greedy is never matched this way whatever is set here. Written
-        ///       out with a space they all work.
+        /// \note This setting permits the attached form but does not guarantee it. Because one
+        ///       token contains one value, the attached form never matches an option that has no
+        ///       argument, an optional argument, more than one argument, or a greedy argument,
+        ///       regardless of this setting. Each of these options accepts its value as a
+        ///       separate token.
         inline Option &shortMatch(ShortMatch rule) {
             _shortMatch = rule;
             return *this;
@@ -602,22 +626,23 @@ namespace stdc::cli {
             _prior = level;
             return *this;
         }
-        /// In scope for every command below this one as well as for this one.
+        /// Places the option in scope for every descendant command as well as for the declaring
+        /// command.
         ///
-        /// Without it an option can be given only where the command declaring it is the one that
-        /// was reached, since every option is written after its own command.
+        /// Without this setting, an option can be given only if the declaring command is the
+        /// reached command, because every option is written after the name of its own command.
         inline Option &recursive(bool on = true) {
             _recursive = on;
             return *this;
         }
-        /// How many times the option may be given, zero meaning without limit.
+        /// Sets the maximum number of occurrences of the option. Zero means no limit.
         ///
-        /// What repeats is the whole occurrence: every time the option is written it reads its
-        /// arguments again, into a set of its own that OptionResult::at() hands back. How many
-        /// values one argument takes within one occurrence is a different question, and
-        /// Argument::multi() is where it is asked.
-        /// \pre \a maxOccurrence is not negative. A negative is not a smaller limit, it is one
-        ///      the count can never reach, which reads back as no limit at all.
+        /// The unit of repetition is the complete occurrence. Every time the option is written,
+        /// the parser reads its arguments again into a separate set, which OptionResult::at()
+        /// returns. The number of values that one argument accepts within one occurrence is a
+        /// separate setting, Argument::multi().
+        /// \pre \a maxOccurrence is not negative. A negative value is not a smaller limit but a
+        ///      limit that the count can never reach, which is equivalent to no limit.
         inline Option &multi(int maxOccurrence = 0) {
             _maxOccurrence = maxOccurrence;
             return *this;
@@ -626,7 +651,7 @@ namespace stdc::cli {
         inline const std::vector<std::string> &tokens() const {
             return _tokens;
         }
-        /// The first spelling, which is the one the help text and diagnostics use.
+        /// Returns the first spelling, which the help text and diagnostics use.
         inline const std::string &token() const {
             assert(!_tokens.empty() && "an option with no spelling has no token");
             return _tokens.front();
@@ -656,7 +681,7 @@ namespace stdc::cli {
             return _maxOccurrence;
         }
 
-        /// What a role says about itself in the help text when nothing else was given.
+        /// Returns the help text description of \a role, used if no description was given.
         static inline std::string defaultDescription(Role role) {
             switch (role) {
                 case Help:
@@ -668,7 +693,7 @@ namespace stdc::cli {
             }
         }
 
-        /// The spellings a role answers to when none were given.
+        /// Returns the conventional spellings of \a role, used if no spellings were given.
         static inline std::vector<std::string> defaultTokens(Role role) {
             switch (role) {
                 case Help:
@@ -692,8 +717,9 @@ namespace stdc::cli {
         bool _recursive = false;
     };
 
-    /// Which heading each name is listed under in the help text. Anything not named here goes
-    /// under the default heading, so a catalogue only has to mention what it wants to move.
+    /// The assignment of names to headings in the help text. Because a name absent from the
+    /// catalogue is listed under the default heading, a catalogue needs to contain only the names
+    /// that the program moves to another heading.
     class CommandCatalogue {
     public:
         struct Group {
@@ -733,11 +759,11 @@ namespace stdc::cli {
         std::vector<Group> _arguments;
     };
 
-    /// A command, its arguments, its options and whatever subcommands it has.
+    /// A command with its arguments, its options and its subcommands, if any.
     class Command {
     public:
-        /// What to run once this command is the one that was named. Its return value is the
-        /// program's.
+        /// The function run if this command is the reached command. Its return value is the
+        /// return value of the program.
         using Handler = std::function<int(const ParseResult &)>;
         /// The function run before the handler. A return value of zero continues the run. Any
         /// other value ends the run and becomes the return value of the program.
@@ -807,19 +833,21 @@ namespace stdc::cli {
             _catalogue = std::move(catalogue);
             return *this;
         }
-        /// What a Version option prints.
+        /// Sets the text that a Version option prints.
         inline Command &setVersion(std::string version) {
             _version = std::move(version);
             return *this;
         }
 
-        /// The version option, with the level that lets it be answered on a command line that is
-        /// otherwise missing everything it needs.
+        /// Adds the version option, with the priority level that allows the option to take
+        /// effect on a command line that lacks every required item.
         ///
-        /// The switch is this command's and the string cascades, so a subcommand adds its own
-        /// switch and says a version of its own or does not. An empty \a version is the second
-        /// of those: the switch answers here with whatever the nearest command above it said.
-        /// Where the whole path is empty, invoke() leaves the Version role for the handler.
+        /// The option belongs to this command, and descendant commands inherit the version text.
+        /// A subcommand therefore adds its own option and either specifies its own version text
+        /// or inherits the version text. An empty \a version selects inheritance, and the option
+        /// of this command prints the version text of the nearest ancestor command that has a
+        /// version text. If no command on the path has a version text, invoke() leaves the
+        /// Version role to the handler.
         /// \sa ParseResult::versionText()
         ///
         /// \code
@@ -833,13 +861,14 @@ namespace stdc::cli {
                                  .prior(Option::IgnoreMissingSymbols));
         }
 
-        /// The help option, likewise.
+        /// Adds the help option, with a priority level that allows the option to take effect on
+        /// a command line that lacks every required item.
         ///
-        /// \param showIfNoArguments Answer a command line with nothing on it at all, so that a
-        ///        bare program name prints its help.
-        /// \param recursive Keep it in scope for the subcommands as well.
-        /// \param tokens The spellings, or the usual ones when empty.
-        /// \param desc The description, or the usual one when empty.
+        /// \param showIfNoArguments Whether the help text is shown for an empty command line, so
+        ///        that the program name alone prints the help text.
+        /// \param recursive Whether the option is also in scope for the subcommands.
+        /// \param tokens The spellings. If empty, the conventional spellings are used.
+        /// \param desc The description. If empty, the conventional description is used.
         inline Command &addHelpOption(bool showIfNoArguments = false, bool recursive = false,
                                       std::vector<std::string> tokens = {}, std::string desc = {}) {
             return addOption(Option(Option::Help, std::move(tokens), std::move(desc))
@@ -883,7 +912,8 @@ namespace stdc::cli {
             return _catalogue;
         }
 
-        /// The subcommand named \a name, or null. Only one level down.
+        /// Returns the subcommand named \a name, or null if no such subcommand exists. Only
+        /// direct subcommands are searched.
         inline const Command *findCommand(std::string_view name) const {
             for (const auto &item : _commands) {
                 if (item._name == name) {
@@ -893,8 +923,8 @@ namespace stdc::cli {
             return nullptr;
         }
 
-        /// The option answering to \a token, or null. A token is any of an option's spellings,
-        /// not only the first.
+        /// Returns the option that has the spelling \a token, or null if no such option exists.
+        /// Every spelling of an option matches, not only the first spelling.
         inline const Option *findOption(std::string_view token) const {
             for (const auto &item : _options) {
                 for (const auto &spelling : item.tokens()) {
@@ -919,47 +949,54 @@ namespace stdc::cli {
         CommandCatalogue _catalogue;
     };
 
-    /// What one option was given.
+    /// The values given to one option.
     ///
-    /// A view onto the ParseResult it came from, the way \c std::string_view is a view onto a
-    /// string. It owns nothing and keeps nothing alive. One exists only where the option was
-    /// given, so there is no such thing as an empty one and nothing here has to ask.
+    /// An OptionResult is a view onto the ParseResult that produced it, in the same way as
+    /// \c std::string_view is a view onto a string. It owns no storage and extends no lifetime.
+    /// Because an OptionResult exists only for an option that was given, no empty OptionResult
+    /// exists and no accessor needs to check for absence.
     ///
-    /// \warning Do not outlive that result. \c parser.parse(args).option("-f") reads freed
-    ///          storage at the semicolon, since the result it was taken from was a temporary.
+    /// \warning An OptionResult must not outlive its ParseResult.
+    ///          \c parser.parse(args).option("-f") reads freed storage after the end of the full
+    ///          expression, because the ParseResult is a temporary.
     /// \sa ParseResult::option()
     class STDC_EXPORT OptionResult {
     public:
-        /// One appearance of the option, read the way a ParseResult is read.
+        /// One occurrence of the option, with the same accessors as a ParseResult.
         ///
-        /// A command is given once and an option may be given many times, which is the whole
-        /// of the difference between them. So this is what a ParseResult is for a command,
-        /// with the same four questions asked of it in the same four words, and OptionResult
-        /// is these in a row.
+        /// The only difference between a command and an option is that a command is given once
+        /// and an option may be given many times. An Occurrence therefore corresponds to the
+        /// ParseResult of a command, with the same four accessors under the same four names,
+        /// and an OptionResult is a sequence of occurrences.
         ///
-        /// \warning A view onto a view, so it lasts as long as the ParseResult and not a line
-        ///          longer. One always stands for an occurrence that happened, which is what
-        ///          OptionResult::at()'s precondition is for.
+        /// \warning Because an Occurrence is a view onto a view, it remains valid exactly as long
+        ///          as the ParseResult. An Occurrence always represents an occurrence that
+        ///          took place, which the precondition of OptionResult::at() guarantees.
         class STDC_EXPORT Occurrence {
         public:
-            /// The \a index'th argument's first value, as text, or the default value where
-            /// there is one, or nothing when there is neither.
+            /// Returns the first value of the \a index'th argument as text, the default value
+            /// if the argument is absent and has a default value, or \c std::nullopt if neither
+            /// exists.
             ///
-            /// An option given an empty value, \c --prefix= , has one, and it is the empty
-            /// string. That is why this answers with an optional rather than with empty text:
-            /// whether a token is there and whether the token is empty are different questions.
+            /// An option given an empty value, as in \c --prefix= , has a value, which is the
+            /// empty string. The return type is therefore an optional instead of a string,
+            /// because the presence of a token and the emptiness of a token are separate
+            /// properties.
             ///
-            /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
-            ///          value<T>() for something that owns what it holds.
+            /// \warning The returned view points into the ParseResult and remains valid exactly
+            ///          as long as the ParseResult. value<T>() returns a value that owns its
+            ///          storage.
             std::optional<std::string_view> rawValue(int index = 0) const;
 
-            /// Every value the \a index'th argument took here, which is more than one only
-            /// where the argument said it accepts more than one.
+            /// Returns every value of the \a index'th argument in this occurrence. The list
+            /// contains more than one value only if the argument accepts more than one value.
             ///
-            /// \warning The same. These point into the ParseResult.
+            /// \warning The returned views point into the ParseResult, with the same lifetime as
+            ///          the view returned by rawValue().
             std::vector<std::string_view> rawValues(int index = 0) const;
 
-            /// Converted, or nothing when there is nothing to convert.
+            /// Returns rawValue() converted to \c T, or \c std::nullopt if no value exists or
+            /// the value is not a valid \c T.
             template <class T = std::string>
             std::optional<T> value(int index = 0) const {
                 auto raw = rawValue(index);
@@ -973,8 +1010,8 @@ namespace stdc::cli {
                 return out;
             }
 
-            /// Every value the \a index'th argument took here, converted, or nothing when one
-            /// of them is not a \c T.
+            /// Returns every value of the \a index'th argument in this occurrence converted to
+            /// \c T, or \c std::nullopt if one of the values is not a valid \c T.
             template <class T = std::string>
             std::optional<std::vector<T>> values(int index = 0) const {
                 std::vector<T> out;
@@ -996,13 +1033,13 @@ namespace stdc::cli {
             int _n;
         };
 
-        /// How many times the option was given, which is at least once.
+        /// Returns the number of occurrences of the option, which is at least one.
         int count() const;
 
-        /// The option itself.
+        /// Returns the declaration of the option.
         const Option *option() const;
 
-        /// The \a n'th time it was given, counting from zero.
+        /// Returns the \a n'th occurrence of the option, counting from zero.
         ///
         /// \code
         ///   for (int n = 0; n < given.count(); ++n) {
@@ -1010,19 +1047,21 @@ namespace stdc::cli {
         ///   }
         /// \endcode
         ///
-        /// \pre \a n is at least zero and less than count(). Anything else is undefined, and
-        ///      is asserted in a debug build. An Occurrence is a view onto one that happened,
-        ///      so there is no such thing as an empty one to hand back and nothing on it to
-        ///      ask, which is the same reason ParseResult::option() answers with an optional
-        ///      and OptionResult does not.
+        /// \pre \a n is at least zero and less than count(). Any other value causes undefined
+        ///      behavior and fails an assertion in a debug build. Because an Occurrence is a view
+        ///      onto an occurrence that took place, no empty Occurrence exists to be returned
+        ///      and no accessor of Occurrence checks for absence. For the same reason,
+        ///      ParseResult::option() returns an optional and OptionResult does not.
         Occurrence at(int n) const;
 
-        /// The four below are the first occurrence's four, said shorter. An option given once
-        /// is what nearly every option is, and there is nothing else it could mean.
+        /// The four accessors below are shorthands for the four accessors of the first
+        /// occurrence. Nearly every option is given once, and for such an option the first
+        /// occurrence is the only possible interpretation.
         ///
-        /// What an option has that a command has not is that it may be given again, and that
-        /// is at() and the two all-prefixed below. Neither is folded into these: an option
-        /// read without saying which occurrence reads the first.
+        /// Unlike a command, an option may be given repeatedly. Repetition is exposed through
+        /// at() and the two accessors below with the \c all prefix. Neither form is merged into
+        /// these four accessors. An option read without an occurrence index is read from the
+        /// first occurrence.
         inline std::optional<std::string_view> rawValue(int index = 0) const {
             return at(0).rawValue(index);
         }
@@ -1044,20 +1083,21 @@ namespace stdc::cli {
             return at(0).values<T>(index);
         }
 
-        /// Every value the \a index'th argument took, in every occurrence, in the order they
-        /// were written.
+        /// Returns every value of the \a index'th argument across all occurrences, in the order
+        /// written.
         ///
-        /// This is what a repeated option is usually asked, \c -I \c a \c -I \c b answering
-        /// with both, and the reason it is spelled apart from the four above is that they
-        /// would otherwise mean one thing for an option given once and another for the same
-        /// option given twice.
+        /// This function is the usual query for a repeated option. For \c -I \c a \c -I \c b it
+        /// returns both values. It is separate from the four accessors above, because those
+        /// accessors would otherwise behave differently for an option given once and for the
+        /// same option given twice.
         ///
-        /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
-        ///          allValues<T>() for something that owns what it holds.
+        /// \warning The returned views point into the ParseResult and remain valid exactly as
+        ///          long as the ParseResult. allValues<T>() returns values that own their
+        ///          storage.
         std::vector<std::string_view> allRawValues(int index = 0) const;
 
-        /// The same, converted, or nothing when one of them is not a \c T. An empty vector
-        /// means there were none to convert.
+        /// Returns allRawValues() converted to \c T, or \c std::nullopt if one of the values is
+        /// not a valid \c T. An empty vector indicates that no values exist.
         template <class T = std::string>
         std::optional<std::vector<T>> allValues(int index = 0) const {
             std::vector<T> out;
@@ -1078,14 +1118,14 @@ namespace stdc::cli {
         const void *_data;
     };
 
-    /// How a run of help text is printed.
+    /// The print style of a run of help text.
     ///
-    /// Ignored by ParseResult::helpText(), which answers with plain text, and applied by
-    /// ParseResult::showHelp(), which prints.
+    /// ParseResult::helpText() returns plain text and ignores the style. ParseResult::showHelp()
+    /// prints the text and applies the style.
     struct TextStyle {
         /// A bitwise or of console::style values.
         int style = console::nostyle;
-        /// One console::color value rather than a bitwise or of several.
+        /// A single console::color value, not a bitwise or of several values.
         int foreground = console::nocolor;
         int background = console::nocolor;
     };
@@ -1098,58 +1138,60 @@ namespace stdc::cli {
         return !(a == b);
     }
 
-    /// One block of the help text: a heading, and under it either a paragraph or a two column
-    /// list.
+    /// One block of the help text, consisting of a heading followed by either a paragraph or a
+    /// two-column list.
     ///
-    /// This is what the help text is made of before it is laid out. A program that wants
-    /// something HelpLayout cannot say asks ParseResult::helpBlocks() for these and prints them
-    /// itself.
+    /// Help blocks are the content of the help text before layout. A program that requires an
+    /// arrangement that HelpLayout cannot express obtains the blocks from
+    /// ParseResult::helpBlocks() and prints them itself.
     class HelpBlock {
     public:
-        /// One row of a list: what it is called on the left, what it does on the right.
+        /// One row of a list, with the name in the left column and the description in the right
+        /// column.
         struct Entry {
             std::string left;
             std::string right;
         };
 
-        /// Which part of the help text this is.
+        /// The part of the help text that a block represents.
         ///
-        /// \note One role becomes zero or more blocks. A command with no options contributes no
-        ///       Options block, and a CommandCatalogue splits the options it does have across a
-        ///       block per group.
+        /// \note One role produces zero or more blocks. A command without options produces no
+        ///       Options block, and a CommandCatalogue distributes the options of a command
+        ///       across one block per group.
         enum Role {
-            /// The text above everything, printed without a heading.
+            /// The text above all other blocks, printed without a heading.
             Prologue,
             Description,
             Usage,
             Arguments,
             Options,
-            /// What the commands above this one declared recursive and it therefore has.
+            /// The recursive options declared by the ancestors of the command, which are
+            /// therefore in scope at the command.
             ///
-            /// Titled "Global options" in the text, that being the word a reader of a
-            /// help page knows for an option that is not this command's own.
+            /// The help text titles this block "Global options", because readers of help pages
+            /// know this term for an option that the command does not declare itself.
             InheritedOptions,
             Commands,
-            /// The text below everything, printed without a heading.
+            /// The text below all other blocks, printed without a heading.
             Epilogue,
-            /// A block the program wrote itself.
+            /// A block defined by the program.
             Custom,
         };
 
         Role role = Custom;
-        /// The heading, written without its colon, which the layout adds. An empty title means
-        /// the block has no heading and its body sits at the margin.
+        /// The heading without its trailing colon, which the layout adds. An empty title
+        /// indicates that the block has no heading and that its body starts at the margin.
         std::string title;
-        /// The body of a block that is prose. Newlines already in it are kept.
+        /// The body of a prose block. Existing newlines are preserved.
         std::string text;
-        /// The rows of a block that is a list. A block is prose or a list, never both.
+        /// The rows of a list block. A block is either prose or a list, never both.
         std::vector<Entry> entries;
 
         TextStyle titleStyle;
-        /// The prose of a paragraph, and the right hand column of a list.
+        /// The style of the prose of a paragraph and of the right-hand column of a list.
         TextStyle bodyStyle;
-        /// The left hand column of a list, where the names are worth setting apart from what
-        /// they do.
+        /// The style of the left-hand column of a list, which distinguishes the names from their
+        /// descriptions.
         TextStyle entryStyle;
 
         inline bool isEmpty() const {
@@ -1157,9 +1199,10 @@ namespace stdc::cli {
         }
     };
 
-    /// Which blocks the help text is made of, in what order, and how each is printed.
+    /// The blocks of the help text, their order, and the style of each block.
     ///
-    /// A plain value. Start from defaultLayout() and change what is worth changing:
+    /// HelpLayout is a plain value type. A program typically starts from defaultLayout() and
+    /// modifies the required settings:
     ///
     /// \code
     ///   auto layout = cli::HelpLayout::defaultLayout();
@@ -1169,7 +1212,8 @@ namespace stdc::cli {
     /// \endcode
     class HelpLayout {
     public:
-        /// Every role once, in the order the help text has always printed them.
+        /// Returns a layout that contains every role except HelpBlock::Custom once, in the
+        /// default order.
         static inline HelpLayout defaultLayout() {
             HelpLayout res;
             for (auto role : {HelpBlock::Prologue, HelpBlock::Description, HelpBlock::Usage,
@@ -1180,7 +1224,8 @@ namespace stdc::cli {
             return res;
         }
 
-        /// Appends the standard block for \a role. A role added twice prints its contents twice.
+        /// Appends the standard block for \a role. The contents of a role added twice appear
+        /// twice.
         inline HelpLayout &add(HelpBlock::Role role) {
             HelpBlock block;
             block.role = role;
@@ -1188,7 +1233,8 @@ namespace stdc::cli {
             return *this;
         }
 
-        /// Appends a block of the program's own, laid out and aligned like the rest.
+        /// Appends a program-defined block, which is laid out and aligned like the standard
+        /// blocks.
         inline HelpLayout &add(HelpBlock block) {
             _blocks.push_back(std::move(block));
             return *this;
@@ -1196,8 +1242,9 @@ namespace stdc::cli {
 
         /// \name Styling
         ///
-        /// The overloads without a role reach every block the layout holds at the time of the
-        /// call, so add whatever blocks of your own you have before calling one.
+        /// The overloads without a role apply to every block that the layout contains at the
+        /// time of the call. Program-defined blocks must therefore be added before these
+        /// overloads are called.
         /// @{
         inline HelpLayout &setTitleStyle(TextStyle style) {
             for (auto &block : _blocks) {
@@ -1243,8 +1290,8 @@ namespace stdc::cli {
         }
         /// @}
 
-        /// The slots, in order. A standard role carries no contents here, only the styles its
-        /// blocks are made with.
+        /// Returns the block slots in order. A slot for a standard role contains no content, only
+        /// the styles applied to the blocks of that role.
         inline const std::vector<HelpBlock> &blocks() const {
             return _blocks;
         }
@@ -1257,7 +1304,7 @@ namespace stdc::cli {
         std::vector<HelpBlock> _blocks;
     };
 
-    /// What a command line turned out to mean, or why it did not.
+    /// The interpretation of a command line, or the reason for a parse failure.
     class STDC_EXPORT ParseResult {
     public:
         enum Error {
@@ -1279,7 +1326,8 @@ namespace stdc::cli {
 
         ParseResult();
 
-        /// Move only: one command line, parsed once, one owner of the answer.
+        /// A ParseResult is move-only, because one parse of a command line produces one result
+        /// with one owner.
         ParseResult(const ParseResult &RHS) = delete;
         ParseResult &operator=(const ParseResult &RHS) = delete;
         ParseResult(ParseResult &&RHS) noexcept;
@@ -1290,33 +1338,35 @@ namespace stdc::cli {
             return error() == NoError;
         }
         Error error() const;
-        /// What went wrong, ready to be printed.
+        /// Returns the error description, formatted for printing.
         const std::string &errorText() const;
-        /// The declared names close enough to what was typed to be worth offering, ready to be
-        /// printed. Empty when nothing is close, and when the failure was not a mistyped name.
+        /// Returns the declared names similar to the mistyped name as suggestions, formatted for
+        /// printing. Returns an empty string if no name is similar or if the failure is not
+        /// caused by a mistyped name.
         std::string correctionText() const;
 
-        /// The command that was reached, which is the root when no subcommand was named.
+        /// Returns the reached command, which is the root if no subcommand was named.
         const Command *command() const;
         /// Returns the commands from the root to the command reached, in that order. The pointers
         /// remain valid for the lifetime of this result.
         const std::vector<const Command *> &commandPath() const;
 
-        /// What a Version option prints: the innermost command on the path that was given one,
-        /// so a root that says a version passes it to everything under it.
+        /// Returns the text that a Version option prints, which is the version text of the
+        /// innermost command on the path that has a version text. A version text set on the
+        /// root therefore applies to every descendant command.
         /// \sa Command::setVersion(), Command::addVersionOption()
         std::string versionText() const;
 
-        /// Everything a \c main does with a command line, and its return value is what \c main
-        /// returns.
+        /// Performs the complete command line handling of a \c main function and returns the
+        /// value for \c main to return.
         ///
-        /// \li a parse that failed is reported, and \a errorCode comes back
-        /// \li a Help option, or a Version option with nonempty versionText(), is answered and
-        ///     0 comes back without the handler running. That is what keeps \c prog \c copy
-        ///     \c --help from doing whatever copy does.
-        /// \li otherwise the handler of the command that was reached runs, and \a errorCode
-        ///     comes back where there is none. This includes a Version option for which the
-        ///     command path supplies no text, so the handler may answer it itself.
+        /// \li If the parse failed, reports the error and returns \a errorCode.
+        /// \li If a Help option, or a Version option with nonempty versionText(), was given,
+        ///     prints the corresponding text and returns 0 without running the handler. This
+        ///     rule prevents \c prog \c copy \c --help from performing the copy operation.
+        /// \li Otherwise runs the handler of the reached command, or returns \a errorCode if the
+        ///     command has no handler. This case includes a Version option for which the command
+        ///     path supplies no text, and the handler may handle that option itself.
         ///
         /// The pre handlers of the commands on the path run before the handler, from the root
         /// downward. The first nonzero return value skips the remaining pre handlers and the
@@ -1324,8 +1374,8 @@ namespace stdc::cli {
         /// command whose pre handler is absent or returned zero, and the return value of the
         /// last post handler is returned. None of these run if the handler does not.
         ///
-        /// A program that wants to answer any of this itself calls parse() and does so. There
-        /// is nothing left over for a caller of this to have to finish.
+        /// A program that handles any of these cases itself calls parse() instead. A caller of
+        /// this function has no remaining step to perform.
         inline int invoke(int errorCode = -1) const {
             if (!isValid()) {
                 showError();
@@ -1371,41 +1421,46 @@ namespace stdc::cli {
             return code;
         }
 
-        /// Whether an option carrying \a role was given, whatever it was spelled as.
+        /// Returns whether an option with \a role was given, in any of its spellings.
         bool isRoleSet(Option::Role role) const;
 
-        /// What \a token was given, or nothing when it was not given at all, which covers an
-        /// option nobody declared as well as one nobody wrote.
+        /// Returns the values given to the option \a token, or \c std::nullopt if the option was
+        /// not given. The latter case includes an undeclared option as well as a declared option
+        /// that was not written.
         ///
         /// \code
         ///   if (auto force = result.option("-f")) { ... }
         /// \endcode
         ///
-        /// \note What comes back reads out of this result rather than copying, so it is good only
-        ///       while this one is. What that rules out is on OptionResult.
+        /// \note Because the returned OptionResult reads from this result without copying, it
+        ///       remains valid only as long as this result. OptionResult documents the resulting
+        ///       restrictions.
         /// \sa OptionResult
         std::optional<OptionResult> option(std::string_view token) const;
 
-        /// The \a index'th positional argument of the command that was reached, as text, or
-        /// the default value where there is one, or nothing when there is neither.
+        /// Returns the \a index'th positional argument of the reached command as text, the
+        /// default value if the argument is absent and has a default value, or \c std::nullopt
+        /// if neither exists.
         ///
-        /// An argument given an empty string has one, and it is the empty string. That is why
-        /// this answers with an optional rather than with empty text.
+        /// An argument given an empty string has a value, which is the empty string. The return
+        /// type is therefore an optional instead of a string.
         ///
-        /// \warning Points into this result and lasts exactly as long as it does. Ask value<T>()
-        ///          for something that owns what it holds.
+        /// \warning The returned view points into this result and remains valid exactly as long
+        ///          as this result. value<T>() returns a value that owns its storage.
         std::optional<std::string_view> rawValue(int index = 0) const;
-        /// Every token the \a index'th positional argument took.
+        /// Returns every token of the \a index'th positional argument.
         ///
-        /// \warning The same. These point into this result.
+        /// \warning The returned views point into this result, with the same lifetime as the
+        ///          view returned by rawValue().
         std::vector<std::string_view> rawValues(int index = 0) const;
 
-        /// Converted, or nothing when there is nothing to convert.
+        /// Returns rawValue() converted to \c T, or \c std::nullopt if no value can be
+        /// converted.
         ///
-        /// Nothing means one of two things: no token is there and no default value stands in
-        /// for it, or a token is there that is not a \c T. Declaring the type on the Argument
-        /// turns the second into a diagnostic while parsing, which leaves this meaning only the
-        /// first.
+        /// \c std::nullopt indicates one of two cases. Either no token is present and no default
+        /// value replaces it, or the token is not a valid \c T. Declaring the type on the
+        /// Argument turns the second case into a parse diagnostic, and \c std::nullopt then
+        /// indicates only the first case.
         ///
         /// \code
         ///   int jobs = result.value<int>(0).value_or(default_jobs());
@@ -1422,8 +1477,9 @@ namespace stdc::cli {
             }
             return out;
         }
-        /// Every token the \a index'th argument took, converted, or nothing when one of them
-        /// is not a \c T. An empty vector means there were none to convert.
+        /// Returns every token of the \a index'th argument converted to \c T, or \c std::nullopt
+        /// if one of the tokens is not a valid \c T. An empty vector indicates that the argument
+        /// has no tokens.
         template <class T = std::string>
         std::optional<std::vector<T>> values(int index = 0) const {
             std::vector<T> out;
@@ -1437,37 +1493,44 @@ namespace stdc::cli {
             return out;
         }
 
-        /// The first argument of \a token's first occurrence.
+        /// Returns the first value of the first argument in the first occurrence of the option
+        /// \a token, converted to \c T. Returns \c std::nullopt if the option was not given, if
+        /// the argument has no value, or if the value is not a valid \c T.
         template <class T = std::string>
         std::optional<T> valueForOption(std::string_view token) const {
             auto given = option(token);
             return given ? given->value<T>() : std::nullopt;
         }
 
-        /// Printed above and below the help text, as the parser was told.
+        /// Returns the text printed above and below the help text, as set on the parser.
         const std::string &prologue() const;
         const std::string &epilogue() const;
-        /// Which blocks the help text is made of, in what order, and how each is printed.
+        /// Returns the help layout, which specifies the blocks of the help text, their order,
+        /// and their styles.
         const HelpLayout &helpLayout() const;
-        /// What the commands above the one that was reached declared recursive, which is in
-        /// scope here and is demanded here, gathered by the walk the parser made.
+        /// Returns the recursive options declared by the ancestors of the reached command. These
+        /// options are in scope at the reached command, and their requirements are enforced
+        /// there. The parser collects them while traversing the command path.
         ///
-        /// \warning These point into the command tree and last as long as it does.
+        /// \warning The pointers point into the command tree and remain valid as long as the
+        ///          command tree exists.
         std::vector<const Option *> inheritedOptions() const;
 
-        /// The help text for the command that was reached, as the blocks it is made of, in the
-        /// order the layout asks for and with the groups a catalogue asks for already split.
+        /// Returns the help text of the reached command as blocks, in the order that the layout
+        /// specifies and with the groups of the catalogue already split.
         ///
-        /// This is what helpText() lays out. Ask for these where neither HelpLayout nor a
-        /// HelpFormatter can say what the program wants, and print them however it likes.
+        /// helpText() lays out these blocks. A program uses this function if neither HelpLayout
+        /// nor a HelpFormatter can express the required output, and prints the blocks in its own
+        /// format.
         std::vector<HelpBlock> helpBlocks() const;
 
-        /// The help text for the command that was reached, prologue and epilogue included.
+        /// Returns the help text of the reached command, including the prologue and the
+        /// epilogue.
         std::string helpText() const;
-        /// Writes helpText() to stdout, with whatever styling the layout asks for.
+        /// Writes helpText() to stdout with the styles that the layout specifies.
         void showHelp() const;
-        /// Writes what went wrong to stderr, with a line saying how to ask for help. Does
-        /// nothing when the parse succeeded.
+        /// Writes the error description to stderr, followed by a line that indicates how to
+        /// display the help text. Does nothing if the parse succeeded.
         void showError() const;
 
     private:
@@ -1477,17 +1540,19 @@ namespace stdc::cli {
         std::unique_ptr<Impl> _impl;
     };
 
-    /// Turns arguments into a ParseResult against a command tree.
+    /// Parses command line arguments against a command tree into a ParseResult.
     ///
     /// \li Subcommands form the first contiguous part of the line. Once an option or argument
-    ///     is read, no later token can name a subcommand. Thus \c prog \c copy \c -f \c x can
-    ///     reach \c copy, while \c prog \c -V \c copy \c x cannot.
-    /// \li Positional tokens a command cannot take are an error.
-    /// \li An option that needs a value will not take a token that is a declared option of the
-    ///     same command. Anything else beginning with a dash is a value as it is there.
+    ///     is read, no later token can name a subcommand. The command line
+    ///     \c prog \c copy \c -f \c x therefore reaches \c copy, while
+    ///     \c prog \c -V \c copy \c x does not.
+    /// \li A positional token that the reached command cannot accept is an error.
+    /// \li An option that requires a value does not accept as its value a token that is a
+    ///     declared option of the same command. Any other token that begins with a dash is
+    ///     accepted as a value at that position.
     class STDC_EXPORT Parser {
     public:
-        /// What the tokenizer will accept beyond the usual.
+        /// Extensions of the token syntax beyond the standard syntax.
         enum ParseOption {
             Standard = 0,
             /// Subcommand names match without regard to case.
@@ -1498,27 +1563,27 @@ namespace stdc::cli {
             AllowUnixGroupFlags = 0x4,
             /// \c /f is another way of writing \c -f.
             AllowDosShortOptions = 0x8,
-            /// A single dash starts nothing.
+            /// A single dash does not start an option.
             DontAllowUnixShortOptions = 0x10,
             /// \c \@file is replaced by the lines of that file.
             EnableResponseFile = 0x20,
         };
         STDC_DECLARE_FLAGS(ParseOptions, ParseOption)
 
-        /// What the help text says beyond the necessary. Which blocks it is made of and in what
-        /// order is HelpLayout's business rather than this one's.
+        /// Additional content of the help text beyond the required content. HelpLayout, not
+        /// this enumeration, controls the selection and order of the blocks.
         enum DisplayOption {
             Normal = 0,
-            /// Say what an argument falls back to when it is not given.
+            /// Show the default value of an argument.
             ShowArgumentDefaultValue = 0x1,
-            /// List the words an argument accepts, where it accepts only a few.
+            /// List the expected values of an argument that accepts a fixed set of values.
             ShowArgumentExpectedValues = 0x2,
-            /// Mark the options that have to be given.
+            /// Mark the required options.
             ShowOptionIsRequired = 0x4,
-            /// Line the descriptions of every group up with each other, so that a catalogue
-            /// reads as one table.
+            /// Align the descriptions of all groups with each other, so that a catalogue
+            /// appears as one table.
             AlignAllCatalogues = 0x8,
-            /// Keep showError() from offering the names close to what was typed.
+            /// Prevent showError() from suggesting declared names similar to the mistyped name.
             SkipCorrection = 0x10,
         };
         STDC_DECLARE_FLAGS(DisplayOptions, DisplayOption)
@@ -1530,16 +1595,17 @@ namespace stdc::cli {
         Parser(const Parser &RHS) = delete;
         Parser &operator=(const Parser &RHS) = delete;
 
-        /// Movable, so that a parser can be built and returned by a function of its own.
+        /// A Parser is movable, so that a function can build and return a parser.
         Parser(Parser &&RHS) noexcept;
         Parser &operator=(Parser &&RHS) noexcept;
 
-        /// Sets a new root command, replacing the one given to the constructor or the one the
-        /// last parse() ran against.
+        /// Sets a new root command, replacing the root command given to the constructor or used
+        /// by the last parse().
         void setRootCommand(Command root);
         const Command &rootCommand() const;
 
-        /// Printed above and below the help text.
+        /// Sets and returns the text printed above the help text, which is the prologue, and the
+        /// text printed below it, which is the epilogue.
         void setPrologue(std::string text);
         const std::string &prologue() const;
         void setEpilogue(std::string text);
@@ -1548,72 +1614,79 @@ namespace stdc::cli {
         void setDisplayOptions(DisplayOptions options);
         DisplayOptions displayOptions() const;
 
-        /// How many columns the help text may use, which is what its descriptions are wrapped
-        /// to.
+        /// Sets the number of columns available to the help text, which is the wrap width of its
+        /// descriptions.
         ///
-        /// \param width the column count, or 0 to ask the terminal each time the text is made
-        /// \note 0 is the default. Where there is no terminal to ask, as when the output is a
-        ///       pipe, that comes out as 80 columns, so a program's help reads the same however
-        ///       it is captured.
+        /// \param width the column count, or 0 to query the terminal each time the text is
+        ///        generated
+        /// \note 0 is the default. If no terminal is available, as when the output is a pipe,
+        ///       the width is 80 columns. The help text of a program is therefore identical
+        ///       regardless of how the output is captured.
         /// \sa console::width()
         void setTextWidth(int width);
         int textWidth() const;
 
-        /// How far the body of a section is indented from the margin.
-        /// \note Four columns is the default.
+        /// Sets the indentation of the body of a section from the margin.
+        /// \note The default is four columns.
         void setIndent(int columns);
         int indent() const;
 
-        /// How many columns separate the two columns of a list.
-        /// \note Four columns is the default.
+        /// Sets the number of columns between the two columns of a list.
+        /// \note The default is four columns.
         void setSpacing(int columns);
         int spacing() const;
 
-        /// Which blocks the help text is made of, in what order, and how each is printed.
-        /// \note HelpLayout::defaultLayout() is what a parser starts with.
+        /// Sets the help layout, which specifies the blocks of the help text, their order, and
+        /// their styles.
+        /// \note A parser starts with HelpLayout::defaultLayout().
         void setHelpLayout(HelpLayout layout);
         const HelpLayout &helpLayout() const;
 
-        /// How those blocks are made and laid out, for a program that wants something no
-        /// arrangement of the above can say.
+        /// Sets the formatter that builds and lays out the help blocks, for a program that
+        /// requires output that no help layout or size setting can express.
         ///
-        /// \note A plain HelpFormatter is what a parser starts with, and null puts that back.
-        ///       Nothing is kept in one between calls, so a formatter may be shared.
-        /// \sa HelpFormatter, which is a ladder rather than one method
+        /// \note A parser starts with a plain HelpFormatter, and a null pointer restores it. A
+        ///       formatter stores no state between calls. Therefore, one formatter may be shared.
+        ///       A HelpFormatter consists of several overridable levels instead of one method.
+        /// \sa HelpFormatter
         void setHelpFormatter(std::shared_ptr<HelpFormatter> formatter);
         const std::shared_ptr<HelpFormatter> &helpFormatter() const;
 
         /// Checks whether the command tree can be parsed under \a parseOptions.
         ///
-        /// \return nothing when it is valid, or a description of the first problem found
-        /// \note parse() performs this check only through an assertion. A program that accepts
-        ///       a command tree from somewhere else should call this explicitly before parsing.
+        /// \return \c std::nullopt if the tree is valid, or a description of the first problem
+        ///         found
+        /// \note parse() performs this check only through an assertion. A program that obtains
+        ///       a command tree from an external source should call this function explicitly
+        ///       before parsing.
         std::optional<std::string> validate(ParseOptions parseOptions = Standard) const;
 
-        /// What \a args means against the command tree.
+        /// Parses \a args against the command tree.
         ///
-        /// \pre validate() returns nothing. This is asserted in a debug build. A release build
-        ///      does not walk the tree before parsing.
+        /// \pre validate() returns \c std::nullopt. This is asserted in a debug build. A release
+        ///      build does not traverse the tree before parsing.
         /// \note A program whose command tree is built dynamically, such as from plugins,
-        ///       should call validate() explicitly before this even in a release build.
+        ///       should call validate() explicitly before this function, even in a release
+        ///       build.
         inline ParseResult parse(array_view<std::string> args,
                                  ParseOptions parseOptions = Standard) const {
             assert(!validate(parseOptions).has_value() && "the command tree is invalid");
             return parseImpl(args, parseOptions);
         }
-        /// Parses and does everything a \c main does with the answer, reporting a failure and
-        /// answering a Help or Version option before any handler runs. \sa ParseResult::invoke()
+        /// Parses \a args and performs the complete handling of a \c main function, which
+        /// reports a failure and handles a Help or Version option before any handler runs.
+        /// \sa ParseResult::invoke()
         inline int invoke(array_view<std::string> args, int errorCode = -1,
                           ParseOptions parseOptions = Standard) const {
             return parse(args, parseOptions).invoke(errorCode);
         }
 
-        /// The same, taking what \c main was handed.
+        /// Parses the arguments passed to \c main.
         ///
-        /// \warning Not on Windows. What \c main is given there is in the system code page,
-        ///          while everything here is UTF-8, so a non-ASCII argument arrives wrong.
-        ///          system::command_line_arguments() gives the same list already converted, on
-        ///          every platform.
+        /// \warning This overload is unsuitable on Windows. The arguments of \c main are in the
+        ///          system code page on Windows, while this library requires UTF-8. A non-ASCII
+        ///          argument is therefore corrupted. system::command_line_arguments() returns
+        ///          the same list converted to UTF-8 on every platform.
         inline ParseResult parse(int argc, char **argv,
                                  ParseOptions parseOptions = Standard) const {
             return parse(std::vector<std::string>(argv, argv + argc), parseOptions);
@@ -1633,42 +1706,42 @@ namespace stdc::cli {
     STDC_DECLARE_OPERATORS_FOR_FLAGS(Parser::ParseOptions)
     STDC_DECLARE_OPERATORS_FOR_FLAGS(Parser::DisplayOptions)
 
-    /// How much room the help text has, and what it says beyond the necessary.
+    /// The dimensions of the help text and its additional content.
     struct HelpSizes {
-        /// How far the body of a section is set in from the margin.
+        /// The indentation of the body of a section from the margin.
         int indent = 4;
-        /// How many columns separate the two columns of a list.
+        /// The number of columns between the two columns of a list.
         int spacing = 4;
-        /// How many columns the whole text may use.
+        /// The number of columns available to the whole text.
         int textWidth = 80;
         Parser::DisplayOptions displayOptions;
     };
 
-    /// How the help text is made, from a command tree at the top to printable runs at the
-    /// bottom. Rung 4 of \ref cli_help.
+    /// The generation of the help text, from a command tree at the top to printable runs at the
+    /// bottom. Level 4 of \ref cli_help.
     ///
     /// \verbatim
-    ///     the command that was reached, and ParseResult::helpLayout()
+    ///     the reached command and ParseResult::helpLayout()
     ///                    |
     ///                    v
-    ///    +---- blocks(result, sizes) ---------- what the text is made of: which blocks
-    ///    |               |                      there are, what each is called, what goes
-    ///    |               |                      in its two columns
+    ///    +---- blocks(result, sizes) ---------- composition of the text: the blocks, their
+    ///    |               |                      titles, and the contents of their two
+    ///    |               |                      columns
     ///    |               v
-    ///    |      displayed(Option, bool) ------- how one name is spelled, before there is
-    ///    |               |                      any block to put it in
+    ///    |      displayed(Option, bool) ------- spelling of one name, computed before any
+    ///    |               |                      block exists
     ///    |               v                        "-o, --output <file>"
     ///    |      displayed(Argument) -----------   "<file>", "[<file>]", "<file>..."
     ///    |
     ///    +--> std::vector<HelpBlock> ---------> ParseResult::helpBlocks() stops here and
-    ///                    |                      hands these over
+    ///                    |                      returns these blocks
     ///                    v
-    ///    +---- render(blocks, sizes) ---------- the whole page: measures every list, puts a
-    ///    |               |                      blank line between one block and the next
+    ///    +---- render(blocks, sizes) ---------- the whole page: measures every list and
+    ///    |               |                      separates consecutive blocks with a blank line
     ///    |               v
     ///    |      renderBlock(block, sizes, widest)
-    ///    |                                      one block: its heading, its columns lined
-    ///    |                                      up to widest, its descriptions wrapped
+    ///    |                                      one block: its heading, its columns aligned
+    ///    |                                      to widest, its descriptions wrapped
     ///    |
     ///    +--> std::vector<Run>
     ///                    |
@@ -1676,13 +1749,14 @@ namespace stdc::cli {
     ///          v                   v
     ///   ParseResult::        ParseResult::
     ///     helpText()           showHelp()
-    ///   joins them and       prints them and
-    ///   drops the styles     applies the styles
+    ///   joins the runs and   prints the runs and
+    ///   discards styles      applies the styles
     /// \endverbatim
     ///
-    /// Subclass and override the rung that says what wants changing. <b>Every default is public
-    /// and callable</b>, which is what keeps "the same as before except for this" down to a call
-    /// to the base rather than a renderer written again:
+    /// A program subclasses HelpFormatter and overrides the level that produces the part to be
+    /// changed. <b>Every default implementation is public and callable</b>. A change to one detail
+    /// therefore requires only a call to the base implementation instead of a reimplemented
+    /// renderer:
     ///
     /// \code
     ///   struct Shouty : cli::HelpFormatter {
@@ -1698,16 +1772,17 @@ namespace stdc::cli {
     ///   parser.setHelpFormatter(std::make_shared<Shouty>());
     /// \endcode
     ///
-    /// A rung reaches the ones under it through \c this, so overriding
-    /// displayed(const Argument &) alone changes every metavar in the usage line and in every
-    /// list, without touching anything else.
+    /// Each level calls the levels below it through \c this. An override of
+    /// displayed(const Argument &) alone therefore changes every metavar in the usage line and
+    /// in every list, and affects nothing else.
     ///
-    /// Nothing is kept here between calls, so one of these can be shared by every parser in a
-    /// program. What there is to keep is HelpSizes, which the parser owns and hands over.
+    /// A HelpFormatter stores no state between calls. Therefore, every parser in a program can
+    /// share one formatter. The only state is HelpSizes, which the parser owns and passes to the
+    /// formatter.
     class STDC_EXPORT HelpFormatter {
     public:
-        /// One run of help text and how it is printed. ParseResult::helpText() joins these and
-        /// drops the styles, ParseResult::showHelp() prints them and applies them.
+        /// One run of help text and its style. ParseResult::helpText() joins the runs and
+        /// discards the styles. ParseResult::showHelp() prints the runs and applies the styles.
         struct Run {
             TextStyle style;
             std::string text;
@@ -1716,26 +1791,28 @@ namespace stdc::cli {
         HelpFormatter();
         virtual ~HelpFormatter();
 
-        /// How an argument is written where it is named. \c \<file\>, or \c [\<file\>] where it
-        /// may be left out, with an ellipsis where it repeats.
+        /// Returns the displayed form of an argument. The form is \c \<file\>, or \c [\<file\>]
+        /// if the argument is optional, followed by an ellipsis if the argument repeats.
         virtual std::string displayed(const Argument &argument) const;
 
-        /// How an option is written, with whatever it takes after it. Every spelling of it in a
-        /// list, and the first one alone on the usage line.
+        /// Returns the displayed form of an option followed by its arguments. A list shows every
+        /// spelling, and the usage line shows only the first spelling.
         ///
-        /// \note The arguments it takes are asked of displayed(const Argument &), so overriding
-        ///       that one reaches here too.
+        /// \note displayed(const Argument &) formats the arguments. An override of that function
+        ///       therefore also affects this function.
         virtual std::string displayed(const Option &option, bool allSpellings) const;
 
-        /// How a subcommand is written where it is named, which is its name.
+        /// Returns the displayed form of a subcommand, which is its name.
         virtual std::string displayed(const Command &command) const;
 
-        /// One row of a two column list: what displayed() writes on the left, and on the right
-        /// the description together with whatever the display options add to it, a default value
-        /// or the set of values expected or a mark that it has to be given.
+        /// Returns one row of a two-column list. The left column contains the output of
+        /// displayed(). The right column contains the description and the additions that the
+        /// display options select: a default value, the set of expected values, or a mark for a
+        /// required item.
         ///
-        /// \note The left column is asked of displayed(), so overriding that one reaches here
-        ///       too. Override this where the right column is what should differ.
+        /// \note displayed() produces the left column. An override of displayed() therefore also
+        ///       affects this function. A program overrides this function to change the right
+        ///       column.
         virtual HelpBlock::Entry entry(const Argument &argument, const HelpSizes &sizes) const;
 
         /// \overload
@@ -1744,47 +1821,49 @@ namespace stdc::cli {
         /// \overload
         virtual HelpBlock::Entry entry(const Command &command, const HelpSizes &sizes) const;
 
-        /// The usage line, already broken across as many lines as it needs.
+        /// Returns the usage line, broken across as many lines as necessary.
         ///
-        /// \param command the one that was reached, which is where its own options come from
+        /// \param command the reached command, which supplies its own options
         /// \param path the commands from the root to \a command, as ParseResult::commandPath()
         ///        returns them
-        /// \param inherited the options in scope from the commands above it, which is the
-        ///        one thing here that \a command cannot answer for
-        /// \param sizes the indent and the width to break the line against
-        /// \note Each piece stays whole, since an option and the value it takes read as two
-        ///       separate things once a line break comes between them.
+        /// \param inherited the options in scope from the ancestors of \a command, which are
+        ///        the only information here that \a command cannot supply
+        /// \param sizes the indent and the width at which the line is broken
+        /// \note A line break never splits a piece, because an option and its value appear
+        ///       unrelated if a line break separates them.
         virtual std::string usageText(const Command &command,
                                       const std::vector<const Command *> &path,
                                       const std::vector<Option> &inherited,
                                       const HelpSizes &sizes) const;
 
-        /// What the help text is made of, in the order ParseResult::helpLayout() asks for and
-        /// with the groups a CommandCatalogue asks for already split.
+        /// Returns the blocks of the help text, in the order that ParseResult::helpLayout()
+        /// specifies and with the groups of the CommandCatalogue already split.
         ///
-        /// \note \a sizes is not what \a result was given, and is not to be worked out again
-        ///       from it. A text width of zero means ask, and this is the answer, settled once
-        ///       and handed to render() as well, so that a terminal resized in between cannot
-        ///       lay the usage line out to one width and the descriptions to another.
+        /// \note \a sizes differs from the settings that \a result records and must not be
+        ///       recomputed from \a result. A configured text width of zero requests a terminal
+        ///       query, and \a sizes contains the result of that query. The width is determined
+        ///       once and passed to render() as well, so that a terminal resized in between
+        ///       cannot cause the usage line and the descriptions to be laid out to different
+        ///       widths.
         virtual std::vector<HelpBlock> blocks(const ParseResult &result,
                                               const HelpSizes &sizes) const;
 
-        /// One block laid out, its heading over it and its columns lined up to \a widest.
+        /// Lays out one block, with its heading above it and its columns aligned to \a widest.
         ///
-        /// The blank line that separates one block from the next is render()'s, not this one's,
-        /// so what comes back is the block and nothing around it.
+        /// render() inserts the blank line between consecutive blocks. The returned runs
+        /// therefore contain only the block itself.
         virtual std::vector<Run> renderBlock(const HelpBlock &block, const HelpSizes &sizes,
                                              size_t widest) const;
 
-        /// The whole page. Measures the lists, then asks renderBlock() for each block and puts
-        /// a blank line between them.
+        /// Lays out the whole page. Measures the lists, then calls renderBlock() for each block
+        /// and inserts a blank line between consecutive blocks.
         virtual std::vector<Run> render(const std::vector<HelpBlock> &blocks,
                                         const HelpSizes &sizes) const;
 
-        /// How wide the left column of \a block is.
+        /// Returns the width of the left column of \a block.
         ///
-        /// In columns rather than in bytes, or a metavar written in a script that is not ASCII
-        /// pushes its own row out of line with every other.
+        /// The width is measured in display columns instead of bytes, because a byte count
+        /// misaligns the row of a metavar that contains non-ASCII characters.
         static inline size_t widestOf(const HelpBlock &block) {
             size_t res = 0;
             for (const auto &entry : block.entries) {
@@ -1793,7 +1872,8 @@ namespace stdc::cli {
             return res;
         }
 
-        /// The widest across all of them, which is what AlignAllCatalogues lines up to.
+        /// Returns the largest left column width across \a blocks, which is the width that
+        /// AlignAllCatalogues aligns to.
         static inline size_t widestOf(const std::vector<HelpBlock> &blocks) {
             size_t res = 0;
             for (const auto &block : blocks) {
@@ -1802,8 +1882,8 @@ namespace stdc::cli {
             return res;
         }
 
-        /// \a text broken into lines of at most \a columns columns, at spaces where there are
-        /// any and between characters where there are none. Newlines already in it are kept.
+        /// Returns \a text broken into lines of at most \a columns columns. Lines break at spaces
+        /// if spaces exist, and between characters otherwise. Existing newlines are preserved.
         static std::vector<std::string> wrapped(const std::string &text, int columns);
     };
 
