@@ -20,9 +20,9 @@ namespace stdc {
 
     /// The size-agnostic base of \c vlarray.
     ///
-    /// Owns the pointer/size/capacity and the allocator, but not the inline buffer, so a single
-    /// \c vlarray_base<T> & can refer to a \c vlarray<T, N> of any inline size N. Functions
-    /// should take this type by reference.
+    /// The base owns the pointer, size, capacity and allocator, but not the inline buffer. A
+    /// single \c vlarray_base<T> & can therefore refer to a \c vlarray<T, N> of any inline size N.
+    /// A function should accept this type by reference.
     template <class T, class Alloc = std::allocator<T>>
     class vlarray_base {
         using AT = std::allocator_traits<Alloc>;
@@ -134,8 +134,8 @@ namespace stdc {
 
         /// Constructs an element in place.
         ///
-        /// Safe even when the arguments alias an existing element (e.g. \c emplace_back(v[0])): on
-        /// a reallocation the new element is built first, while the old buffer is still alive.
+        /// The arguments may refer to an existing element, as in \c emplace_back(v[0]). On a
+        /// reallocation, the new element is constructed first, while the old buffer still exists.
         template <class... Args>
         reference emplace_back(Args &&...args) {
             if (m_size == m_capacity) {
@@ -157,9 +157,9 @@ namespace stdc {
 
         /// \name Inserting at a position
         ///
-        /// Each insert appends the new element(s) at the end and then rotates them into place. The
-        /// value is copied before any shifting happens, so inserting an element that lives inside
-        /// the array (e.g. \c v.insert(v.begin(),v[3])) is well defined.
+        /// Each insertion appends the new elements at the end and then rotates them into place.
+        /// The value is copied before any element is shifted. Inserting an element of the array
+        /// itself, as in \c v.insert(v.begin(), v[3]), is therefore well-defined.
         /// @{
 
         iterator insert(const_iterator pos, const T &value) {
@@ -261,9 +261,9 @@ namespace stdc {
         /// \name Swap
         /// @{
 
-        /// Swaps contents with \a RHS. Two heap-backed arrays just trade buffers. Otherwise the
-        /// shared elements are swapped and the longer one's tail is moved over, since neither can
-        /// trade away its own inline buffer.
+        /// Swaps the contents with \a RHS. Two arrays that both use heap buffers exchange the
+        /// buffers. Otherwise the common elements are swapped and the remaining elements of the
+        /// longer array are moved, because neither array can give away its inline buffer.
         void swap(vlarray_base &RHS) {
             if (this == &RHS)
                 return;
@@ -299,14 +299,16 @@ namespace stdc {
         explicit vlarray_base(const Alloc &alloc) : m_alloc(alloc) {
         }
 
-        // Frees the heap buffer (if any) on the way out. Derived adds no owning members.
+        // Destroys the elements and frees the heap buffer, if any. The derived class adds no
+        // owning members.
         ~vlarray_base() {
             destroy_range(0, m_size);
             if (!is_inline())
                 AT::deallocate(m_alloc, m_begin, m_capacity);
         }
 
-        // Registers the derived object's inline buffer. Call once, right after construction.
+        // Registers the inline buffer of the derived object. The derived class calls this
+        // function once, directly after construction.
         void adopt_inline_buffer(T *buffer, size_type capacity) {
             m_begin = buffer;
             m_capacity = capacity;
@@ -333,7 +335,7 @@ namespace stdc {
                 may_steal = true;
             }
             if (!RHS.is_inline() && may_steal) {
-                // Steal the heap buffer outright. Its elements come along with it.
+                // Takes over the heap buffer together with its elements.
                 m_begin = RHS.m_begin;
                 m_size = RHS.m_size;
                 m_capacity = RHS.m_capacity;
@@ -383,10 +385,11 @@ namespace stdc {
             return c;
         }
 
-        // Builds [0, m_size) in dst and destroys nothing, so a throw partway can take back what
-        // it built and leave the array as it was. The caller frees dst. Strong for a type that
-        // can be copied, since move_if_noexcept then copies; a move-only type is left as
-        // std::vector leaves it, destructible and nothing more.
+        // Constructs the elements [0, m_size) in dst and destroys none of the source elements. An
+        // exception thrown partway therefore destroys only the constructed elements and leaves the
+        // array unchanged. The caller frees dst. The guarantee is strong for a copyable type,
+        // because move_if_noexcept then copies. A move-only type is left in the state that
+        // std::vector leaves it in, which only guarantees that it is destructible.
         void construct_range_at(T *dst) {
             size_type built = 0;
 #ifdef STDC_HAS_EXCEPTIONS
@@ -405,7 +408,8 @@ namespace stdc {
 #endif
         }
 
-        // Grows for reserve(): no new element, the elements just move to a bigger buffer.
+        // Grows the buffer for reserve(). No element is added, and the existing elements are moved
+        // to the larger buffer.
         void grow(size_type min_capacity) {
             size_type new_capacity = compute_new_capacity(min_capacity);
             T *new_buffer = AT::allocate(m_alloc, new_capacity);
@@ -426,8 +430,8 @@ namespace stdc {
             m_capacity = new_capacity;
         }
 
-        // Grows and appends. The new element is constructed first, before the old buffer is
-        // touched, so arguments that reference an existing element stay valid.
+        // Grows the buffer and appends an element. The new element is constructed before the old
+        // buffer is modified, so that arguments that refer to an existing element remain valid.
         template <class... Args>
         void grow_and_emplace_back(Args &&...args) {
             size_type new_capacity = compute_new_capacity(m_size + 1);
@@ -459,7 +463,8 @@ namespace stdc {
             ++m_size;
         }
 
-        // Destroys the elements and releases any heap buffer, returning to the inline buffer.
+        // Destroys the elements, releases the heap buffer if any, and returns to the inline
+        // buffer.
         void reset_to_inline() {
             destroy_range(0, m_size);
             if (!is_inline()) {
@@ -497,9 +502,10 @@ namespace stdc {
 
     /// A dynamic array with N elements of inline (pre-allocated) storage.
     ///
-    /// Behaves like a small \c std::vector that stays off the heap until it holds more than N
-    /// elements. All the behavior lives in \c vlarray_base<T, Alloc>. This layer only adds the
-    /// inline buffer, so a \c vlarray<T, N> binds to \c vlarray_base<T> & regardless of N.
+    /// The array behaves like a \c std::vector that allocates no heap memory until it holds more
+    /// than N elements. The behavior is implemented in \c vlarray_base<T, Alloc>. This class only
+    /// adds the inline buffer, so that a \c vlarray<T, N> binds to \c vlarray_base<T> &
+    /// regardless of N.
     template <class T, std::size_t N = 4, class Alloc = std::allocator<T>>
     class vlarray : public vlarray_base<T, Alloc> {
         using Base = vlarray_base<T, Alloc>;
@@ -530,7 +536,7 @@ namespace stdc {
             this->assign(std::move(RHS));
         }
 
-        // Cross-size construction: accept any vlarray<T, M> through the common base.
+        // Construction from a vlarray<T, M> of any inline size, through the common base.
         vlarray(const Base &RHS) : vlarray(RHS.get_allocator()) {
             this->assign(RHS);
         }
@@ -577,7 +583,8 @@ namespace stdc {
             return reinterpret_cast<T *>(m_buffer);
         }
 
-        // Raw, uninitialized storage for N elements (at least one byte so N == 0 stays valid).
+        // Uninitialized storage for N elements. The array has at least one byte, so that N == 0
+        // remains valid.
         alignas(T) unsigned char m_buffer[N ? N * sizeof(T) : 1];
     };
 

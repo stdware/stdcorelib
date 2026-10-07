@@ -187,9 +187,9 @@ namespace stdc {
 
     /// An associative container that preserves insertion order.
     ///
-    /// Values live in a list so their order and iterators remain stable. An independently
-    /// configured associative container indexes the list. Its key traits decide whether the
-    /// index owns another key or refers to the key in the list node.
+    /// Values are stored in a list, so that their order and their iterators remain stable. A
+    /// separately configured associative container indexes the list. Its key traits determine
+    /// whether the index stores a copy of the key or refers to the key in the list node.
     template <class K, class V, class MapTraits = linked_map_unordered_traits<>,
               class KeyTraits = typename detail::linked_map_default_key_traits<K>::type>
     class linked_map {

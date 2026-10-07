@@ -11,14 +11,14 @@
 
 /// \defgroup containers Containers and views
 ///
-/// stdc::array_view is a read-only view over any contiguous container, so one parameter replaces a
-/// pile of overloads. stdc::vlarray keeps its first N elements inline and stays off the heap while
-/// it is small. stdc::linked_map remembers insertion order, over \c std::unordered_map or
-/// \c std::map. stdc::aligned_allocator gives a container storage with a fixed minimum alignment.
-/// stdc::any holds a value of any type and hands it back without RTTI.
+/// stdc::array_view is a read-only view of any contiguous container, so that one parameter
+/// replaces a set of overloads. stdc::vlarray stores its first N elements inline and allocates no
+/// heap memory while it is small. stdc::linked_map preserves insertion order on top of
+/// \c std::unordered_map or \c std::map. stdc::aligned_allocator provides storage with a fixed
+/// minimum alignment. stdc::any stores a value of any type and returns it without RTTI.
 ///
 /// \code
-///     stdc::vlarray<int, 16> v;   // nothing allocated until the seventeenth element
+///     stdc::vlarray<int, 16> v;   // no allocation before the seventeenth element
 /// \endcode
 
 namespace stdc {
@@ -26,14 +26,14 @@ namespace stdc {
     /// \addtogroup containers
     /// @{
 
-    /// A read-only view of a contiguous array, close to \c std::span<const \c T> from C++20.
+    /// A read-only view of a contiguous array, similar to \c std::span<const \c T> of C++20.
     ///
-    /// It converts implicitly from a \c std::vector, a \c std::array, a C array, a pointer and a
-    /// length, or a single object, which is what makes it worth taking as a parameter instead of
-    /// one overload per container.
+    /// The view converts implicitly from a \c std::vector, a \c std::array, a C array, a pointer
+    /// and a length, or a single object. A function can therefore accept an array_view parameter
+    /// instead of one overload per container.
     ///
-    /// \warning It borrows and never owns. The array has to outlive the view, so binding one to
-    ///          a temporary leaves it dangling at the end of the statement.
+    /// \warning The view never owns the array, and the array must outlive the view. A view bound
+    ///          to a temporary dangles at the end of the full expression.
     template <class T>
     class array_view {
     public:
@@ -78,9 +78,8 @@ namespace stdc {
         }
 
 #if defined(__GNUC__) && __GNUC__ >= 9
-// Disable gcc's warning in this constructor as it generates an enormous amount
-// of messages. Anyone using ArrayRef(array_view) should already be aware of the fact that
-// it does not do lifetime extension.
+// Suppresses the GCC warning in this constructor, which produces a large number of messages. The
+// class documentation states that a view does not extend the lifetime of its array.
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Winit-list-lifetime"
 #endif
@@ -138,7 +137,7 @@ namespace stdc {
         /// \name Slicing
         /// @{
 
-        /// Drops the first \a i elements and keeps the \a j that follow.
+        /// Returns a view of the \a j elements that follow the first \a i elements.
         ///
         /// \pre <tt>i + j <= size()</tt>
         array_view<T> slice(size_t i, size_t j) const {
@@ -146,12 +145,12 @@ namespace stdc {
             return array_view<T>(data() + i, j);
         }
 
-        /// Drops the first \a i elements and keeps the rest.
+        /// Returns a view of the elements that follow the first \a i elements.
         array_view<T> slice(size_t i) const {
             return drop_front(i);
         }
 
-        /// A view without the first \a i elements.
+        /// Returns a view without the first \a i elements.
         ///
         /// \pre <tt>i <= size()</tt>
         array_view<T> drop_front(size_t i = 1) const {
@@ -159,7 +158,7 @@ namespace stdc {
             return slice(i, size() - i);
         }
 
-        /// A view without the last \a i elements.
+        /// Returns a view without the last \a i elements.
         ///
         /// \pre <tt>i <= size()</tt>
         array_view<T> drop_back(size_t i = 1) const {
@@ -167,14 +166,14 @@ namespace stdc {
             return slice(0, size() - i);
         }
 
-        /// A view of the first \a i elements, or all of them if there are fewer.
+        /// Returns a view of the first \a i elements, or of all elements if fewer exist.
         array_view<T> take_front(size_t i = 1) const {
             if (i >= size())
                 return *this;
             return drop_back(size() - i);
         }
 
-        /// A view of the last \a i elements, or all of them if there are fewer.
+        /// Returns a view of the last \a i elements, or of all elements if fewer exist.
         array_view<T> take_back(size_t i = 1) const {
             if (i >= size())
                 return *this;
@@ -191,9 +190,9 @@ namespace stdc {
             return _data[index];
         }
 
-        /// Assigning a temporary would leave the view dangling, so both of these are deleted.
+        /// These operators are deleted, because assigning a temporary leaves the view dangling.
         ///
-        /// The declaration is this involved so that <tt>view = {}</tt> keeps selecting the move
+        /// The declaration is constrained so that <tt>view = {}</tt> still selects the move
         /// assignment operator.
         template <typename T1>
         std::enable_if_t<std::is_same<T1, T>::value, array_view<T>> &
@@ -206,7 +205,7 @@ namespace stdc {
 
         /// @}
 
-        /// A copy of the elements, which the caller then owns.
+        /// Returns a copy of the elements, which the caller owns.
         std::vector<T> vec() const {
             return std::vector<T>(_data, _data + _size);
         }
@@ -219,11 +218,11 @@ namespace stdc {
 
     namespace detail {
 
-        // The comparisons against a container are constrained to leave out array_view itself.
-        // Since C++17 relaxed how a template template parameter matches, V binds to array_view
-        // with the pack empty, so an array_view on both sides matched the container overload as
-        // exactly as the one written for it and partial ordering had nothing to separate them.
-        // MSVC picked one and clang called it ambiguous.
+        // The comparisons with a container are constrained to exclude array_view itself. Since
+        // C++17 relaxed the matching of template template parameters, V binds to array_view with
+        // an empty pack. Without the constraint, an array_view on both sides matches the
+        // container overload as exactly as the array_view overload, and partial ordering cannot
+        // distinguish them. MSVC selects one overload, and Clang reports an ambiguity.
         template <class V, class T>
         using enable_if_not_array_view = std::enable_if_t<!std::is_same_v<V, array_view<T>>, int>;
 

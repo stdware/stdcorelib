@@ -47,7 +47,8 @@ namespace stdc {
         }
     }
 
-    // Folds `key` into `seed`, for building one hash out of several values. Order dependent.
+    // Combines key into seed, so that several values form one hash. The result depends on the
+    // order of the combined values.
     inline constexpr size_t hash(size_t key, size_t seed = 0) noexcept {
         if constexpr (sizeof(size_t) >= 8) {
             return seed ^ (key + size_t(0x9e3779b97f4a7c15ULL) + (seed << 12) + (seed >> 4));

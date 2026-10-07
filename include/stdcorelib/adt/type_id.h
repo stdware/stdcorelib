@@ -13,9 +13,9 @@
 
 /// \defgroup types Type identity and registries
 ///
-/// stdc::type_id names a type without \c typeid, and keeps that name the same across a shared
-/// library boundary, which is the part \c std::type_index does not promise.
-/// stdc::StaticRegistry and stdc::DynamicRegistry are what a plugin system registers into.
+/// stdc::type_id identifies a type without \c typeid and keeps the identity consistent across
+/// shared library boundaries, which \c std::type_index does not guarantee.
+/// stdc::StaticRegistry and stdc::DynamicRegistry provide the registries of a plugin system.
 
 namespace stdc {
 
@@ -24,16 +24,16 @@ namespace stdc {
 
     namespace detail {
 
-        /// The compiler's own spelling of \a T, cut out of the signature of this function.
+        /// Returns the compiler's spelling of \a T, extracted from the signature of this function.
         ///
-        /// Identity rests on this text. Every module that mentions \a T gets its own copy of
-        /// everything else here, and the spelling is the only part they are guaranteed to agree
-        /// about.
+        /// Type identity is based on this text. Every module that uses \a T has its own copy of
+        /// the other parts of this header, and the spelling is the only part that is guaranteed
+        /// to be identical in all modules.
         ///
-        /// \note The spelling is whatever the compiler writes, not a normalized form: MSVC says
-        ///       \c "struct Foo" where GCC says \c "Foo". That costs nothing inside a process,
-        ///       which never holds two compilers at once, but it does mean the name is not a
-        ///       portable key to write into a file.
+        /// \note The spelling is the output of the compiler, not a normalized form. MSVC writes
+        ///       \c "struct Foo", and GCC writes \c "Foo". The difference has no effect within a
+        ///       process, which never contains code from two compilers. However, the name is not
+        ///       a portable key for storage in a file.
         template <class T>
         constexpr std::string_view type_name() {
 #if defined(_MSC_VER)
@@ -45,7 +45,7 @@ namespace stdc {
             constexpr std::string_view signature = __PRETTY_FUNCTION__;
             constexpr std::string_view opening = "T = ";
             constexpr auto first = signature.find(opening) + opening.size();
-            // GCC lists the other template parameters after a semicolon, clang does not.
+            // GCC lists the other template parameters after a semicolon. Clang does not.
             constexpr auto semicolon = signature.find(';', first);
             constexpr auto last =
                 semicolon == std::string_view::npos ? signature.rfind(']') : semicolon;
@@ -54,32 +54,33 @@ namespace stdc {
             return signature.substr(first, last - first);
         }
 
-        /// One of these exists per type per module.
+        /// The registration of one type in one module. One entry exists per type and module.
         ///
-        /// \a name is the identity. It is settled at compile time, and two entries stand for the
-        /// same type exactly when it matches.
+        /// \c name is the identity. It is determined at compile time, and two entries denote the
+        /// same type if and only if their names match.
         ///
-        /// \a id is a cache of the one address this process uses for that name. There is no
-        /// answer before the process has a table, and none is wanted until two modules meet, so
-        /// it starts null and the first comparison that spans them fills it in.
+        /// \c id caches the address that this process uses for the name. No address exists
+        /// before the process creates its table, and none is required until ids from two modules
+        /// are compared. The cache is therefore initially null, and the first comparison across
+        /// modules fills it.
         struct type_entry {
             std::string_view name;
             std::atomic<const void *> id;
         };
 
-        /// Registers \a entry and returns the one address this process uses to stand for its
-        /// name.
+        /// Registers \a entry and returns the address that this process uses for its name.
         ///
-        /// An address rather than a number, because a number would have to come from a counter,
-        /// and a build where two modules each hold a table would have two counters both starting
-        /// at one. An entry keeps the first answer it is given, so entries numbered by different
-        /// counters could collide and two unrelated types would compare equal. Addresses taken
-        /// from different tables never do.
+        /// The identity is an address rather than a number, because a number requires a
+        /// counter, and a build in which two modules each hold a table has two counters that
+        /// both start at one. An entry keeps the first value assigned to it. Entries numbered by
+        /// different counters can therefore collide, and two unrelated types then compare equal.
+        /// Addresses from different tables never collide.
         ///
-        /// \note The table lives in exactly one place, so this unifies modules that share one
-        ///       copy of the library. Statically linking stdcorelib into two of them gives each
-        ///       its own table, and then a type simply does not carry across, which is a refusal
-        ///       rather than a wrong answer.
+        /// \note The table exists in exactly one place. This function therefore unifies the
+        ///       modules that share one copy of the library. If stdcorelib is linked statically
+        ///       into two modules, each module has its own table, and a type does not compare
+        ///       equal across them. The result is then a false inequality rather than a false
+        ///       equality.
         STDC_EXPORT const void *register_type_id(type_entry &entry);
 
         /// Returns the canonical address cached in \a entry, registering it on the first call.
@@ -98,12 +99,12 @@ namespace stdc {
 
     }
 
-    /// Which type something is, in a form that can be compared, stored, and passed between
+    /// The identity of a type, in a form that can be compared, stored, and passed between
     /// modules.
     ///
-    /// What \c typeid would give, without needing RTTI and without depending on the loader having
-    /// merged anything. Two ids compare equal when they name the same type, whichever module each
-    /// of them was made in.
+    /// A type_id provides the information of \c typeid without requiring RTTI and without
+    /// depending on symbol merging by the loader. Two ids compare equal if they denote the same
+    /// type, regardless of the modules that created them.
     ///
     /// \code
     ///   if (value.type() == type_id::of<Codec>()) {
@@ -111,30 +112,30 @@ namespace stdc {
     ///   }
     /// \endcode
     ///
-    /// \warning The type is taken exactly as written. \c Derived and \c Base are different ids,
-    ///          and there is no way to ask whether one is the other.
+    /// \warning The type is used exactly as written. \c Derived and \c Base have different ids,
+    ///          and no query determines whether one type derives from the other.
     ///
-    /// \note Comparing two ids made in the same module is a pointer comparison. The first
-    ///       comparison that spans two of them consults a table in the library, once per type per
-    ///       module, and remembers the answer.
+    /// \note Comparing two ids created in the same module is a pointer comparison. The first
+    ///       comparison of ids from two modules queries a table in the library, once per type
+    ///       and module, and caches the result.
     ///
     /// \sa any, DynamicRegistry
     class type_id {
     public:
-        /// An id that stands for no type. Two such ids compare equal.
+        /// Constructs an id that denotes no type. Two such ids compare equal.
         constexpr type_id() = default;
 
-        /// The id for \a T. Const and reference qualifiers are stripped, so \c int and
-        /// \c const int& give the same one.
+        /// Returns the id of \a T. Const and reference qualifiers are removed. \c int and
+        /// \c const int& therefore have the same id.
         template <class T>
         static type_id of() {
             return type_id(&detail::entry_of<std::decay_t<T>>());
         }
 
-        /// The compiler's name for the type, or an empty view when there is no type.
+        /// Returns the compiler's name of the type, or an empty view if the id denotes no type.
         ///
-        /// Meant for diagnostics and logging. The spelling differs between compilers, so it is
-        /// not something to write down and read back.
+        /// The name is intended for diagnostics and logging. Because the spelling differs
+        /// between compilers, the name is not suitable for storage and later lookup.
         std::string_view name() const noexcept {
             return _entry ? _entry->name : std::string_view();
         }
@@ -161,8 +162,8 @@ namespace stdc {
         explicit type_id(detail::type_entry *entry) noexcept : _entry(entry) {
         }
 
-        // The one address standing for this type, which is what a hash has to be taken over so
-        // that two ids comparing equal also hash equal.
+        // Returns the address that represents this type. A hash must be computed from this
+        // address, so that two ids that compare equal also have equal hashes.
         const void *canonical() const {
             return _entry ? detail::resolve_type_id(*_entry) : nullptr;
         }

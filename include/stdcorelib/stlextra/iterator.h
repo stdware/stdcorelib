@@ -11,12 +11,13 @@ namespace stdc {
     /// \addtogroup containers
     /// @{
 
-    /// A reverse iterator that stores the position it denotes, not the one after it.
+    /// A reverse iterator that stores the position that it denotes rather than the following
+    /// position.
     ///
-    /// \c std::reverse_iterator holds \c base() and dereferences a copy of \c base()-1, so the
-    /// reference it returns points into a temporary that is gone by the end of the expression.
-    /// That works for a pointer and breaks for any iterator that keeps the element in itself,
-    /// which is what the registry key and value iterators do.
+    /// \c std::reverse_iterator stores \c base() and dereferences a copy of \c base()-1. The
+    /// returned reference therefore points into a temporary that is destroyed at the end of the
+    /// full expression. This is correct for a pointer but not for an iterator that stores its
+    /// element, such as the key and value iterators of the registry.
     ///
     /// \sa stdc::windows::RegKey
     template <class T>

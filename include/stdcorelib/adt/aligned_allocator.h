@@ -18,15 +18,15 @@ namespace stdc {
 
     /// A stateless STL allocator that gives every allocation a fixed minimum alignment.
     ///
-    /// Use it when a container's storage must meet an alignment stricter than its element type
-    /// normally requests, such as a SIMD vector or a page-aligned byte buffer.
+    /// The allocator is intended for a container whose storage requires a stricter alignment
+    /// than its element type, such as a SIMD vector or a page-aligned byte buffer.
     ///
     /// \code
     ///     std::vector<float, stdc::aligned_allocator<float, 64>> samples;
     /// \endcode
     ///
-    /// \note Alignment must be a power of two, at least alignof(void *), and sufficient for T.
-    ///       Rebinding preserves the same alignment.
+    /// \note The alignment must be a power of two, at least \c alignof(void *), and sufficient
+    ///       for \c T. Rebinding preserves the alignment.
     template <class T, std::size_t Alignment>
     class aligned_allocator {
         static_assert(Alignment >= alignof(void *), "Alignment must be at least alignof(void *)");
