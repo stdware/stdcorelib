@@ -31,7 +31,8 @@ namespace stdc::system {
         /// The result does not include an organization or application name. The function does
         /// not create the directory, and a valid result need not exist yet.
         ///
-        /// \return an absolute native path, or empty when the operating system cannot provide one
+        /// \return an absolute native path, or \c std::nullopt if the operating system provides
+        ///         none
         static std::optional<std::filesystem::path> writableDirectory(Directory directory);
 
     private:

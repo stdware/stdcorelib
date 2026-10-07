@@ -20,15 +20,16 @@ namespace stdc {
         VersionNumber();
         explicit VersionNumber(int major, int minor = 0, int patch = 0, int tweak = 0);
 
-        /// The version \a s spells, or nothing where it does not spell one.
+        /// Parses \a s as a version.
         ///
-        /// One to four components separated by dots, each of them digits and nothing else, each
-        /// fitting an \c int. Leading zeros are read as the number they are, so \c 01.02 is
-        /// 1.2.
+        /// A version consists of one to four components separated by dots. Each component
+        /// consists of digits only and must fit in an \c int. Leading zeros do not change the
+        /// value. \c 01.02 is therefore the version 1.2.
         ///
-        /// \note It used to answer with whatever it could get and zeros for the rest, so
-        ///       \c abc and \c 0 were the same answer and \c 1.2.3.4.5 was 1.2.3.4. There was
-        ///       no way to tell a version from a sentence.
+        /// \return the version, or \c std::nullopt if \a s is not a version
+        /// \note Invalid input is rejected as a whole rather than read up to the first invalid
+        ///       character. \c abc is therefore not the version 0, and \c 1.2.3.4.5 is not the
+        ///       version 1.2.3.4.
         static std::optional<VersionNumber> fromString(const std::string_view &s);
 
     public:

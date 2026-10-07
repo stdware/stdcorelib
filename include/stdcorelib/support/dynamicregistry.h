@@ -27,16 +27,17 @@ namespace stdc {
 
     namespace detail {
 
-        // The one object this process keeps under name, built by create the first time anybody
-        // asks for it. Why it is a function rather than a static is in the cpp.
+        // Returns the single object that this process keeps under name. create constructs the
+        // object on the first request. The source file explains why this is a function rather
+        // than a static variable.
         STDC_EXPORT void *shared_instance(std::string_view name, void *(*create)());
 
     }
 
     /// Controls what a \c DynamicRegistry factory returns and how an absent result is represented.
     ///
-    /// The default returns an owning pointer. Specialize this trait when \a T should be returned
-    /// by value or uses another ownership type.
+    /// The default returns an owning pointer. A specialization is required if \a T is returned by
+    /// value or uses another ownership type.
     template <class T>
     struct dynamic_registry_traits {
         using result_type = std::unique_ptr<T>;
@@ -46,12 +47,12 @@ namespace stdc {
         }
     };
 
-    /// A registry that is filled at run time, looked up by name, and can be watched.
+    /// A registry that is filled at run time, searched by name, and observable through listeners.
     ///
-    /// The counterpart to StaticRegistry, for the entries a program only learns about once it is
-    /// running: what a configuration file asked for, what a plugin directory turned out to hold,
-    /// what a script defined. Registration is a call rather than a static object, so ordering is
-    /// whatever the program decides.
+    /// The class complements StaticRegistry for entries that a program discovers only at run
+    /// time, such as entries requested by a configuration file, found in a plugin directory, or
+    /// defined by a script. Registration is a function call rather than a static object, so that
+    /// the program determines the order.
     ///
     /// \code
     ///   auto &reg = stdc::DynamicRegistry<Codec>::instance();
@@ -63,16 +64,16 @@ namespace stdc {
     ///   }
     /// \endcode
     ///
-    /// The registry is built on first use rather than during static initialization, so nothing
-    /// depends on the order the translation units happen to be initialized in, and there is one
-    /// of it per process rather than per module. See instance().
+    /// The registry is constructed on first use rather than during static initialization.
+    /// Therefore, nothing depends on the initialization order of the translation units, and one
+    /// registry exists per process rather than per module.
     ///
-    /// \note Thread safe. add(), remove() and the lookups may be called from any thread.
-    ///       Entries are handed out as shared_ptr, so one stays alive in the caller's hands even
-    ///       if another thread removes it meanwhile.
-    /// \warning Do not call remove_listener() from inside a listener callback.
+    /// \note The class is thread-safe. add(), remove() and the lookups may be called from any
+    ///       thread. Entries are returned as shared_ptr, so that an entry remains valid for the
+    ///       caller even if another thread removes it meanwhile.
+    /// \warning remove_listener() must not be called from a listener callback.
     ///
-    /// \sa StaticRegistry, for what is known at link time
+    /// \sa StaticRegistry, instance()
     template <class T, class Traits = dynamic_registry_traits<T>>
     class DynamicRegistry {
     public:
@@ -80,13 +81,13 @@ namespace stdc {
         using traits_type = Traits;
         using result_type = typename traits_type::result_type;
 
-        /// How to make one. A \c std::function rather than a plain pointer, since an entry
-        /// discovered at run time usually has to carry something with it, such as the library it
-        /// came out of.
+        /// The function that creates an instance. The type is a \c std::function rather than a
+        /// function pointer, because an entry discovered at run time usually carries data, such
+        /// as the library from which it was loaded.
         using Factory = std::function<result_type()>;
 
-        /// One registered implementation. Owns its name, unlike the static registry's, because
-        /// there is no literal to point at.
+        /// One registered implementation. Unlike an entry of StaticRegistry, it owns its name,
+        /// because no string literal exists to refer to.
         class Entry {
         public:
             Entry(std::string name, std::string desc, Factory factory)
@@ -100,7 +101,8 @@ namespace stdc {
                 return _desc;
             }
 
-            /// Makes one, or returns the traits' empty result if the factory is absent.
+            /// Creates an instance, or returns the empty result of the traits if no factory
+            /// exists.
             result_type instantiate() const {
                 return _factory ? _factory() : traits_type::empty();
             }
@@ -113,7 +115,8 @@ namespace stdc {
 
         using EntryPointer = std::shared_ptr<const Entry>;
 
-        /// Told when entries come and go. Install with add_listener().
+        /// The interface notified when entries are added or removed. add_listener() installs a
+        /// listener.
         class Listener {
         public:
             virtual ~Listener() = default;
@@ -126,16 +129,19 @@ namespace stdc {
             }
         };
 
-        /// The registry for \a T. Built on first use.
+        /// Returns the registry for \a T, which is constructed on first use.
         ///
-        /// One per process, not one per module: the static here caches a pointer, and the object
-        /// it points at is owned by the table inside stdcorelib. A plugin that registers is
-        /// therefore registering where the host will look.
+        /// One registry exists per process, not per module. The static variable here caches a
+        /// pointer, and the table inside stdcorelib owns the object. A plugin therefore registers
+        /// in the registry that the host searches.
         ///
-        /// \note That holds as far as one copy of stdcorelib reaches. Two modules that each link
-        ///       it statically have a table each, and then they have a registry each too.
-        /// \note Never destroyed, which is what lets a plugin ask for it without becoming
-        ///       responsible for taking it apart. See remove() for what a plugin does owe.
+        /// \note This holds within the reach of one copy of stdcorelib. If two modules each link
+        ///       stdcorelib statically, each module has its own table and therefore its own
+        ///       registry.
+        /// \note The registry is never destroyed. A plugin can therefore use it without becoming
+        ///       responsible for its destruction. The obligations of a plugin are described at
+        ///       remove().
+        /// \sa remove()
         static DynamicRegistry &instance() {
             static auto *self = static_cast<DynamicRegistry *>(
                 detail::shared_instance(detail::type_name<DynamicRegistry>(),
@@ -145,7 +151,7 @@ namespace stdc {
 
         /// Registers \a name.
         ///
-        /// \retval false the name was taken, and nothing changed
+        /// \retval false the name is already registered, and the registry is unchanged
         bool add(std::string name, std::string desc, Factory factory) {
             auto entry =
                 std::make_shared<const Entry>(std::move(name), std::move(desc), std::move(factory));
@@ -174,23 +180,24 @@ namespace stdc {
 
         /// Removes \a name.
         ///
-        /// \retval false there was no such entry
-        /// \note An instance already handed out by instantiate() is not affected. This only
-        ///       stops new ones being made.
+        /// \retval false no entry with this name exists
+        /// \note An instance already created by instantiate() is not affected. The removal only
+        ///       prevents the creation of new instances.
         ///
-        /// \warning <b>A plugin has to do this before it is unloaded.</b> The factory it registered
-        ///          is code inside the plugin, and the registry outlives the plugin, so an entry
-        ///          left behind is a call into memory that is no longer mapped. Nothing detects
-        ///          this: the entry looks exactly like any other until somebody instantiates it.
+        /// \warning <b>A plugin must remove its entries before it is unloaded.</b> The registered
+        ///          factory is code inside the plugin, and the registry outlives the plugin. A
+        ///          remaining entry therefore calls into memory that is no longer mapped. Nothing
+        ///          detects this condition, because the entry is indistinguishable from other
+        ///          entries until it is instantiated.
         ///
         /// \code
-        ///   // in the plugin, on the way out
+        ///   // in the plugin, before it is unloaded
         ///   DynamicRegistry<Codec>::instance().remove("flac");
         /// \endcode
         ///
-        /// The registry itself is not the plugin's to release. It is shared with the host and
-        /// with every other plugin, and it is never destroyed, so the entries are the whole of
-        /// what a plugin owns here.
+        /// A plugin does not release the registry itself. The registry is shared with the host
+        /// and with every other plugin and is never destroyed. The entries are therefore the only
+        /// part of the registry that a plugin owns.
         bool remove(std::string_view name) {
             EntryPointer entry;
             ListenerList listeners;
@@ -218,21 +225,22 @@ namespace stdc {
             return true;
         }
 
-        /// The entry registered under \a name, or null.
+        /// Returns the entry registered under \a name, or null.
         EntryPointer find(std::string_view name) const {
             std::shared_lock<std::shared_mutex> lock(_mutex);
             auto it = _entries.find(name);
             return it == _entries.end() ? EntryPointer() : it->second;
         }
 
-        /// Makes one directly, or returns the traits' empty result if \a name is not registered.
+        /// Creates an instance directly, or returns the empty result of the traits if \a name is
+        /// not registered.
         result_type instantiate(std::string_view name) const {
             auto entry = find(name);
             return entry ? entry->instantiate() : traits_type::empty();
         }
 
-        /// Every entry, in name order. A snapshot, so iterating it is safe while another thread
-        /// registers.
+        /// Returns every entry, sorted by name. The result is a snapshot, so that iterating it is
+        /// safe while another thread registers entries.
         std::vector<EntryPointer> entries() const {
             std::shared_lock<std::shared_mutex> lock(_mutex);
             std::vector<EntryPointer> result;
@@ -248,17 +256,18 @@ namespace stdc {
             return _entries.size();
         }
 
-        /// Forgets everything. Mainly for a test that has to start from a known state.
+        /// Removes every entry. The function is intended mainly for a test that requires a known
+        /// initial state.
         void clear() {
             std::unique_lock<std::shared_mutex> lock(_mutex);
             _entries.clear();
         }
 
-        /// \name Watching
+        /// \name Listeners
         /// @{
 
-        /// Adds \a listener, which is not owned and has to outlive this registry or be removed
-        /// first. Adding the same one twice does nothing.
+        /// Adds \a listener, which the registry does not own. The listener must outlive the
+        /// registry or be removed first. Adding the same listener twice has no effect.
         void add_listener(Listener *listener) {
             if (!listener) {
                 return;
@@ -284,15 +293,15 @@ namespace stdc {
     private:
         DynamicRegistry() = default;
 
-        // Called once a batch of callbacks is over, from the guard that owns the batch.
+        // Called by the guard of a batch of callbacks after the batch ends.
         //
-        // The count goes down under \c _notificationMutex rather than atomically alone, and
-        // that is the whole of why this is a function. remove_listener() waits on this count
-        // through a condition variable, and a condition variable's predicate has to be changed
-        // while holding the mutex the waiter holds. Decremented outside it, the change can land
-        // between the waiter reading the count and blocking on it, and then notify_all() has
-        // nobody to wake and nothing will send another. Being \c std::atomic does not help: the
-        // atomicity is of the write, not of the window.
+        // The count is decremented while _notificationMutex is held, not only atomically, which
+        // is the reason for this function. remove_listener() waits for the count through a
+        // condition variable, and the predicate of a condition variable must be changed while the
+        // mutex of the waiter is held. A decrement outside the mutex can occur between the moment
+        // at which the waiter reads the count and the moment at which it blocks. notify_all()
+        // then wakes no thread, and no further notification follows. std::atomic does not prevent
+        // this, because it makes the write atomic, not the interval between reading and blocking.
         void notificationFinished() {
             {
                 std::lock_guard<std::mutex> lock(_notificationMutex);
@@ -303,13 +312,14 @@ namespace stdc {
 
         mutable std::shared_mutex _mutex;
 
-        // Watching is the exception rather than the rule, and a program that does watch installs
-        // one or two. Four pointers sit inline, which is what the snapshot add() and remove() take
-        // to call outside the lock is made of, so the common case allocates nothing.
+        // Few programs install listeners, and a program that installs listeners usually installs
+        // one or two. Four pointers are stored inline. They hold the snapshot that add() and
+        // remove() take in order to call the listeners outside the lock, so that the common case
+        // allocates no memory.
         static constexpr size_t PreallocatedListeners = 4;
         using ListenerList = vlarray<Listener *, PreallocatedListeners>;
 
-        // std::less<> so a string_view looks up without building a string first.
+        // std::less<> allows a lookup with a string_view without constructing a string.
         std::map<std::string, EntryPointer, std::less<>> _entries;
         ListenerList _listeners;
         std::atomic<size_t> _activeNotifications{0};

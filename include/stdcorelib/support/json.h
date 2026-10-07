@@ -16,40 +16,41 @@
 
 /// \defgroup json JSON and CBOR
 ///
-/// stdc::json::Value reads and writes both, over the same tree.
+/// stdc::json::Value reads and writes both encodings with the same document tree.
 
 namespace stdc::cbor {
 
     /// \addtogroup json
     /// @{
 
-    /// Why a CBOR document was turned down, and where.
+    /// The reason and the position of the rejection of a CBOR document.
     ///
-    /// The codec itself is json::Value::toCbor() and json::Value::fromCbor(), since one tree
-    /// serves both encodings. This sits here rather than beside them because it says what went
-    /// wrong with CBOR, and whatever else CBOR grows will want the same home.
+    /// The codec consists of json::Value::toCbor() and json::Value::fromCbor(), because one tree
+    /// serves both encodings. This type is declared here rather than beside them, because it
+    /// describes CBOR failures, and future CBOR facilities belong in the same namespace.
     struct STDC_EXPORT DecodeError {
         enum Code {
             NoError = 0,
-            UnexpectedEnd,   ///< the bytes stopped in the middle of an item
-            IllegalEncoding, ///< a reserved encoding, or one this item is not allowed
+            UnexpectedEnd,   ///< end of input in the middle of an item
+            IllegalEncoding, ///< a reserved encoding, or an encoding not allowed for this item
             IllegalString,   ///< a text string that is not UTF-8
-            OutOfRange,      ///< a number CBOR can write and json::Value cannot hold
-            UnsupportedType, ///< tags, and map keys that are not text
+            OutOfRange,      ///< a number that CBOR can encode and json::Value cannot hold
+            UnsupportedType, ///< a tag, or a map key that is not text
             NestedTooDeeply,
-            TrailingContent, ///< a whole item, and then more after it
+            TrailingContent, ///< further content after a complete item
         };
 
         Code code = NoError;
-        size_t offset = 0; ///< bytes from the start
-        std::string what;  ///< what was wrong, without the position in front of it
+        size_t offset = 0; ///< offset in bytes from the start
+        std::string what;  ///< description of the failure, without the position
 
-        /// Whether this says a decode failed.
+        /// Returns whether this object reports a failed decode.
         explicit operator bool() const {
             return code != NoError;
         }
 
-        /// The failure in words, with the byte offset in front of it. Empty for NoError.
+        /// Returns the description of the failure, preceded by the byte offset, or an empty
+        /// string for NoError.
         std::string message() const;
     };
 
@@ -67,10 +68,11 @@ namespace stdc::json {
 
     using Object = std::map<std::string, Value, std::less<>>;
 
-    /// Which of the eight kinds a Value is.
+    /// The eight kinds of a Value.
     ///
-    /// \note Scoped, so that the \c Array and \c Object here leave the two names above alone. An
-    ///       unscoped enumerator would hide them inside Value and everywhere else in here.
+    /// \note The enumeration is scoped, so that its \c Array and \c Object do not hide the two
+    ///       type aliases above. An unscoped enumerator would hide them inside Value and in the
+    ///       rest of this namespace.
     enum class Type {
         Null = 0,
         Bool,
@@ -82,38 +84,39 @@ namespace stdc::json {
         Object,
     };
 
-    /// Why a JSON document was turned down, and where.
+    /// The reason and the position of the rejection of a JSON document.
     struct STDC_EXPORT ParseError {
         enum Code {
             NoError = 0,
-            UnexpectedEnd,   ///< the text stopped in the middle of something
-            UnexpectedToken, ///< something was there, and it was not what belongs at that point
-            IllegalNumber,   ///< a leading zero, a missing digit, an exponent with nothing in it
-            IllegalEscape,   ///< an escape nothing answers to, or a broken surrogate pair
-            IllegalString,   ///< a raw control character, or bytes that are not UTF-8
+            UnexpectedEnd,   ///< end of input in the middle of a value
+            UnexpectedToken, ///< a token that is not allowed at its position
+            IllegalNumber,   ///< a leading zero, a missing digit, or an empty exponent
+            IllegalEscape,   ///< an unknown escape sequence, or an invalid surrogate pair
+            IllegalString,   ///< an unescaped control character, or an invalid UTF-8 sequence
             NestedTooDeeply,
-            TrailingContent,   ///< a whole value, and then more after it
-            CommentNotAllowed, ///< a comment, where \a ignoreComments was not asked for
+            TrailingContent,   ///< further content after a complete value
+            CommentNotAllowed, ///< a comment, if \a ignoreComments was not set
         };
 
         Code code = NoError;
-        size_t offset = 0; ///< bytes from the start of the text
-        size_t line = 1;   ///< counting from one
-        size_t column = 1; ///< counting from one, in bytes rather than code points
-        std::string what;  ///< what was wrong, without the position in front of it
+        size_t offset = 0; ///< offset in bytes from the start of the text
+        size_t line = 1;   ///< line number, starting at one
+        size_t column = 1; ///< column number, starting at one, in bytes rather than code points
+        std::string what;  ///< description of the failure, without the position
 
-        /// Whether this says a parse failed.
+        /// Returns whether this object reports a failed parse.
         explicit operator bool() const {
             return code != NoError;
         }
 
-        /// The failure in words, with the line and column in front of it. Empty for NoError.
+        /// Returns the description of the failure, preceded by the line and column, or an empty
+        /// string for NoError.
         std::string message() const;
     };
 
     namespace detail {
 
-        /// The empty objects the readers below hand back where the value holds something else.
+        /// The empty objects that the readers below return if the value has another type.
         /// @{
         inline const Value &empty_value();
         inline const std::string &empty_string();
@@ -124,25 +127,25 @@ namespace stdc::json {
 
     }
 
-    /// A JSON value, shaped after Qt's.
+    /// A JSON value, modeled on the JSON classes of Qt.
     ///
     /// The tree is built by construction and read through the \c toXxx() family, which never
-    /// fails: an accessor asked for a type the value does not have hands back the default it was
-    /// given, and a subscript that finds nothing hands back a null value, so a chain of them
-    /// needs no check at each step.
+    /// fails. An accessor for a type that the value does not have returns the given default, and
+    /// a subscript that finds nothing returns a null value. A chain of accessors therefore
+    /// requires no check at each step.
     ///
-    /// The \c asXxx() family is the other half. It answers with a pointer into the value's own
-    /// storage, or with \c nullptr when the value holds something else, and its non-const forms
-    /// are how a document is changed after it has been built. That half needs the check the
-    /// first half does not.
+    /// The \c asXxx() family complements it. It returns a pointer into the storage of the value,
+    /// or \c nullptr if the value has another type, and its non-const forms are the means of
+    /// changing a document after construction. These accessors require the check that the
+    /// \c toXxx() family does not.
     ///
-    /// \note A number keeps the form it was written in. \c 1 parses as \c Type::Int and \c 1.0 as
-    ///       \c Type::Double, which is what a round trip through toJson() has to preserve.
+    /// \note A number keeps the form in which it was written. \c 1 parses as \c Type::Int and
+    ///       \c 1.0 as \c Type::Double, which a round trip through toJson() must preserve.
     ///       Comparison ignores the distinction and compares numerically.
     ///
-    ///       An integer is exact, up to the range of \c int64_t. Anything outside it, including an
-    ///       unsigned value above \c INT64_MAX, becomes a \c Type::Double and is exact only up to
-    ///       2^53.
+    ///       An integer is exact within the range of \c int64_t. A value outside that range,
+    ///       including an unsigned value above \c INT64_MAX, becomes a \c Type::Double and is
+    ///       exact only up to 2^53.
     class STDC_EXPORT Value {
     public:
         Value(Type = Type::Null);
@@ -208,17 +211,18 @@ namespace stdc::json {
         }
 
     public:
-        /// \name Reading, with something to fall back on
+        /// \name Access with default values
         ///
-        /// None of these fail. Where the value holds something else the default comes back, and
-        /// the two number forms convert into each other, which is the only conversion there is.
+        /// None of these accessors fail. If the value has another type, the default is returned.
+        /// The two number types convert into each other, and no other conversion exists.
         ///
-        /// \warning A form that hands back a reference and was given a default hands back a
-        ///          reference to that default where the type does not match, so a temporary
-        ///          written at the call site is gone by the semicolon. The forms taking no
-        ///          default answer with a shared empty object instead and are safe to keep.
-        /// \sa The \c asXxx() family below, for the storage itself and for telling a value that
-        ///     is absent from one that happens to equal the default.
+        /// \warning A form that returns a reference and accepts a default returns a reference to
+        ///          that default if the type does not match. A temporary written at the call site
+        ///          is therefore destroyed at the end of the full expression. The forms without a
+        ///          default return a shared empty object instead and can be kept safely.
+        ///
+        /// The \c asXxx() family below provides access to the storage itself and distinguishes
+        /// an absent value from a value that equals the default.
         /// @{
 
         inline bool toBool(bool defaultValue = false) const {
@@ -240,8 +244,8 @@ namespace stdc::json {
                 case Type::Int:
                     return _p.i;
                 case Type::Double:
-                    // Truncated, not rounded, and undefined once the value is out of range, which
-                    // is what a cast does everywhere else too.
+                    // The conversion truncates rather than rounds and is undefined if the value is
+                    // out of range, as for any other cast.
                     return int64_t(_p.d);
                 default:
                     break;
@@ -316,20 +320,20 @@ namespace stdc::json {
 
         /// @}
 
-        /// \name Reading the storage itself
+        /// \name Access to the storage
         ///
-        /// The value's own payload, or \c nullptr where it holds something else. Nothing is
-        /// converted and nothing is substituted, which is the whole difference from the \c toXxx()
-        /// family above: asDouble() on an \c Int answers with null where toDouble() answers with
-        /// the number.
+        /// These accessors return the payload of the value, or \c nullptr if the value has
+        /// another type. Nothing is converted and nothing is substituted, which distinguishes
+        /// them from the \c toXxx() family above. asDouble() on an \c Int returns null, whereas
+        /// toDouble() returns the number.
         ///
-        /// This is also how to tell a value that is not there from one that happens to equal the
-        /// default, which \c toInt(-1) cannot do.
+        /// These accessors also distinguish an absent value from a value that equals the default,
+        /// which \c toInt(-1) cannot.
         ///
-        /// The non-const forms hand out a writable pointer and are the only way to change a
-        /// document once it is built. There is no reference form on purpose: a type that does not
-        /// match has nothing to return a reference to, and handing back the shared empty object
-        /// would let one caller's write reach every other reader of it.
+        /// The non-const forms return a writable pointer and are the only means of changing a
+        /// document after construction. A reference form deliberately does not exist. A type
+        /// that does not match has no object to refer to, and returning the shared empty object
+        /// would let the write of one caller reach every other reader of that object.
         ///
         /// \code
         ///   if (auto *o = doc.asObject()) {
@@ -392,37 +396,38 @@ namespace stdc::json {
     public:
         /// Returns the serialized JSON text of this value.
         ///
-        /// \param indent The number of spaces to indent the JSON text. If negative, no indentation
-        ///        is performed.
+        /// \param indent the number of spaces per indentation level, or a negative number for no
+        ///        indentation
         std::string toJson(int indent = -1) const;
 
-        /// Returns the value the given JSON text spells.
+        /// Returns the value that the JSON text \a json denotes.
         ///
-        /// \param json The text to parse.
-        /// \param ignoreComments Whether comments should be ignored and treated like whitespace
-        ///        (true) or yield a parse error (false)
-        /// \param error Set to why the text was rejected, or cleared on success. A rejected
-        ///        document and the text \c null both come back as a null value, so this tells
-        ///        them apart.
+        /// \param json the text to parse
+        /// \param ignoreComments whether comments are treated as whitespace (true) or reported
+        ///        as a parse error (false)
+        /// \param error receives the reason for a rejection, and is cleared on success. A rejected
+        ///        document and the text \c null both produce a null value, and \a error
+        ///        distinguishes them.
         static Value fromJson(std::string_view json, bool ignoreComments,
                               ParseError *error = nullptr);
 
         std::vector<uint8_t> toCbor() const;
 
-        /// Returns the value the given CBOR encodes.
+        /// Returns the value that the CBOR data \a cbor encodes.
         ///
-        /// \param cbor The bytes to decode.
-        /// \param error Set to why the bytes were rejected, or cleared on success. A rejected
-        ///        document and an encoded null both come back as a null value, so this tells
-        ///        them apart.
+        /// \param cbor the bytes to decode
+        /// \param error receives the reason for a rejection, and is cleared on success. A rejected
+        ///        document and an encoded null both produce a null value, and \a error
+        ///        distinguishes them.
         static Value fromCbor(array_view<uint8_t> cbor, cbor::DecodeError *error = nullptr);
 
     private:
-        // The alternatives, all trivially copyable, so the payload moves as one object rather
-        // than one member at a time. Which member is live is _type and nothing else.
+        // The alternatives are all trivially copyable. The payload is therefore copied as one
+        // object rather than one member at a time. _type alone determines the active member.
         //
-        // Anything larger than a scalar sits behind a pointer this owns, and is copied when the
-        // value is. A std::string alone is wider than everything here put together.
+        // Every alternative larger than a scalar is stored behind a pointer that the value owns
+        // and copies together with the value. A std::string alone is larger than all other
+        // members together.
         union Payload {
             bool b;
             int64_t i;
@@ -437,7 +442,7 @@ namespace stdc::json {
         Type _type;
         Payload _p;
 
-        // Frees what the live alternative owns, if it owns anything, and becomes null.
+        // Frees the memory that the active alternative owns, if any, and makes the value null.
         void reset() noexcept;
         void copyFrom(const Value &RHS);
     };

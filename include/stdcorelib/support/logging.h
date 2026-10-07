@@ -14,15 +14,15 @@
 ///
 ///     lc.stdcWarning("cannot read %1", path);
 ///     lc.stdcDebugF("offset=%zu", off);   // the printf-style variant
-///     stdcInfo("no category in scope, so this goes to the default one");
+///     stdcInfo("logged to the default category");
 ///
-///     lc.setFilterRules("*.debug = false\n"        // silence debug everywhere
-///                       "app.io = false\n"         // silence this category
-///                       "app.io.warning = true");  // except for its warnings
+///     lc.setFilterRules("*.debug = false\n"        // disables debug in every category
+///                       "app.io = false\n"         // disables this category
+///                       "app.io.warning = true");  // re-enables its warnings
 /// \endcode
 ///
-/// \c Logger::setLogCallback() replaces the sink, which is how records reach a file or a UI instead
-/// of the terminal.
+/// \c Logger::setLogCallback() replaces the sink. A program uses it to direct records to a file or
+/// to a user interface instead of the terminal.
 
 namespace stdc {
 
@@ -114,18 +114,18 @@ namespace stdc {
 
         static LogCallback logCallback();
 
-        /// Replaces the sink every record goes to.
+        /// Replaces the sink that receives every record.
         ///
-        /// \param callback the new sink, or \c nullptr to put the built-in one back
+        /// \param callback the new sink, or \c nullptr to restore the built-in sink
         static void setLogCallback(LogCallback callback);
 
     protected:
         LogContext _context;
     };
 
-    /// A named channel with independently switchable levels, after Qt's \c QLoggingCategory.
+    /// A named channel with independently switchable levels, modeled on \c QLoggingCategory of Qt.
     ///
-    /// Each category registers itself on construction and picks up whatever filter rules are
+    /// Each category registers itself on construction and applies the filter rules that are
     /// already in effect.
     ///
     /// Disabling the fatal level suppresses its record but does not suppress process termination.
@@ -148,40 +148,41 @@ namespace stdc {
 
         using LogCategoryFilter = void (*)(LogCategory *);
 
-        /// The filter in force, which is the default one where none was installed.
+        /// Returns the filter in effect, which is the default filter if none was installed.
         ///
-        /// \return never \c nullptr. setLogFilter() takes one to mean the default rather than
-        ///         none, so there is no state in which nothing is filtering.
+        /// \return never \c nullptr. setLogFilter() interprets \c nullptr as the default filter
+        ///         rather than as no filter. A state without a filter therefore does not exist.
         static LogCategoryFilter logFilter();
 
-        /// Replaces the category filter and re-runs it over every registered category.
+        /// Replaces the category filter and applies it again to every registered category.
         ///
-        /// \param filter the new filter, or \c nullptr to restore the default one
-        /// \note A custom filter takes over entirely, so setFilterRules() has no effect unless
-        ///       that filter chooses to consult the rules itself.
+        /// \param filter the new filter, or \c nullptr to restore the default filter
+        /// \note A custom filter replaces the default filter entirely. setFilterRules() therefore
+        ///       has no effect unless the custom filter reads the rules itself.
         static void setLogFilter(LogCategoryFilter filter);
 
         static std::string filterRules();
 
-        /// Installs Qt-style filter rules controlling which levels each category emits.
+        /// Installs Qt-style filter rules that determine which levels each category emits.
         ///
         /// Rules are separated by newlines or \c ;, and a \c # starts a comment line. Each rule
-        /// reads <tt>category[.level] = true|false</tt>, where:
-        ///   \li category may carry a single leading and/or trailing \c * wildcard, and
+        /// has the form <tt>category[.level] = true|false</tt>, in which:
+        ///   \li category may have a single leading or trailing \c * wildcard, or both, and
         ///       otherwise matches exactly
         ///   \li level is one of \c trace, \c debug, \c success, \c info, \c warning,
-        ///       \c critical or \c fatal, and omitting it affects every level
+        ///       \c critical or \c fatal. A rule without a level applies to every level.
         ///
-        /// Rules apply in order over an all-enabled baseline, so a later match wins.
+        /// Rules are applied in order, starting from a state in which every level is enabled.
+        /// A later matching rule therefore takes precedence.
         ///
         /// \code
-        ///   *.debug = false          // silence debug everywhere
-        ///   stdc.io = false          // silence the stdc.io category
-        ///   stdc.io.warning = true   // except for its warnings
+        ///   *.debug = false          // disables debug in every category
+        ///   stdc.io = false          // disables the stdc.io category
+        ///   stdc.io.warning = true   // re-enables its warnings
         /// \endcode
         ///
-        /// \note This affects every category in the process, not just this one, despite being a
-        ///       member. A malformed rule is skipped rather than reported.
+        /// \note Although the function is a member, it affects every category in the process,
+        ///       not only this category. A malformed rule is skipped without a report.
         void setFilterRules(std::string rules);
 
         static LogCategory &defaultCategory();
@@ -226,7 +227,7 @@ namespace stdc {
     /// @}
 }
 
-/// What the macros below fall back to when no LogCategory is in scope. A category of your own
+/// Returns the category that the macros below use if no LogCategory is in scope. A category
 /// provides a member of the same name, which unqualified lookup finds first.
 ///
 /// \internal
@@ -234,22 +235,22 @@ static inline const stdc::LogCategory &stdcGetLogCategory() {
     return stdc::LogCategory::defaultCategory();
 }
 
-/// Logs one record at \a LEVEL, tagged with the file, line and function it came from.
+/// Logs one record at \a LEVEL, together with the file, line and function of the call.
 ///
-/// Written on a category it goes to that one, written bare it goes to the default category. The
-/// message uses formatN() placeholders (\c %1, \c %2, ...), and the \c F variants below take
-/// printf conversions instead.
+/// Called on a category, the macro logs to that category. Called without a category, it logs to
+/// the default category. The message uses formatN() placeholders (\c %1, \c %2, ...), and the
+/// \c F variants below use printf conversions instead.
 ///
-/// \warning This expands to an ordinary call, so the arguments are evaluated whether the level
-///          is enabled or not. Unlike Qt's \c qCDebug, which short circuits, anything expensive
-///          belongs behind an isLevelEnabled() check of your own.
+/// \warning The macro expands to an ordinary call. The arguments are therefore evaluated whether
+///          or not the level is enabled. Unlike \c qCDebug of Qt, the macro does not short
+///          circuit, and an expensive argument requires a preceding isLevelEnabled() check.
 ///
 /// \code
 ///   stdc::LogCategory lc("app.io");
 ///   lc.stdcWarning("cannot read %1", path);
 ///   lc.stdcWarningF("cannot read %s", path.c_str());
 ///
-///   stdcWarning("something to say about nothing in particular");
+///   stdcWarning("logged to the default category");
 /// \endcode
 #define stdcLog(LEVEL, ...)                                                                        \
     stdcGetLogCategory().log<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)

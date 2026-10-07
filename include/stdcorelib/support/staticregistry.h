@@ -15,9 +15,9 @@ namespace stdc {
 
     /// Controls what a \c StaticRegistry constructs for one registered implementation.
     ///
-    /// The default returns an owning pointer so derived implementations retain their dynamic
-    /// type. Specialize this trait when \a T is a small descriptor that should be returned by
-    /// value instead.
+    /// The default returns an owning pointer, so that derived implementations retain their
+    /// dynamic type. A specialization is required if \a T is a small descriptor that is returned
+    /// by value.
     template <class T>
     struct static_registry_traits {
         using result_type = std::unique_ptr<T>;
@@ -28,14 +28,14 @@ namespace stdc {
         }
     };
 
-    /// A registry that fills itself before \c main, so an implementation is available merely by
-    /// having been linked in.
+    /// A registry that is filled before \c main, so that an implementation is available as soon
+    /// as it is linked.
     ///
-    /// Every registration object links itself into a list and takes itself back out when it is
-    /// destroyed. Nothing calls an initialization function and nothing keeps a list of what to
-    /// initialize, which is what makes it work across a shared library boundary: a plugin's own
-    /// static object joins the host's list as the plugin is loaded, and leaves it as the plugin
-    /// unloads.
+    /// Every registration object inserts itself into a list and removes itself when it is
+    /// destroyed. No initialization function is called, and no list of objects to initialize
+    /// exists. The registry therefore works across a shared library boundary: the static
+    /// object of a plugin joins the list of the host when the plugin is loaded and leaves it
+    /// when the plugin is unloaded.
     ///
     /// \code
     ///   // in the host
@@ -53,28 +53,30 @@ namespace stdc {
     ///   }
     /// \endcode
     ///
-    /// The list is the only structure that can be built this way. A map or a vector has a
-    /// constructor of its own, so touching one from a static constructor races with its own
-    /// initialization. The storage accessor initializes its two pointers before returning them
-    /// to a registration.
+    /// A linked list is the only structure that can be built this way. A map or a vector has its
+    /// own constructor, and accessing it from a static constructor races with its initialization.
+    /// The storage accessor initializes its two pointers before returning them to a
+    /// registration.
     ///
-    /// \note For a plugin to reach the host's list, declare the registry with
-    ///       \c STDC_DECLARE_EXPORTED_STATIC_REGISTRY and define it with
-    ///       \c STDC_STATIC_REGISTRY. An executable host also has to export its symbols, such as
-    ///       by linking with \c -rdynamic on ELF platforms.
-    /// \note A registration goes away when the object holding it is destroyed, which for a plugin
-    ///       means the loader really did unload it. A platform loader may retain a module even
-    ///       after reporting a successful close.
-    /// \warning Neither joining nor leaving the list is synchronized, and leaving it races with
-    ///          anyone iterating. Loading and unloading a shared library is not necessarily
-    ///          single threaded, so serialize that yourself.
-    /// \warning Leaving the list does not make an entry safe to keep. Its name and constructor
-    ///          both live in the module that registered it, as does whatever \c instantiate()
-    ///          built, so those have to be gone before it unloads.
-    /// \warning The names are not copied. Register with a literal, or with something that
-    ///          outlives the program.
+    /// \note For a plugin to reach the list of the host, the registry is declared with
+    ///       \c STDC_DECLARE_EXPORTED_STATIC_REGISTRY and defined with \c STDC_STATIC_REGISTRY.
+    ///       An executable host must also export its symbols, for example by linking with
+    ///       \c -rdynamic on ELF platforms.
+    /// \note A registration is removed when the object that holds it is destroyed. For a plugin,
+    ///       this happens only if the loader actually unloads the plugin. A platform loader may
+    ///       retain a module even after it reports a successful close.
+    /// \warning Neither insertion into the list nor removal from it is synchronized, and a
+    ///          removal races with any iteration. Loading and unloading a shared library is not
+    ///          necessarily single-threaded. The program must therefore serialize these
+    ///          operations.
+    /// \warning Removal from the list does not make a copy of an entry safe to keep. Its name and
+    ///          constructor are located in the module that registered it, as is every object that
+    ///          \c instantiate() created. All of them must be destroyed before the module is
+    ///          unloaded.
+    /// \warning The names are not copied. A name must be a string literal or another string
+    ///          that outlives the program.
     ///
-    /// \sa DynamicRegistry, for the entries that are not known at link time
+    /// \sa DynamicRegistry
     template <class T, class Traits = static_registry_traits<T>>
     class StaticRegistry {
     public:
@@ -82,7 +84,7 @@ namespace stdc {
         using traits_type = Traits;
         using result_type = typename traits_type::result_type;
 
-        /// One registered implementation: what it is called, and how to make one.
+        /// One registered implementation, consisting of its name and its constructor.
         class Entry {
         public:
             Entry(std::string_view name, std::string_view desc, result_type (*ctor)())
@@ -96,8 +98,8 @@ namespace stdc {
                 return _desc;
             }
 
-            /// Makes one. A fresh object every call, so the registry holds descriptions rather
-            /// than instances.
+            /// Creates an instance. Every call creates a new object, because the registry holds
+            /// descriptions rather than instances.
             result_type instantiate() const {
                 return _ctor();
             }
@@ -110,11 +112,11 @@ namespace stdc {
 
         class Iterator;
 
-        /// A link in the list. Lives inside the Add object that registered it, so the registry
-        /// itself never allocates.
+        /// A node of the list. The node is stored inside the Add object that registered it, so
+        /// that the registry itself never allocates memory.
         ///
-        /// Doubly linked so that a registration can take itself out in constant time without
-        /// walking the list for its predecessor.
+        /// The list is doubly linked, so that a registration can remove itself in constant time
+        /// without searching the list for its predecessor.
         class Node {
         public:
             explicit Node(const Entry &entry) : _entry(entry) {
@@ -168,7 +170,8 @@ namespace stdc {
             const Node *_node;
         };
 
-        /// What entries() hands back, so the registry reads in a range-for.
+        /// The return type of entries(), which allows the registry to be used in a range-based
+        /// for loop.
         class Range {
         public:
             Iterator begin() const {
@@ -189,8 +192,8 @@ namespace stdc {
             return Range();
         }
 
-        /// Appends \a node, keeping registration order. Called by Add, and by a plugin against
-        /// the host's copy of this symbol.
+        /// Appends \a node and preserves the registration order. Add calls this function, and a
+        /// plugin calls the copy of this symbol in the host.
         static void add_node(Node *node) {
             auto &data = storage();
             node->_prev = data.tail;
@@ -202,7 +205,7 @@ namespace stdc {
             data.tail = node;
         }
 
-        /// Takes \a node back out, which is what a registration does when it is destroyed.
+        /// Removes \a node. A registration calls this function when it is destroyed.
         static void remove_node(Node *node) {
             auto &data = storage();
             if (node->_prev) {
@@ -219,14 +222,16 @@ namespace stdc {
             node->_prev = nullptr;
         }
 
-        /// Registers \a V, default constructed, for as long as this object lives. For a static
-        /// object that is the whole program.
+        /// Registers \a V, constructed by its default constructor, for the lifetime of this
+        /// object. For a static object, the lifetime is the whole program.
         ///
         /// \code
         ///   static CodecRegistry::Add<FlacCodec> x("flac", "Free Lossless Audio Codec");
         /// \endcode
         ///
-        /// \sa AddFactory, for an implementation that is not default constructible
+        /// AddFactory registers an implementation that is not default-constructible.
+        ///
+        /// \sa AddFactory
         template <class V>
         class Add {
         public:
@@ -250,11 +255,13 @@ namespace stdc {
             STDC_DISABLE_COPY_MOVE(Add)
         };
 
-        /// Registers something built the way \a factory says, for the implementations that take
-        /// constructor arguments, come from a factory function, or are not one type at all.
+        /// Registers an implementation that \a factory constructs. This form is intended for
+        /// implementations that require constructor arguments, that a factory function creates,
+        /// or that are not a single type.
         ///
-        /// A lambda that captures nothing converts to the function pointer this takes, so the
-        /// arguments are baked in at the call site with no allocation and nothing to spell out:
+        /// A lambda without captures converts to the function pointer that the constructor
+        /// accepts. The arguments are therefore fixed at the call site without allocation and
+        /// without a separate type:
         ///
         /// \code
         ///   static CodecRegistry::AddFactory x(
@@ -262,12 +269,13 @@ namespace stdc {
         ///       []() -> std::unique_ptr<Codec> { return std::make_unique<Mp3Codec>(44100, 2); });
         /// \endcode
         ///
-        /// \note The lambda has to name the base in its return type, \c std::unique_ptr<Codec>
-        ///       above. One returning \c std::unique_ptr<Mp3Codec> is a different function type
-        ///       and will not convert, even though the pointers themselves would.
-        /// \note Only values known where the lambda is written can go in it. Capturing something
-        ///       decided at run time makes a closure, which is no longer a function pointer.
-        ///       DynamicRegistry holds a \c std::function and takes those.
+        /// \note The lambda must name the base class in its return type, as
+        ///       \c std::unique_ptr<Codec> above. A lambda that returns
+        ///       \c std::unique_ptr<Mp3Codec> has a different function type and does not convert,
+        ///       although the pointers themselves convert.
+        /// \note The lambda can contain only values that are known where it is written. A capture
+        ///       of a value determined at run time makes a closure, which does not convert to a
+        ///       function pointer. DynamicRegistry stores a \c std::function and accepts closures.
         class AddFactory {
         public:
             AddFactory(std::string_view name, std::string_view desc, result_type (*factory)())
@@ -302,9 +310,10 @@ namespace stdc {
 
 /// Declares the exported storage for a \c StaticRegistry over \a TYPE.
 ///
-/// Put this in a public header after any specialization of \c static_registry_traits for
-/// \a TYPE. Put \c STDC_STATIC_REGISTRY in one translation unit of the module that owns the
-/// registry. \a EXPORT must select export while building that module and import while using it.
+/// The declaration belongs in a public header, after any specialization of
+/// \c static_registry_traits for \a TYPE. \c STDC_STATIC_REGISTRY belongs in one translation unit
+/// of the module that owns the registry. \a EXPORT must select export while that module is built
+/// and import while it is used.
 #define STDC_DECLARE_EXPORTED_STATIC_REGISTRY(TYPE, EXPORT)                                        \
     template <>                                                                                    \
     EXPORT                                                                                         \
@@ -315,9 +324,9 @@ namespace stdc {
 
 /// Defines the storage for a \c StaticRegistry over \a TYPE.
 ///
-/// Put this in exactly one translation unit of the module that owns the registry. Put the
-/// corresponding declaration in a public header when registrations can come from another
-/// module. The macro must be used at global scope.
+/// The definition belongs in exactly one translation unit of the module that owns the registry.
+/// If registrations can come from another module, the corresponding declaration belongs in a
+/// public header. The macro must be used at global scope.
 #define STDC_STATIC_REGISTRY(TYPE)                                                                 \
     template <>                                                                                    \
     typename ::stdc::StaticRegistry<TYPE>::Storage & ::stdc::StaticRegistry<TYPE>::storage() {     \
