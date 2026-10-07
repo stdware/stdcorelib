@@ -185,7 +185,8 @@ namespace {
     }
 
     // The output of an exchange that is expected to finish. A case that fails here reports the
-    // reason rather than dereferencing an empty result.
+    // reason rather than dereferencing an empty result. Only the main thread may call this
+    // function, because it asserts and Boost.Test is not thread-safe.
     std::tuple<std::string, std::string> communicated(Popen &p, const std::string &input = {},
                                                       int timeout = Timeout) {
         auto output = p.communicate(input, timeout);
@@ -1842,8 +1843,11 @@ BOOST_AUTO_TEST_CASE(test_threads) {
                 }
                 started++;
                 std::string mine = "thread " + std::to_string(i) + "\n";
-                auto [out, errout] = communicated(p, mine, Timeout);
-                if (out == mine && p.returnCode() && *p.returnCode() == 0) {
+                // No Boost.Test assertion runs on a worker thread, because Boost.Test is not
+                // thread-safe. The main thread checks the counters instead.
+                auto output = p.communicate(mine, Timeout);
+                if (output && std::get<0>(*output) == mine && p.returnCode() &&
+                    *p.returnCode() == 0) {
                     succeeded++;
                 }
             });
