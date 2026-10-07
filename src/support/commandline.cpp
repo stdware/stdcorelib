@@ -210,7 +210,8 @@ namespace stdc::cli {
         /// the tree is walked once.
         std::shared_ptr<const Command> root;
         const Command *target = nullptr;
-        std::vector<std::string> path;
+        /// The commands from the root to the target, in that order.
+        std::vector<const Command *> path;
 
         /// Per positional argument of the command that was reached.
         std::vector<ArgumentValues> arguments;
@@ -402,7 +403,7 @@ namespace stdc::cli {
         return impl.target;
     }
 
-    const std::vector<std::string> &ParseResult::commandPath() const {
+    const std::vector<const Command *> &ParseResult::commandPath() const {
         stdc_impl_t;
         return impl.path;
     }
@@ -411,13 +412,16 @@ namespace stdc::cli {
     // its own and everything under a root that says one inherits it.
     std::string ParseResult::versionText() const {
         stdc_impl_t;
+        // A parse that fails while expanding a response file ends before the root is added to
+        // the path.
+        if (impl.path.empty()) {
+            return impl.root ? impl.root->version() : std::string();
+        }
         std::string res;
-        const Command *at = impl.root.get();
-        for (size_t i = 0; at; ++i) {
+        for (const Command *at : impl.path) {
             if (!at->version().empty()) {
                 res = at->version();
             }
-            at = i + 1 < impl.path.size() ? at->findCommand(impl.path[i + 1]) : nullptr;
         }
         return res;
     }
@@ -488,17 +492,13 @@ namespace stdc::cli {
     std::vector<const Option *> ParseResult::inheritedOptions() const {
         stdc_impl_t;
         std::vector<const Option *> res;
-        if (!impl.root || impl.path.size() <= 1) {
-            return res;
-        }
-        const Command *at = impl.root.get();
-        for (size_t i = 1; i < impl.path.size() && at; ++i) {
-            for (const auto &option : at->options()) {
+        // The commands above the target. The target is the last element of the path.
+        for (size_t i = 0; i + 1 < impl.path.size(); ++i) {
+            for (const auto &option : impl.path[i]->options()) {
                 if (option.isRecursive()) {
                     res.push_back(&option);
                 }
             }
-            at = at->findCommand(impl.path[i]);
         }
         return res;
     }
@@ -593,7 +593,7 @@ namespace stdc::cli {
         if (impl.target && !help.empty()) {
             std::string name;
             for (size_t i = 0; i < impl.path.size(); ++i) {
-                name += (i ? " " : "") + impl.path[i];
+                name += (i ? " " : "") + impl.path[i]->name();
             }
             console::fputs(console::nostyle, console::nocolor, console::nocolor,
                            "Try \"" + name + " " + help + "\" for more information.\n", stderr);
@@ -784,11 +784,11 @@ namespace stdc::cli {
         // Broken into as many lines as the room a section body gets, with the breaks written into
         // the text.
         std::string usage_text(const HelpFormatter &formatter, const Command &command,
-                               const std::vector<std::string> &path,
+                               const std::vector<const Command *> &path,
                                const std::vector<Option> &inherited, int indent, int text_width) {
             std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
-                head += (i ? " " : "") + path[i];
+                head += (i ? " " : "") + path[i]->name();
             }
 
             // An option that has to be given is not optional information, so it is spelled out
@@ -888,7 +888,7 @@ namespace stdc::cli {
     }
 
     std::string HelpFormatter::usageText(const Command &command,
-                                         const std::vector<std::string> &path,
+                                         const std::vector<const Command *> &path,
                                          const std::vector<Option> &inherited,
                                          const HelpSizes &sizes) const {
         return usage_text(*this, command, path, inherited, sizes.indent, sizes.textWidth);
@@ -1329,7 +1329,7 @@ namespace stdc::cli {
                 }
             }
             r->target = next;
-            r->path.push_back(next->name());
+            r->path.push_back(next);
         }
 
         /// What can be written here: the target's own options, plus the recursive ones of every
@@ -1809,7 +1809,7 @@ namespace stdc::cli {
                 }
             }
 
-            r->path.push_back(r->target->name());
+            r->path.push_back(r->target);
             readTokens();
             if (failed()) {
                 return;

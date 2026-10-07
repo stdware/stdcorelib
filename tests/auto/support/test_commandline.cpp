@@ -89,6 +89,15 @@ namespace {
         int denominator = 1;
     };
 
+    /// Returns the names of the commands on \a path, by which the cases compare paths.
+    std::vector<std::string> names(const std::vector<const Command *> &path) {
+        std::vector<std::string> res;
+        for (const Command *command : path) {
+            res.push_back(command->name());
+        }
+        return res;
+    }
+
 }
 
 /// A type of the caller's own, to check that the customization point is reachable from outside
@@ -562,7 +571,7 @@ BOOST_AUTO_TEST_CASE(test_parse_bare_command) {
     auto result = ok(parser, {});
     BOOST_REQUIRE(result.command() != nullptr);
     BOOST_CHECK_EQUAL(result.command()->name(), "prog");
-    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog"}));
+    BOOST_CHECK(names(result.commandPath()) == std::vector<std::string>({"prog"}));
 }
 
 BOOST_AUTO_TEST_CASE(test_positional_arguments) {
@@ -925,7 +934,7 @@ BOOST_AUTO_TEST_CASE(test_subcommands) {
     auto result = ok(parser, {"copy", "a"});
     BOOST_REQUIRE(result.command() != nullptr);
     BOOST_CHECK_EQUAL(result.command()->name(), "copy");
-    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "copy"}));
+    BOOST_CHECK(names(result.commandPath()) == std::vector<std::string>({"prog", "copy"}));
     BOOST_CHECK_EQUAL(must(result.value(0)), "a");
 
     // A name that is no subcommand, on a command that takes no arguments either, is named as
@@ -945,7 +954,7 @@ BOOST_AUTO_TEST_CASE(test_nested_subcommands) {
         Command("remote").addCommand(Command("add").addArgument(Argument("name")))));
 
     auto result = ok(parser, {"remote", "add", "origin"});
-    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "remote", "add"}));
+    BOOST_CHECK(names(result.commandPath()) == std::vector<std::string>({"prog", "remote", "add"}));
     BOOST_CHECK_EQUAL(must(result.value(0)), "origin");
 }
 
@@ -2645,6 +2654,97 @@ BOOST_AUTO_TEST_CASE(test_invoke_answers_help_and_version_before_the_handler) {
     }
 }
 
+// The pre and post handlers of the commands on the path run around the handler of the command
+// reached. A post handler runs only for a command whose pre handler succeeded, in the same way as
+// a destructor runs only for an object whose constructor completed.
+BOOST_AUTO_TEST_CASE(test_invoke_runs_the_pre_and_post_handlers_on_the_path) {
+    std::vector<std::string> trace;
+    // Each hook appends its name to the trace. A post handler returns the received value plus
+    // ten. The final return value therefore records the number of post handlers run and that
+    // each passed its result to the next.
+    const auto &pre = [&trace](std::string name, int code) {
+        return [&trace, name, code](const ParseResult &) {
+            trace.push_back(name + " pre");
+            return code;
+        };
+    };
+    const auto &post = [&trace](std::string name) {
+        return [&trace, name](const ParseResult &, int code) {
+            trace.push_back(name + " post " + std::to_string(code));
+            return code + 10;
+        };
+    };
+    const auto &handler = [&trace](std::string name, int code) {
+        return [&trace, name, code](const ParseResult &) {
+            trace.push_back(name);
+            return code;
+        };
+    };
+    // The path is prog, sub and foo. The hooks of bar, a sibling of sub, must not run.
+    const auto &tree = [&](int progPre, int subPre, int fooPre, int fooCode, bool subHasPre) {
+        Command sub = Command("sub").setPostHandler(post("sub"));
+        if (subHasPre) {
+            sub.setPreHandler(pre("sub", subPre));
+        }
+        sub.addCommand(Command("foo")
+                           .addHelpOption()
+                           .setPreHandler(pre("foo", fooPre))
+                           .setPostHandler(post("foo"))
+                           .setHandler(handler("foo", fooCode)));
+        return Parser(Command("prog")
+                          .setPreHandler(pre("prog", progPre))
+                          .setPostHandler(post("prog"))
+                          .addCommand(std::move(sub))
+                          .addCommand(Command("bar")
+                                          .setPreHandler(pre("bar", 0))
+                                          .setPostHandler(post("bar"))
+                                          .setHandler(handler("bar", 0))));
+    };
+    const auto &ran = [&trace](std::vector<std::string> expected) {
+        BOOST_CHECK_EQUAL_COLLECTIONS(trace.begin(), trace.end(), expected.begin(), expected.end());
+        trace.clear();
+    };
+
+    // All succeed. The pre handlers run downward, then the handler, then the post handlers
+    // upward.
+    BOOST_CHECK_EQUAL(tree(0, 0, 0, 0, true).invoke(argv({"sub", "foo"})), 30);
+    ran({"prog pre", "sub pre", "foo pre", "foo", "foo post 0", "sub post 10", "prog post 20"});
+
+    // A failed pre handler skips the hooks and the handler below it. Only the commands above it
+    // run their post handlers, and the first post handler receives the failure value.
+    BOOST_CHECK_EQUAL(tree(0, 5, 0, 0, true).invoke(argv({"sub", "foo"})), 15);
+    ran({"prog pre", "sub pre", "prog post 5"});
+
+    // A failed pre handler of the root leaves no post handler to run.
+    BOOST_CHECK_EQUAL(tree(5, 0, 0, 0, true).invoke(argv({"sub", "foo"})), 5);
+    ran({"prog pre"});
+
+    // A command without a pre handler counts as entered.
+    BOOST_CHECK_EQUAL(tree(0, 0, 5, 0, false).invoke(argv({"sub", "foo"})), 25);
+    ran({"prog pre", "foo pre", "sub post 5", "prog post 15"});
+
+    // A failed handler still runs every post handler, each receiving the current value.
+    BOOST_CHECK_EQUAL(tree(0, 0, 0, 3, true).invoke(argv({"sub", "foo"})), 33);
+    ran({"prog pre", "sub pre", "foo pre", "foo", "foo post 3", "sub post 13", "prog post 23"});
+
+    // No hook runs if the handler does not: on help, on a failed parse, and without a handler.
+    {
+        int code = -1;
+        std::ignore = capturedStdout(
+            [&] { code = tree(0, 0, 0, 0, true).invoke(argv({"sub", "foo", "--help"})); });
+        BOOST_CHECK_EQUAL(code, 0);
+        ran({});
+
+        std::ignore = capturedStderr(
+            [&] { code = tree(0, 0, 0, 0, true).invoke(argv({"sub", "foo", "--nope"}), -9); });
+        BOOST_CHECK_EQUAL(code, -9);
+        ran({});
+
+        BOOST_CHECK_EQUAL(tree(0, 0, 0, 0, true).invoke(argv({"sub"}), -9), -9);
+        ran({});
+    }
+}
+
 // The innermost command on the path that was given one.
 BOOST_AUTO_TEST_CASE(test_which_version_a_result_answers_with) {
     Parser parser(Command("prog")
@@ -3064,7 +3164,8 @@ BOOST_AUTO_TEST_CASE(test_recursive_options_are_written_after_the_command_that_w
     // is written. Two levels of recursive and the leaf's own, side by side.
     auto parser = tree();
     auto trailing = ok(parser, {"remote", "add", "--root-wide", "--mid", "--leaf", "x"});
-    BOOST_CHECK(trailing.commandPath() == std::vector<std::string>({"prog", "remote", "add"}));
+    BOOST_CHECK(names(trailing.commandPath()) ==
+                std::vector<std::string>({"prog", "remote", "add"}));
     BOOST_CHECK(trailing.option("--root-wide").has_value());
     BOOST_CHECK(trailing.option("--mid").has_value());
     BOOST_CHECK(trailing.option("--leaf").has_value());
@@ -3132,7 +3233,7 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
                                                  .addArgument(Argument("target"))
                                                  .addOption(Option({"-j"}, "Jobs").arg("n"))));
     auto result = ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
-    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "build"}));
+    BOOST_CHECK(names(result.commandPath()) == std::vector<std::string>({"prog", "build"}));
     BOOST_CHECK_EQUAL(must(result.value(0)), "target");
     BOOST_CHECK_EQUAL(must(result.valueForOption<int>("-j")), 4);
 
@@ -3637,7 +3738,7 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
 BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_the_usage_line) {
     struct Synopsis : HelpFormatter {
         mutable std::vector<std::string> inherited;
-        std::string usageText(const Command &command, const std::vector<std::string> &path,
+        std::string usageText(const Command &command, const std::vector<const Command *> &path,
                               const std::vector<Option> &from_above,
                               const HelpSizes &sizes) const override {
             inherited.clear();

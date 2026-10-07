@@ -739,6 +739,12 @@ namespace stdc::cli {
         /// What to run once this command is the one that was named. Its return value is the
         /// program's.
         using Handler = std::function<int(const ParseResult &)>;
+        /// The function run before the handler. A return value of zero continues the run. Any
+        /// other value ends the run and becomes the return value of the program.
+        using PreHandler = std::function<int(const ParseResult &)>;
+        /// The function run after the handler. It receives the current return value and returns
+        /// the value that replaces it.
+        using PostHandler = std::function<int(const ParseResult &, int)>;
 
         Command() = default;
 
@@ -779,6 +785,22 @@ namespace stdc::cli {
 
         inline Command &setHandler(Handler handler) {
             _handler = std::move(handler);
+            return *this;
+        }
+        /// Sets the function run before the handler if the command reached is this command or a
+        /// descendant of it. Pre handlers run from the root downward, and the first nonzero
+        /// return value ends the run. A typical use is applying a recursive option.
+        /// \sa ParseResult::invoke()
+        inline Command &setPreHandler(PreHandler handler) {
+            _preHandler = std::move(handler);
+            return *this;
+        }
+        /// Sets the function run after the handler if the command reached is this command or a
+        /// descendant of it, and the pre handler of this command is absent or returned zero. Post
+        /// handlers run from the innermost command outward, each receiving the previous result.
+        /// \sa ParseResult::invoke()
+        inline Command &setPostHandler(PostHandler handler) {
+            _postHandler = std::move(handler);
             return *this;
         }
         inline Command &setCatalogue(CommandCatalogue catalogue) {
@@ -851,6 +873,12 @@ namespace stdc::cli {
         inline const Handler &handler() const {
             return _handler;
         }
+        inline const PreHandler &preHandler() const {
+            return _preHandler;
+        }
+        inline const PostHandler &postHandler() const {
+            return _postHandler;
+        }
         inline const CommandCatalogue &catalogue() const {
             return _catalogue;
         }
@@ -886,6 +914,8 @@ namespace stdc::cli {
         std::vector<Option> _options;
         std::vector<Command> _commands;
         Handler _handler;
+        PreHandler _preHandler;
+        PostHandler _postHandler;
         CommandCatalogue _catalogue;
     };
 
@@ -1268,8 +1298,9 @@ namespace stdc::cli {
 
         /// The command that was reached, which is the root when no subcommand was named.
         const Command *command() const;
-        /// The names from the root down to it, the root first.
-        const std::vector<std::string> &commandPath() const;
+        /// Returns the commands from the root to the command reached, in that order. The pointers
+        /// remain valid for the lifetime of this result.
+        const std::vector<const Command *> &commandPath() const;
 
         /// What a Version option prints: the innermost command on the path that was given one,
         /// so a root that says a version passes it to everything under it.
@@ -1286,6 +1317,12 @@ namespace stdc::cli {
         /// \li otherwise the handler of the command that was reached runs, and \a errorCode
         ///     comes back where there is none. This includes a Version option for which the
         ///     command path supplies no text, so the handler may answer it itself.
+        ///
+        /// The pre handlers of the commands on the path run before the handler, from the root
+        /// downward. The first nonzero return value skips the remaining pre handlers and the
+        /// handler. The post handlers then run from the innermost command outward for each
+        /// command whose pre handler is absent or returned zero, and the return value of the
+        /// last post handler is returned. None of these run if the handler does not.
         ///
         /// A program that wants to answer any of this itself calls parse() and does so. There
         /// is nothing left over for a caller of this to have to finish.
@@ -1309,7 +1346,29 @@ namespace stdc::cli {
             if (!target || !target->handler()) {
                 return errorCode;
             }
-            return target->handler()(*this);
+
+            // Only the commands whose pre handlers succeeded receive a post handler call. These
+            // commands form a prefix of the path, in the same way as objects whose constructors
+            // completed.
+            const auto &path = commandPath();
+            size_t entered = 0;
+            int code = 0;
+            for (; entered < path.size(); ++entered) {
+                const auto &pre = path[entered]->preHandler();
+                if (pre && (code = pre(*this)) != 0) {
+                    break;
+                }
+            }
+            if (entered == path.size()) {
+                code = target->handler()(*this);
+            }
+            while (entered > 0) {
+                const auto &post = path[--entered]->postHandler();
+                if (post) {
+                    code = post(*this, code);
+                }
+            }
+            return code;
         }
 
         /// Whether an option carrying \a role was given, whatever it was spelled as.
@@ -1688,13 +1747,15 @@ namespace stdc::cli {
         /// The usage line, already broken across as many lines as it needs.
         ///
         /// \param command the one that was reached, which is where its own options come from
-        /// \param path how it was reached, \c args[0] first
+        /// \param path the commands from the root to \a command, as ParseResult::commandPath()
+        ///        returns them
         /// \param inherited the options in scope from the commands above it, which is the
         ///        one thing here that \a command cannot answer for
         /// \param sizes the indent and the width to break the line against
         /// \note Each piece stays whole, since an option and the value it takes read as two
         ///       separate things once a line break comes between them.
-        virtual std::string usageText(const Command &command, const std::vector<std::string> &path,
+        virtual std::string usageText(const Command &command,
+                                      const std::vector<const Command *> &path,
                                       const std::vector<Option> &inherited,
                                       const HelpSizes &sizes) const;
 
