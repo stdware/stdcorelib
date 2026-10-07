@@ -1,6 +1,6 @@
 # Status
 
-Released as v1.1.0.0 and used by `qmcorecmd` of qmsetup. The headers remain source compatible within a major version, and the soname includes the minor version. A minor version may therefore change the symbols that the binary exports.
+The current version is 0.2.1.0, and `qmcorecmd` of qmsetup uses the library. Before major version 1, any release may change the headers incompatibly. From major version 1 onward, the headers remain source compatible within a major version. The soname includes the minor version. A minor version may therefore change the symbols that the binary exports.
 
 ## Known gaps
 
