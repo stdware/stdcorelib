@@ -8,6 +8,13 @@
 #include <set>
 #include <shared_mutex>
 
+#ifdef _WIN32
+#  include <condition_variable>
+#  include <exception>
+#  include <mutex>
+#  include <thread>
+#endif
+
 #include <stdcorelib/support/popen.h>
 
 namespace stdc {
@@ -88,6 +95,34 @@ namespace stdc {
         std::optional<int> returnCode;
 
         bool _communication_started = false;
+
+#ifdef _WIN32
+        // The workers of communicate() and what they have read. They outlive a call that times
+        // out, so the next call resumes with nothing lost, as in Python.
+        struct Communication {
+            std::thread stdin_thread;
+            std::thread stdout_thread;
+            std::thread stderr_thread;
+            std::string input;
+            std::string stdout_buff;
+            std::string stderr_buff;
+            std::exception_ptr stdin_error;
+            std::exception_ptr stdout_error;
+            std::exception_ptr stderr_error;
+
+            // The workers still running, guarded by mutex and announced through finished
+            std::mutex mutex;
+            std::condition_variable finished;
+            int running = 0;
+        };
+        Communication _communication;
+#else
+        // What communicate() has written and read, kept across calls for the same reason
+        std::string _input;
+        size_t _input_offset = 0;
+        std::string _stdout_buff;
+        std::string _stderr_buff;
+#endif
 
         // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L895
         double _sigint_wait_secs = 0.25;
@@ -170,8 +205,12 @@ namespace stdc {
         bool terminate_impl();
 
         bool send_signal_impl(int sig);
-        std::tuple<std::string, std::string> communicate_impl(const std::string &input = {},
-                                                              int timeout = -1);
+        std::optional<std::tuple<std::string, std::string>>
+            communicate_impl(const std::string &input = {}, int timeout = -1);
+
+        /// Waits for the workers of communicate() to end. They end once the child closes its
+        /// ends of the pipes, so the child is killed first if it must not be waited for.
+        void _join_communication();
     };
 
 }

@@ -100,19 +100,35 @@ namespace stdc {
     // \note Reads go straight to the descriptor. Anything a caller already pulled out through
     //       standardInput(), standardOutput() or standardError() into the stream's own buffer
     //       is theirs and is not seen here, which was true of the thread version as well.
-    std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
-                                                                       int timeout) {
+    //
+    // What has been written and read is kept in the Popen rather than in the call, and a stream
+    // is closed as it reaches its end. A call that times out leaves the child running, and the
+    // next call resumes where it stopped, as in Python (Lib/subprocess.py#L2115).
+    std::optional<std::tuple<std::string, std::string>>
+        Popen::Impl::communicate_impl(const std::string &input, int timeout) {
         clear_error();
 
         // Same answer as the other five, rather than the no_such_process the check below would
         // give. A detached child exists, it is just not ours to talk to.
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
-            return {};
+            return std::nullopt;
         }
         if (!_child_created) {
             errorCode = std::make_error_code(std::errc::no_such_process);
-            return {};
+            return std::nullopt;
+        }
+
+        // Python raises ValueError here (Lib/subprocess.py#L1196). The child receives the input
+        // of the first call only.
+        if (_communication_started && !input.empty()) {
+            errorCode = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "input given after communication started";
+            return std::nullopt;
+        }
+        if (!_communication_started) {
+            _input = input;
+            _input_offset = 0;
         }
 
         // Whatever the caller wrote through the stream goes out ahead of the input given here,
@@ -147,10 +163,6 @@ namespace stdc {
         }
 #endif
 
-        std::string out, err;
-        size_t written = 0;
-        bool timed_out = false;
-
         const auto started = std::chrono::steady_clock::now();
         const auto &remaining = [&]() -> int {
             if (timeout < 0) {
@@ -164,7 +176,7 @@ namespace stdc {
 
         // Nothing to say, so the child is told that now rather than after the loop. A child
         // reading to end of input would otherwise wait for a close that never comes.
-        if (in_fd >= 0 && input.empty()) {
+        if (in_fd >= 0 && _input_offset == _input.size()) {
             stdin_stream.close();
             in_fd = -1;
         }
@@ -220,11 +232,11 @@ namespace stdc {
                 }
                 errorCode = std::error_code(errno, std::generic_category());
                 error_api = "poll";
-                break;
+                return std::nullopt;
             }
             if (ready == 0) {
-                timed_out = true;
-                break;
+                errorCode = std::make_error_code(std::errc::timed_out);
+                return std::nullopt;
             }
 
             if (in_slot >= 0 && fds[in_slot].revents) {
@@ -234,40 +246,45 @@ namespace stdc {
                     stdin_stream.close();
                     in_fd = -1;
                 } else {
-                    ssize_t n = ::write(in_fd, input.data() + written, input.size() - written);
+                    ssize_t n = ::write(in_fd, _input.data() + _input_offset,
+                                        _input.size() - _input_offset);
                     if (n > 0) {
-                        written += size_t(n);
+                        _input_offset += size_t(n);
                     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
                         // EPIPE, if the child went between the poll and the write.
                         stdin_stream.close();
                         in_fd = -1;
                     }
                     // End of input is what lets a child reading to the end finish.
-                    if (in_fd >= 0 && written == input.size()) {
+                    if (in_fd >= 0 && _input_offset == _input.size()) {
                         stdin_stream.close();
                         in_fd = -1;
                     }
                 }
             }
-            if (out_slot >= 0 && fds[out_slot].revents && !drain(out_fd, out)) {
+            if (out_slot >= 0 && fds[out_slot].revents && !drain(out_fd, _stdout_buff)) {
+                stdout_stream.close();
                 out_fd = -1;
             }
-            if (err_slot >= 0 && fds[err_slot].revents && !drain(err_fd, err)) {
+            if (err_slot >= 0 && fds[err_slot].revents && !drain(err_fd, _stderr_buff)) {
+                stderr_stream.close();
                 err_fd = -1;
             }
         }
 
-        // A timeout kills the child rather than leaving it behind.
-        if (timed_out || !_wait(remaining())) {
-            auto wait_error = errorCode;
-            std::ignore = kill_impl();
-            std::ignore = _wait();
-            errorCode =
-                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
+        if (!_wait(remaining())) {
+            if (!errorCode) {
+                errorCode = std::make_error_code(std::errc::timed_out);
+            }
+            return std::nullopt;
         }
 
         close_std_files();
-        return {out, err};
+        return std::make_tuple(_stdout_buff, _stderr_buff);
+    }
+
+    void Popen::Impl::_join_communication() {
+        // Nothing to join. The poll loop runs on the calling thread.
     }
 
     static inline std::error_code make_last_error_code() {

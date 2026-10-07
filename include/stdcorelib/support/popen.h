@@ -35,7 +35,16 @@
 ///     if (!proc.start()) {
 ///         return proc.errorMessage();
 ///     }
-///     auto [out, _] = proc.communicate({}, 5000);
+///     auto output = proc.communicate({}, 5000);
+///     if (!output && proc.errorCode() == std::errc::timed_out) {
+///         // Still running, and nothing read so far is lost
+///         proc.kill();
+///         output = proc.communicate();
+///     }
+///     if (!output) {
+///         return proc.errorMessage();
+///     }
+///     auto &[out, _] = *output;
 ///     int code = proc.returnCode().value_or(-1);
 /// \endcode
 ///
@@ -73,7 +82,11 @@ namespace stdc {
     ///   if (!proc.start()) {
     ///       return proc.errorMessage();
     ///   }
-    ///   auto [out, _] = proc.communicate();
+    ///   auto output = proc.communicate();
+    ///   if (!output) {
+    ///       return proc.errorMessage();
+    ///   }
+    ///   auto &[out, _] = *output;
     ///   int code = proc.returnCode().value_or(-1);
     /// \endcode
     ///
@@ -393,15 +406,21 @@ namespace stdc {
         /// soon as the other one fills.
         ///
         /// \param input written to the child's stdin, which is then closed so that a child
-        ///        reading to end of input can finish
+        ///        reading to end of input can finish. Only the first call may give it, and a
+        ///        later call that does fails with \c invalid_argument.
         /// \param timeout how long to allow for writing, reading and waiting together, in
         ///        milliseconds, or negative for no limit
         /// \return what the child wrote to stdout and to stderr, each empty if that stream was
-        ///         not a \c Pipe
-        /// \note A child still running at \a timeout is killed rather than left behind, and
-        ///       errorCode() then reports a timeout.
-        std::tuple<std::string, std::string> communicate(const std::string &input = {},
-                                                         int timeout = -1);
+        ///         not a \c Pipe, or \c std::nullopt if the exchange did not finish, with the
+        ///         reason in errorCode()
+        /// \note A child still running at \a timeout is left running, as in Python, and
+        ///       errorCode() reports a timeout. Calling this again resumes, and nothing read so
+        ///       far is lost. To give up on the child, kill() it and call this again for the
+        ///       rest of its output.
+        /// \warning Until a call returns the output, the pipes belong to this function. Do not
+        ///          read, write or close the streams in between.
+        std::optional<std::tuple<std::string, std::string>>
+            communicate(const std::string &input = {}, int timeout = -1);
 
         /// Sends \a sig to the child. On Windows only \c WS_CTRL_C_EVENT and
         /// \c WS_CTRL_BREAK_EVENT are accepted.

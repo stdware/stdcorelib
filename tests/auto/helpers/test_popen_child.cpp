@@ -10,10 +10,12 @@
 // Deliberately built against nothing but the standard library, so a defect in stdcorelib cannot
 // be hidden by the same defect on both sides of the pipe.
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 
 #ifdef _WIN32
 #  include <fcntl.h>
@@ -32,7 +34,7 @@ namespace {
     }
 
     int usage() {
-        std::fputs("usage: test_popen_child arg0|argv|exit|fill|cat ...\n", stderr);
+        std::fputs("usage: test_popen_child arg0|argv|exit|fill|cat|slow ...\n", stderr);
         return 2;
     }
 
@@ -118,6 +120,25 @@ int main(int argc, char *argv[]) {
             std::fwrite(buf, 1, n, stdout);
         }
         std::fflush(stdout);
+        return 0;
+    }
+
+    // A line on each stream, a pause of the given milliseconds, and another line on each. A
+    // parent that times out during the pause and then resumes receives all four lines. The
+    // optional byte count is written to stdout ahead of the first line, so that a reader with a
+    // buffer smaller than that receives some of the output before the pause.
+    if (mode == "slow") {
+        long pause = argc > 2 ? std::atol(argv[2]) : 0;
+        fill(stdout, argc > 3 ? std::atol(argv[3]) : 0);
+        std::fputs("first\n", stdout);
+        std::fflush(stdout);
+        std::fputs("early\n", stderr);
+        std::fflush(stderr);
+        std::this_thread::sleep_for(std::chrono::milliseconds(pause));
+        std::fputs("second\n", stdout);
+        std::fflush(stdout);
+        std::fputs("late\n", stderr);
+        std::fflush(stderr);
         return 0;
     }
 

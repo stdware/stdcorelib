@@ -144,6 +144,9 @@ namespace stdc {
             std::ignore = kill_impl();
             std::ignore = _wait();
         }
+        // The workers of a communicate() that timed out still read the pipes that _cleanup()
+        // closes.
+        _join_communication();
         _cleanup();
     }
 
@@ -635,7 +638,8 @@ namespace stdc {
         return impl._wait(timeout);
     }
 
-    std::tuple<std::string, std::string> Popen::communicate(const std::string &input, int timeout) {
+    std::optional<std::tuple<std::string, std::string>> Popen::communicate(const std::string &input,
+                                                                           int timeout) {
         stdc_impl_t;
         return impl.communicate_impl(input, timeout);
     }

@@ -7,6 +7,7 @@
 #include <io.h>
 
 #include <array>
+#include <chrono>
 #include <thread>
 #include <tuple>
 #include <algorithm>
@@ -47,113 +48,161 @@ namespace stdc {
     // at once, and on Windows an anonymous pipe cannot be waited on, so the only way to have
     // three things move at once is three threads. Python reaches the same conclusion here, and
     // polls instead on unix, which is what popen_unix.cpp does.
-    std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
-                                                                       int timeout) {
+    //
+    // The workers belong to the Popen rather than to one call. A call that times out returns and
+    // leaves them running, and the next call waits for them again. This is how Python resumes
+    // without losing output (Lib/subprocess.py#L1659).
+    std::optional<std::tuple<std::string, std::string>>
+        Popen::Impl::communicate_impl(const std::string &input, int timeout) {
         clear_error();
 
         // Same answer as the other five, rather than the no_such_process the check below would
         // give. A detached child exists, it is just not ours to talk to.
         if (_detached_started) {
             errorCode = std::make_error_code(std::errc::operation_not_supported);
-            return {};
+            return std::nullopt;
         }
 
         if (!_child_created) {
             errorCode = std::make_error_code(std::errc::no_such_process);
-            return {};
+            return std::nullopt;
         }
 
-        std::string out, err;
-        std::thread out_thread, err_thread, in_thread;
-        std::exception_ptr out_error, err_error, in_error;
+        // Python raises ValueError here (Lib/subprocess.py#L1196). The child receives the input
+        // of the first call only.
+        if (_communication_started && !input.empty()) {
+            errorCode = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "input given after communication started";
+            return std::nullopt;
+        }
 
-        const auto &read_all = [](FILE *file, std::string &dest, std::exception_ptr &error) {
-            run_capturing(error, [&] {
-                char buf[4096];
-                size_t n;
-                while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
-                    dest.append(buf, n);
-                }
-            });
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeout, 0));
+        const auto &remaining = [&]() -> int {
+            if (timeout < 0) {
+                return -1;
+            }
+            auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            deadline - std::chrono::steady_clock::now())
+                            .count();
+            return left <= 0 ? 0 : int(left);
         };
 
-        const auto &start_workers = [&] {
-            if (stdout_stream.isOpen()) {
-                out_thread =
-                    std::thread(read_all, stdout_stream.file(), std::ref(out), std::ref(out_error));
-            }
-            if (stderr_stream.isOpen()) {
-                err_thread =
-                    std::thread(read_all, stderr_stream.file(), std::ref(err), std::ref(err_error));
-            }
+        auto &c = _communication;
 
-            // Input has its own worker too. Otherwise a child that never reads can fill the pipe
-            // and block this thread before it ever reaches the timeout below.
-            if (stdin_stream.isOpen()) {
-                in_thread = std::thread([&] {
-                    run_capturing(in_error, [&] {
-                        if (!input.empty()) {
-                            stdin_stream.write(input.data(), std::streamsize(input.size()));
+        if (!_communication_started) {
+            c.input = input;
+
+            // Each worker counts itself out as it ends, which is what the wait below waits for.
+            const auto &start = [&c](std::thread &thread, std::exception_ptr &error, auto body) {
+                {
+                    std::lock_guard lock(c.mutex);
+                    ++c.running;
+                }
+                thread = std::thread([&c, &error, body] {
+                    run_capturing(error, body);
+                    std::lock_guard lock(c.mutex);
+                    --c.running;
+                    c.finished.notify_all();
+                });
+            };
+
+            const auto &read_all = [](FILE *file, std::string &dest) {
+                return [file, &dest] {
+                    char buf[4096];
+                    size_t n;
+                    while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
+                        dest.append(buf, n);
+                    }
+                };
+            };
+
+            const auto &start_workers = [&] {
+                if (stdout_stream.isOpen()) {
+                    start(c.stdout_thread, c.stdout_error,
+                          read_all(stdout_stream.file(), c.stdout_buff));
+                }
+                if (stderr_stream.isOpen()) {
+                    start(c.stderr_thread, c.stderr_error,
+                          read_all(stderr_stream.file(), c.stderr_buff));
+                }
+
+                // Input has its own worker too. Otherwise a child that never reads can fill the
+                // pipe and block this thread before it ever reaches the timeout below.
+                if (stdin_stream.isOpen()) {
+                    start(c.stdin_thread, c.stdin_error, [this, &c] {
+                        if (!c.input.empty()) {
+                            stdin_stream.write(c.input.data(), std::streamsize(c.input.size()));
                         }
                         stdin_stream.flush();
                         stdin_stream.close();
                     });
-                });
-            }
-        };
+                }
+            };
 
 #ifdef STDC_HAS_EXCEPTIONS
-        try {
-            start_workers();
-        } catch (...) {
-            // No writer exists yet when thread construction can fail, so closing stdin is safe.
-            stdin_stream.close();
-            std::ignore = kill_impl();
-            std::ignore = _wait();
-            if (out_thread.joinable())
-                out_thread.join();
-            if (err_thread.joinable())
-                err_thread.join();
-            close_std_files();
-            throw;
-        }
+            try {
+                start_workers();
+            } catch (...) {
+                // No writer exists yet when thread construction can fail, so closing stdin is
+                // safe.
+                stdin_stream.close();
+                std::ignore = kill_impl();
+                std::ignore = _wait();
+                _join_communication();
+                // A worker that failed to start counted itself in and never out.
+                c.running = 0;
+                close_std_files();
+                throw;
+            }
 #else
-        // Starting a thread can still fail, but without exceptions it takes the process down
-        // where it happens rather than arriving here to be cleaned up after.
-        start_workers();
+            // Starting a thread can still fail, but without exceptions it takes the process down
+            // where it happens rather than arriving here to be cleaned up after.
+            start_workers();
 #endif
-        _communication_started = true;
-
-        // A timeout kills the child rather than leaving it behind. Its exit is what closes the
-        // write ends, and without that the reader threads below never finish.
-        if (!_wait(timeout)) {
-            auto wait_error = errorCode;
-            std::ignore = kill_impl();
-            std::ignore = _wait();
-            errorCode =
-                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
+            _communication_started = true;
         }
 
-        if (in_thread.joinable()) {
-            in_thread.join();
+        // The readers finish at the end of the pipes, which the child closes as it exits.
+        {
+            std::unique_lock lock(c.mutex);
+            const auto &ended = [&c] { return c.running == 0; };
+            if (timeout < 0) {
+                c.finished.wait(lock, ended);
+            } else if (!c.finished.wait_until(lock, deadline, ended)) {
+                errorCode = std::make_error_code(std::errc::timed_out);
+                return std::nullopt;
+            }
         }
-        if (out_thread.joinable()) {
-            out_thread.join();
+
+        if (!_wait(remaining())) {
+            if (!errorCode) {
+                errorCode = std::make_error_code(std::errc::timed_out);
+            }
+            return std::nullopt;
         }
-        if (err_thread.joinable()) {
-            err_thread.join();
-        }
+
+        _join_communication();
         close_std_files();
 
 #ifdef STDC_HAS_EXCEPTIONS
-        if (in_error)
-            std::rethrow_exception(in_error);
-        if (out_error)
-            std::rethrow_exception(out_error);
-        if (err_error)
-            std::rethrow_exception(err_error);
+        if (c.stdin_error)
+            std::rethrow_exception(c.stdin_error);
+        if (c.stdout_error)
+            std::rethrow_exception(c.stdout_error);
+        if (c.stderr_error)
+            std::rethrow_exception(c.stderr_error);
 #endif
-        return {out, err};
+        return std::make_tuple(c.stdout_buff, c.stderr_buff);
+    }
+
+    void Popen::Impl::_join_communication() {
+        auto &c = _communication;
+        for (std::thread *thread : {&c.stdin_thread, &c.stdout_thread, &c.stderr_thread}) {
+            if (thread->joinable()) {
+                thread->join();
+            }
+        }
     }
 
     using namespace winapi;
