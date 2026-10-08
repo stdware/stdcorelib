@@ -42,7 +42,8 @@ namespace stdc {
     /// Controls what a \c DynamicRegistry factory returns and how an absent result is represented.
     ///
     /// The default returns an owning pointer. A specialization is required if \a T is returned by
-    /// value or uses another ownership type.
+    /// value or uses another ownership type. \c construct() is required only by
+    /// DynamicRegistry::Add.
     template <class T>
     struct dynamic_registry_traits {
         using result_type = std::unique_ptr<T>;
@@ -50,14 +51,19 @@ namespace stdc {
         static result_type empty() {
             return nullptr;
         }
+
+        template <class V>
+        static result_type construct() {
+            return std::make_unique<V>();
+        }
     };
 
     /// A registry that is filled at run time, searched by name, and observable through listeners.
     ///
     /// The class complements StaticRegistry for entries that a program discovers only at run
     /// time, such as entries requested by a configuration file, found in a plugin directory, or
-    /// defined by a script. Registration is a function call rather than a static object, so that
-    /// the program determines the order.
+    /// defined by a script. An entry is registered by a call or by an object that the program
+    /// creates, rather than by a static object, so that the program determines the order.
     ///
     /// The owner of the registry, such as an application or a host of plugins, creates the
     /// registry and passes it to the code that registers entries. No registry exists per process,
@@ -82,7 +88,7 @@ namespace stdc {
     ///       caller even if another thread removes it meanwhile.
     /// \warning remove_listener() must not be called from a listener callback.
     ///
-    /// \sa StaticRegistry, Registration
+    /// \sa StaticRegistry, AddFactory, Add
     template <class T, class Traits = dynamic_registry_traits<T>,
               template <class...> class Map = std::map>
     class DynamicRegistry {
@@ -139,43 +145,50 @@ namespace stdc {
             }
         };
 
-        /// Registers an entry for the lifetime of this object.
+        /// Registers an entry that \a factory creates, for the lifetime of this object. Unlike
+        /// StaticRegistry::AddFactory, the factory may be a closure.
         ///
-        /// The destructor removes the entry. A plugin holds its registrations and destroys them
-        /// before it is unloaded, because the factory of an entry is code of the plugin.
+        /// The destructor removes the entry. A plugin holds these objects and destroys them
+        /// before it is unloaded, because the factory of an entry is code of the plugin. Assigning
+        /// an empty object removes the entry earlier.
         ///
-        /// The registration is safe if the registry is destroyed first: the destructor then
-        /// removes nothing. The registration and the registry must not be destroyed concurrently
-        /// on two threads.
+        /// The object is safe if the registry is destroyed first: the destructor then removes
+        /// nothing. The object and the registry must not be destroyed concurrently on two
+        /// threads.
         ///
         /// \code
-        ///   // in the plugin, which holds the registration until it is unloaded
-        ///   codec = std::make_unique<DynamicRegistry<Codec>::Registration>(
-        ///       codecs, "flac", "Free Lossless Audio Codec",
-        ///       [] { return std::unique_ptr<Codec>(new FlacCodec()); });
+        ///   // a member of the plugin, assigned when the plugin is loaded
+        ///   mp3 = stdc::DynamicRegistry<Codec>::AddFactory(
+        ///       codecs, "mp3", "MPEG Layer III",
+        ///       [rate] { return std::unique_ptr<Codec>(new Mp3Codec(rate)); });
+        ///
+        ///   // before the plugin is unloaded
+        ///   mp3 = {};
         /// \endcode
-        class Registration {
+        ///
+        /// \sa Add
+        class AddFactory {
         public:
-            /// Constructs a registration that registers nothing.
-            Registration() = default;
+            /// Constructs an object that registers nothing.
+            AddFactory() = default;
 
             /// Registers \a name in \a registry, as add() does. If the name is already
-            /// registered, the registration registers nothing, and registered() returns false.
-            Registration(DynamicRegistry &registry, std::string name, std::string desc,
-                         Factory factory)
+            /// registered, the object registers nothing, and entry() returns null.
+            AddFactory(DynamicRegistry &registry, std::string name, std::string desc,
+                       Factory factory)
                 : _registry(registry._self),
                   _entry(registry.insert(std::move(name), std::move(desc), std::move(factory))) {
             }
 
-            ~Registration() {
+            ~AddFactory() {
                 reset();
             }
 
-            Registration(Registration &&RHS) noexcept
+            AddFactory(AddFactory &&RHS) noexcept
                 : _registry(std::move(RHS._registry)), _entry(std::move(RHS._entry)) {
             }
 
-            Registration &operator=(Registration &&RHS) noexcept {
+            AddFactory &operator=(AddFactory &&RHS) noexcept {
                 if (this != &RHS) {
                     reset();
                     _registry = std::move(RHS._registry);
@@ -184,19 +197,12 @@ namespace stdc {
                 return *this;
             }
 
-            /// Returns whether the registry exists and still holds the entry of this
-            /// registration, which a remove() of its name ends.
-            bool registered() const {
-                const auto registry = _registry.lock();
-                return registry && _entry && (*registry)->find(_entry->name()) == _entry;
-            }
-
-            /// Returns the registered entry, or null if the registration registers nothing.
+            /// Returns the registered entry, or null if the object registers nothing.
             const EntryPointer &entry() const {
                 return _entry;
             }
 
-            /// Removes the entry, if any, and leaves the registration empty.
+        private:
             void reset() {
                 if (const auto registry = _registry.lock(); registry && _entry) {
                     (*registry)->erase(_entry->name(), _entry.get());
@@ -205,17 +211,41 @@ namespace stdc {
                 _entry.reset();
             }
 
-        private:
             std::weak_ptr<DynamicRegistry *> _registry;
             EntryPointer _entry;
 
-            STDC_DISABLE_COPY(Registration)
+            STDC_DISABLE_COPY(AddFactory)
+        };
+
+        /// Registers \a V, constructed by \c construct<V>() of the traits, for the lifetime of
+        /// this object, as StaticRegistry::Add does. The object behaves as AddFactory otherwise.
+        ///
+        /// \code
+        ///   flac = stdc::DynamicRegistry<Codec>::Add<FlacCodec>(codecs, "flac",
+        ///                                                       "Free Lossless Audio Codec");
+        /// \endcode
+        template <class V>
+        class Add : public AddFactory {
+        public:
+            /// Constructs an object that registers nothing.
+            Add() = default;
+
+            /// Registers \a name in \a registry. If the name is already registered, the object
+            /// registers nothing, and entry() returns null.
+            Add(DynamicRegistry &registry, std::string name, std::string desc)
+                : AddFactory(registry, std::move(name), std::move(desc), &construct) {
+            }
+
+        private:
+            static result_type construct() {
+                return traits_type::template construct<V>();
+            }
         };
 
         DynamicRegistry() = default;
 
-        /// Destroys the registry. A Registration that still refers to the registry then removes
-        /// nothing.
+        /// Destroys the registry. An object of AddFactory or Add that still refers to the
+        /// registry then removes nothing.
         ~DynamicRegistry() = default;
 
         /// Registers \a name.
@@ -233,8 +263,8 @@ namespace stdc {
         ///
         /// \warning <b>A plugin must remove its entries before it is unloaded.</b> The registered
         ///          factory is code inside the plugin, and the registry can outlive the plugin. A
-        ///          remaining entry therefore calls into memory that is no longer mapped. A
-        ///          Registration removes its entry on destruction.
+        ///          remaining entry therefore calls into memory that is no longer mapped. An
+        ///          AddFactory object removes its entry on destruction.
         bool remove(std::string_view name) {
             return erase(name, nullptr);
         }
@@ -339,8 +369,8 @@ namespace stdc {
         }
 
         // Removes the entry of name and notifies the listeners. If expected is not null, the
-        // entry is removed only if it is expected. A Registration passes its own entry, so that
-        // the removal does not affect an entry that another caller registered under the same
+        // entry is removed only if it is expected. An AddFactory object passes its own entry, so
+        // that the removal does not affect an entry that another caller registered under the same
         // name after a remove().
         bool erase(std::string_view name, const Entry *expected) {
             EntryPointer entry;
@@ -397,14 +427,15 @@ namespace stdc {
         std::mutex _notificationMutex;
         std::condition_variable _notificationsFinished;
 
-        // The registrations refer to the registry through this pointer. It expires with the
-        // registry, so that a registration destroyed later removes nothing.
+        // The AddFactory objects refer to the registry through this pointer. It expires with the
+        // registry, so that an AddFactory object destroyed later removes nothing.
         std::shared_ptr<DynamicRegistry *> _self = std::make_shared<DynamicRegistry *>(this);
 
         STDC_DISABLE_COPY_MOVE(DynamicRegistry)
     };
 
     /// @}
+
 }
 
 #endif // STDCORELIB_DYNAMICREGISTRY_H

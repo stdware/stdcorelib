@@ -25,6 +25,12 @@ namespace {
         int tag = 0;
     };
 
+    struct Button : Widget {
+        Button() {
+            tag = 5;
+        }
+    };
+
     struct Descriptor {
         int tag;
     };
@@ -244,49 +250,68 @@ BOOST_AUTO_TEST_CASE(test_is_thread_safe) {
     BOOST_CHECK_EQUAL(reg.size(), size_t(Threads * PerThread));
 }
 
-// A registration adds its entry and notifies the listeners, removes the entry on destruction,
-// and registers nothing if the name is taken.
-BOOST_AUTO_TEST_CASE(test_a_registration_removes_its_entry) {
+// An AddFactory object adds its entry and notifies the listeners, removes the entry on
+// destruction, and registers nothing if the name is taken.
+BOOST_AUTO_TEST_CASE(test_an_add_factory_object_removes_its_entry) {
     WidgetRegistry reg;
     CountingListener listener;
     reg.add_listener(&listener);
     {
-        WidgetRegistry::Registration registration(reg, "alpha", "alpha widget", factoryOf(1));
-        BOOST_CHECK(registration.registered());
+        WidgetRegistry::AddFactory registration(reg, "alpha", "alpha widget", factoryOf(1));
         BOOST_REQUIRE(registration.entry());
         BOOST_CHECK(reg.find("alpha") == registration.entry());
 
-        WidgetRegistry::Registration duplicate(reg, "alpha", {}, factoryOf(2));
-        BOOST_CHECK(!duplicate.registered());
+        WidgetRegistry::AddFactory duplicate(reg, "alpha", {}, factoryOf(2));
         BOOST_CHECK(!duplicate.entry());
+        BOOST_CHECK_EQUAL(reg.instantiate("alpha")->tag, 1);
     }
     BOOST_CHECK(!reg.find("alpha"));
     BOOST_CHECK(listener.added == (std::vector<std::string>{"alpha"}));
     BOOST_CHECK(listener.removed == (std::vector<std::string>{"alpha"}));
     reg.remove_listener(&listener);
 
-    // A moved registration removes the entry once, and reset() removes it at once.
-    WidgetRegistry::Registration moved;
-    BOOST_CHECK(!moved.registered());
+    // A moved object removes the entry once, and assigning an empty object removes it at once.
+    WidgetRegistry::AddFactory moved;
+    BOOST_CHECK(!moved.entry());
     {
-        WidgetRegistry::Registration registration(reg, "beta", {}, factoryOf(1));
+        WidgetRegistry::AddFactory registration(reg, "beta", {}, factoryOf(1));
         moved = std::move(registration);
     }
-    BOOST_CHECK(moved.registered());
-    BOOST_CHECK(reg.find("beta"));
-    moved.reset();
-    BOOST_CHECK(!moved.registered());
+    BOOST_REQUIRE(moved.entry());
+    BOOST_CHECK(reg.find("beta") == moved.entry());
+    moved = {};
+    BOOST_CHECK(!moved.entry());
     BOOST_CHECK(!reg.find("beta"));
 }
 
-// The destruction of a registration whose name was removed and registered again leaves the
+// An Add object registers its type, constructed by the traits, and removes the entry on
+// destruction.
+BOOST_AUTO_TEST_CASE(test_an_add_object_registers_its_type) {
+    WidgetRegistry reg;
+    {
+        WidgetRegistry::Add<Button> registration(reg, "button", "a button");
+        BOOST_REQUIRE(registration.entry());
+        BOOST_CHECK(reg.find("button") == registration.entry());
+        BOOST_CHECK_EQUAL(reg.find("button")->desc(), "a button");
+        const auto button = reg.instantiate("button");
+        BOOST_REQUIRE(button);
+        BOOST_CHECK_EQUAL(button->tag, 5);
+        BOOST_CHECK(!(WidgetRegistry::Add<Button>(reg, "button", {}).entry()));
+
+        WidgetRegistry::Add<Button> moved;
+        moved = std::move(registration);
+        BOOST_CHECK(reg.find("button") == moved.entry());
+    }
+    BOOST_CHECK(!reg.find("button"));
+}
+
+// The destruction of an AddFactory object whose name was removed and registered again leaves the
 // new entry in place.
-BOOST_AUTO_TEST_CASE(test_a_registration_spares_an_entry_registered_again) {
+BOOST_AUTO_TEST_CASE(test_an_add_factory_object_spares_an_entry_registered_again) {
     WidgetRegistry reg;
     auto registration =
-        std::make_unique<WidgetRegistry::Registration>(reg, "alpha", "", factoryOf(1));
+        std::make_unique<WidgetRegistry::AddFactory>(reg, "alpha", "", factoryOf(1));
     BOOST_CHECK(reg.remove("alpha"));
-    BOOST_CHECK(!registration->registered());
     BOOST_CHECK(reg.add("alpha", {}, factoryOf(2)));
 
     registration.reset();
@@ -294,16 +319,14 @@ BOOST_AUTO_TEST_CASE(test_a_registration_spares_an_entry_registered_again) {
     BOOST_CHECK_EQUAL(reg.instantiate("alpha")->tag, 2);
 }
 
-// A registration may outlive its registry, and its destruction then removes nothing.
-BOOST_AUTO_TEST_CASE(test_a_registration_outlives_its_registry) {
-    std::unique_ptr<WidgetRegistry::Registration> registration;
+// An AddFactory object may outlive its registry, and its destruction then removes nothing.
+BOOST_AUTO_TEST_CASE(test_an_add_factory_object_outlives_its_registry) {
+    std::unique_ptr<WidgetRegistry::AddFactory> registration;
     {
         WidgetRegistry reg;
-        registration =
-            std::make_unique<WidgetRegistry::Registration>(reg, "alpha", "", factoryOf(1));
-        BOOST_CHECK(registration->registered());
+        registration = std::make_unique<WidgetRegistry::AddFactory>(reg, "alpha", "", factoryOf(1));
+        BOOST_CHECK(reg.find("alpha") == registration->entry());
     }
-    BOOST_CHECK(!registration->registered());
     registration.reset();
 }
 
@@ -317,20 +340,20 @@ BOOST_AUTO_TEST_CASE(test_a_plugin_registers_in_a_registry_of_the_host) {
     BOOST_REQUIRE_MESSAGE(plugin.open(TEST_DYNAMICREGISTRY_PLUGIN_PATH), plugin.errorMessage());
 
     auto registerWidget =
-        reinterpret_cast<PluginWidgetRegistry::Registration *(*) (PluginWidgetRegistry *,
-                                                                  const char *, int)>(
+        reinterpret_cast<PluginWidgetRegistry::AddFactory *(*) (PluginWidgetRegistry *,
+                                                                const char *, int)>(
             plugin.resolve("registry_plugin_register"));
-    auto unregisterWidget = reinterpret_cast<void (*)(PluginWidgetRegistry::Registration *)>(
+    auto unregisterWidget = reinterpret_cast<void (*)(PluginWidgetRegistry::AddFactory *)>(
         plugin.resolve("registry_plugin_unregister"));
     BOOST_REQUIRE(registerWidget && unregisterWidget);
 
     PluginWidgetRegistry here;
     const auto registration = registerWidget(&here, "from-the-plugin", 7);
     BOOST_REQUIRE(registration);
-    BOOST_CHECK(registration->registered());
 
     auto entry = here.find("from-the-plugin");
     BOOST_REQUIRE(entry);
+    BOOST_CHECK(entry == registration->entry());
     BOOST_CHECK_EQUAL(entry->desc(), "registered by the plugin");
     auto widget = entry->instantiate();
     BOOST_REQUIRE(widget);

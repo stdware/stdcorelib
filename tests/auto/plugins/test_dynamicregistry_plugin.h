@@ -17,12 +17,12 @@ struct PluginWidget {
 using PluginWidgetRegistry = stdc::DynamicRegistry<PluginWidget>;
 
 /// Registers an entry in \a registry from inside the plugin. The caller passes the returned
-/// registration to registry_plugin_unregister().
-TEST_DYNAMICREGISTRY_PLUGIN_API PluginWidgetRegistry::Registration *
+/// object to registry_plugin_unregister().
+TEST_DYNAMICREGISTRY_PLUGIN_API PluginWidgetRegistry::AddFactory *
     registry_plugin_register(PluginWidgetRegistry *registry, const char *name, int tag);
 
 /// Destroys \a registration, which removes its entry, inside the plugin.
 TEST_DYNAMICREGISTRY_PLUGIN_API void
-    registry_plugin_unregister(PluginWidgetRegistry::Registration *registration);
+    registry_plugin_unregister(PluginWidgetRegistry::AddFactory *registration);
 
 #endif // STDC_TEST_DYNAMICREGISTRY_PLUGIN_H
