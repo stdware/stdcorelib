@@ -119,7 +119,7 @@ namespace stdc {
     ///       comparison of ids from two modules queries a table in the library, once per type
     ///       and module, and caches the result.
     ///
-    /// \sa any, DynamicRegistry
+    /// \sa any
     class type_id {
     public:
         /// Constructs an id that denotes no type. Two such ids compare equal.

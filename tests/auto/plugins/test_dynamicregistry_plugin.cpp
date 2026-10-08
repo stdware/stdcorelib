@@ -15,16 +15,14 @@ namespace {
 
 }
 
-TEST_DYNAMICREGISTRY_PLUGIN_API bool registry_plugin_add(const char *name, int tag) {
-    return stdc::DynamicRegistry<PluginWidget>::instance().add(
-        name, "registered by the plugin",
+TEST_DYNAMICREGISTRY_PLUGIN_API PluginWidgetRegistry::Registration *
+    registry_plugin_register(PluginWidgetRegistry *registry, const char *name, int tag) {
+    return new PluginWidgetRegistry::Registration(
+        *registry, name, "registered by the plugin",
         [tag] { return std::unique_ptr<PluginWidget>(new PluginWidgetImpl(tag)); });
 }
 
-TEST_DYNAMICREGISTRY_PLUGIN_API size_t registry_plugin_size() {
-    return stdc::DynamicRegistry<PluginWidget>::instance().size();
-}
-
-TEST_DYNAMICREGISTRY_PLUGIN_API const void *registry_plugin_address() {
-    return &stdc::DynamicRegistry<PluginWidget>::instance();
+TEST_DYNAMICREGISTRY_PLUGIN_API void
+    registry_plugin_unregister(PluginWidgetRegistry::Registration *registration) {
+    delete registration;
 }
