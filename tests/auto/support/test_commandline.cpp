@@ -1892,6 +1892,73 @@ BOOST_AUTO_TEST_CASE(test_a_response_file_is_found_by_a_name_that_is_not_ascii) 
     std::filesystem::remove(path);
 }
 
+// A command line may contain several response files and ordinary arguments before, between, and
+// after them. qmsetup relies on this because windeps.bat passes a response file that CMake writes
+// beside the response file that the script generates. Each file expands in place, so that the
+// positional values follow the order of the tokens.
+BOOST_AUTO_TEST_CASE(test_several_response_files_expand_in_place_among_ordinary_arguments) {
+    const auto first = std::filesystem::temp_directory_path() / "stdc_cli_response_first.txt";
+    const auto second = std::filesystem::temp_directory_path() / "stdc_cli_response_second.txt";
+    {
+        std::ofstream file(first, std::ios::binary);
+        file << "one\n--out=dir\n";
+    }
+    {
+        std::ofstream file(second, std::ios::binary);
+        file << "three\n";
+    }
+
+    Parser parser(Command("prog")
+                      .addArguments({Argument("a"), Argument("b"), Argument("c")})
+                      .addOption(Option({"-f"}, "Force"))
+                      .addOption(Option({"--out"}, "Out").arg("dir")));
+
+    {
+        auto result = ok(parser, {"-f", "@" + first.string(), "two", "@" + second.string()},
+                         Parser::EnableResponseFile);
+        BOOST_CHECK(result.option("-f").has_value());
+        BOOST_CHECK_EQUAL(must(result.valueForOption("--out")), "dir");
+        BOOST_CHECK_EQUAL(must(result.value(0)), "one");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "two");
+        BOOST_CHECK_EQUAL(must(result.value(2)), "three");
+    }
+
+    // A file named twice expands twice.
+    {
+        auto result = ok(parser, {"@" + second.string(), "two", "@" + second.string()},
+                         Parser::EnableResponseFile);
+        BOOST_CHECK_EQUAL(must(result.value(0)), "three");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "two");
+        BOOST_CHECK_EQUAL(must(result.value(2)), "three");
+    }
+
+    std::filesystem::remove(first);
+    std::filesystem::remove(second);
+}
+
+// Response files do not nest. A line of a response file that begins with @ is a value and is not
+// read as the name of another response file.
+BOOST_AUTO_TEST_CASE(test_a_response_file_line_that_begins_with_at_is_a_value) {
+    const auto outer = std::filesystem::temp_directory_path() / "stdc_cli_response_outer.txt";
+    const auto inner = std::filesystem::temp_directory_path() / "stdc_cli_response_inner.txt";
+    {
+        std::ofstream file(inner, std::ios::binary);
+        file << "nested\n";
+    }
+    {
+        std::ofstream file(outer, std::ios::binary);
+        file << "@" << inner.string() << "\nsecond\n";
+    }
+
+    Parser parser(Command("prog").addArguments({Argument("a"), Argument("b")}));
+    auto result = ok(parser, {"@" + outer.string()}, Parser::EnableResponseFile);
+    BOOST_CHECK_EQUAL(must(result.value(0)), "@" + inner.string());
+    BOOST_CHECK_EQUAL(must(result.value(1)), "second");
+
+    std::filesystem::remove(outer);
+    std::filesystem::remove(inner);
+}
+
 BOOST_AUTO_TEST_CASE(test_an_empty_command_line_is_not_an_error_by_itself) {
     // No declarations and no tokens produce no error. argparse tests this case because a parser
     // can easily fail on it.
