@@ -72,6 +72,29 @@ BOOST_AUTO_TEST_CASE(test_normalize_separators) {
     BOOST_CHECK_EQUAL(normalize_separators(fs::path("a\\b")), "a/b");
 }
 
+BOOST_AUTO_TEST_CASE(test_lexically_relative) {
+    const auto relative = [](const fs::path &p, const fs::path &base) {
+        return path::lexically_relative(p, base).generic_string();
+    };
+    BOOST_CHECK_EQUAL(relative("/a/b/c.wav", "/a"), "b/c.wav");
+    BOOST_CHECK_EQUAL(relative("/a/b/c.wav", "/a/"), "b/c.wav");
+    BOOST_CHECK_EQUAL(relative("/x/y", "/a/b"), "../../x/y");
+    BOOST_CHECK_EQUAL(relative("/a", "/a"), ".");
+    BOOST_CHECK_EQUAL(relative("a/b", "/a"), "");
+
+#ifdef _WIN32
+    // libc++ before LLVM 20 returns \a\b\c.wav and \x\y for the first two paths.
+    BOOST_CHECK_EQUAL(relative("C:\\a\\b\\c.wav", "C:/a/"), "b/c.wav");
+    BOOST_CHECK_EQUAL(relative("C:/x/y", "C:\\a"), "../x/y");
+    BOOST_CHECK_EQUAL(relative("D:\\a", "C:/a"), "");
+#endif
+}
+
+BOOST_AUTO_TEST_CASE(test_lexically_proximate) {
+    BOOST_CHECK_EQUAL(path::lexically_proximate("/a/b", "/a").generic_string(), "b");
+    BOOST_CHECK_EQUAL(path::lexically_proximate("a/b", "/a").generic_string(), "a/b");
+}
+
 BOOST_AUTO_TEST_CASE(test_utf8_conversion) {
     // ASCII round trip
     {

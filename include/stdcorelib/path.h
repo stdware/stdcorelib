@@ -64,6 +64,33 @@ namespace stdc {
         ///          of canonical(), because the lexical resolution ignores the target of the link.
         STDC_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
 
+        /// Returns \a path relative to \a base like \c path::lexically_relative, with the same
+        /// result in every standard library. On Windows, \c / and <tt>\\</tt> are the same
+        /// separator, also in the root directory.
+        ///
+        /// \note libc++ before LLVM 20 compares the root directories as written, so that
+        ///       <tt>C:\\a\\b</tt> relative to \c C:/a is <tt>\\a\\b</tt> instead of \c b
+        ///       (LLVM issue 99780). This function avoids that comparison.
+        /// \return the relative path, or an empty path if none exists
+        inline std::filesystem::path lexically_relative(const std::filesystem::path &path,
+                                                        const std::filesystem::path &base) {
+            // make_preferred() replaces the alternative separator on Windows only, and the other
+            // elements are compared by name.
+            auto preferred = path;
+            preferred.make_preferred();
+            auto preferredBase = base;
+            preferredBase.make_preferred();
+            return preferred.lexically_relative(preferredBase);
+        }
+
+        /// Returns lexically_relative(), or \a path if lexically_relative() is empty, like
+        /// \c path::lexically_proximate.
+        inline std::filesystem::path lexically_proximate(const std::filesystem::path &path,
+                                                         const std::filesystem::path &base) {
+            auto result = lexically_relative(path, base);
+            return result.empty() ? path : result;
+        }
+
         /// Returns \a path with every separator written as \c /, or as the native separator if
         /// \a native is true.
         inline std::string normalize_separators(const std::filesystem::path &path,
