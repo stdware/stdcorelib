@@ -10,8 +10,20 @@
 #  include "winextra.h"
 #endif
 
-#include <cstring>
+#include <cerrno>
 #include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#ifdef _WIN32
+#  include <clocale>
+#else
+#  include <locale.h>
+#  ifdef __APPLE__
+#    include <xlocale.h>
+#  endif
+#endif
 
 #include "path.h"
 #include "utf.h"
@@ -369,6 +381,118 @@ namespace stdc {
                 return 0;
             }
             return LHS.size() < RHS.size() ? -1 : 1;
+        }
+
+        namespace {
+
+#ifdef _WIN32
+            // Selects the numeric conventions of the C locale for the calling thread during the
+            // lifetime of the object. The setlocale of a thread with a locale of its own affects
+            // that thread alone, and the previous mode returns a thread without one to the global
+            // locale.
+            class CNumericLocale {
+            public:
+                CNumericLocale() : _mode(_configthreadlocale(_ENABLE_PER_THREAD_LOCALE)) {
+                    const auto previous = std::setlocale(LC_NUMERIC, nullptr);
+                    _previous = previous ? previous : "C";
+                    std::setlocale(LC_NUMERIC, "C");
+                }
+
+                ~CNumericLocale() {
+                    std::setlocale(LC_NUMERIC, _previous.c_str());
+                    _configthreadlocale(_mode);
+                }
+
+                CNumericLocale(const CNumericLocale &) = delete;
+                CNumericLocale &operator=(const CNumericLocale &) = delete;
+
+            private:
+                int _mode;
+                std::string _previous;
+            };
+#else
+            // Selects the numeric conventions of the C locale for the calling thread during the
+            // lifetime of the object. The locale is created once and kept for the lifetime of the
+            // program.
+            class CNumericLocale {
+            public:
+                CNumericLocale() : _previous(uselocale(locale())) {
+                }
+
+                ~CNumericLocale() {
+                    uselocale(_previous);
+                }
+
+                CNumericLocale(const CNumericLocale &) = delete;
+                CNumericLocale &operator=(const CNumericLocale &) = delete;
+
+            private:
+                static locale_t locale() {
+                    static const locale_t c = newlocale(LC_NUMERIC_MASK, "C", locale_t(0));
+                    return c;
+                }
+
+                locale_t _previous;
+            };
+#endif
+
+            float convert(const char *s, char **end, float *) {
+                return std::strtof(s, end);
+            }
+
+            double convert(const char *s, char **end, double *) {
+                return std::strtod(s, end);
+            }
+
+            long double convert(const char *s, char **end, long double *) {
+                return std::strtold(s, end);
+            }
+
+        }
+
+        template <class T>
+        std::optional<T> parse_floating(std::string_view s, floating_range range) {
+            if (s.empty()) {
+                return std::nullopt;
+            }
+            // strtod requires a terminated string, which a string_view does not guarantee.
+            vlarray<char, 64> text(s.data(), s.data() + s.size());
+            text.push_back('\0');
+            char *end = nullptr;
+            T value;
+            int error;
+            {
+                const CNumericLocale locale;
+                errno = 0;
+                value = convert(text.data(), &end, static_cast<T *>(nullptr));
+                error = errno;
+            }
+            if (end != text.data() + s.size()) {
+                return std::nullopt;
+            }
+            if (error == ERANGE && range == floating_range::reject) {
+                return std::nullopt;
+            }
+            return value;
+        }
+
+        template std::optional<float> parse_floating<float>(std::string_view, floating_range);
+        template std::optional<double> parse_floating<double>(std::string_view, floating_range);
+        template std::optional<long double> parse_floating<long double>(std::string_view,
+                                                                        floating_range);
+
+        std::string format_floating(double d) {
+            const CNumericLocale locale;
+            char buf[40];
+            int written = 0;
+            // Seventeen digits always suffice, but most values need fewer and look better for it.
+            for (int precision = 15; precision <= 17; ++precision) {
+                written = std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
+                if (std::strtod(buf, nullptr) == d) {
+                    break;
+                }
+            }
+            return std::string(buf, size_t(written));
         }
 
     }

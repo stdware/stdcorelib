@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 
+#include "str_p.h"
 #include "utf.h"
 #include "vlarray.h"
 
@@ -104,24 +105,14 @@ namespace {
             return;
         }
 
-        char buf[40];
-        size_t n;
 #if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+        char buf[40];
         auto res = std::to_chars(buf, buf + sizeof(buf), d);
-        n = size_t(res.ptr - buf);
+        std::string_view sv(buf, size_t(res.ptr - buf));
 #else
-        // The shortest form that reads back as the same value. Seventeen digits always suffice for
-        // a double, but most values need fewer and look better for it.
-        int written = 0;
-        for (int precision = 15; precision <= 17; ++precision) {
-            written = std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
-            if (std::strtod(buf, nullptr) == d) {
-                break;
-            }
-        }
-        n = size_t(written);
+        const auto text = str::format_floating(d);
+        std::string_view sv(text);
 #endif
-        std::string_view sv(buf, n);
         out += sv;
 
         // A double that happens to be integral has to keep looking like one, or a round trip
@@ -669,14 +660,14 @@ namespace {
             }
 #endif
 
-            vlarray<char, 64> text(first, last);
-            text.push_back('\0');
-            char *end = nullptr;
-            double d = std::strtod(text.data(), &end);
-            if (end != text.data() + text.size() - 1) {
+            // A number outside the range of double reads as an infinity or zero, as strtod
+            // returns it.
+            const auto d = str::parse_floating<double>(
+                std::string_view(first, size_t(last - first)), str::floating_range::accept);
+            if (!d) {
                 return fail(ParseError::IllegalNumber, "malformed number");
             }
-            *out = Value(d);
+            *out = Value(*d);
             return true;
         }
 

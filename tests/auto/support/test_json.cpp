@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+#include <clocale>
 #include <cmath>
+#include <string>
 #include <type_traits>
 
 #include <stdcorelib/support/json.h>
@@ -789,6 +791,40 @@ BOOST_AUTO_TEST_CASE(test_Value_Numbers) {
             BOOST_CHECK(json::Value::fromJson(v.toJson(), false).toDouble() == d);
         }
     }
+}
+
+// A double is written and read with a period as the decimal separator in a locale whose separator
+// is a comma, as a host program selects with setlocale. Without a floating-point charconv the
+// conversion uses strtod and snprintf, which follow the locale of the thread.
+BOOST_AUTO_TEST_CASE(test_Value_NumbersIgnoreTheLocale) {
+    const char *selected = nullptr;
+    for (const char *name : {"de_DE.UTF-8", "de_DE", "de-DE", "German_Germany.1252"}) {
+        if ((selected = std::setlocale(LC_ALL, name))) {
+            break;
+        }
+    }
+    if (!selected) {
+        BOOST_TEST_MESSAGE("No German locale is installed, so the case is skipped.");
+        return;
+    }
+    struct RestoreLocale {
+        ~RestoreLocale() {
+            std::setlocale(LC_ALL, "C");
+        }
+    } restore;
+    BOOST_REQUIRE_EQUAL(std::string(std::localeconv()->decimal_point), ",");
+
+    BOOST_CHECK_EQUAL(json::Value(1.5).toJson(), "1.5");
+    BOOST_CHECK_EQUAL(json::Value(json::Array{json::Value(0.25)}).toJson(), "[0.25]");
+    const auto parsed = json::Value::fromJson("[1.5, 2.25e1, 1,5]", false);
+    BOOST_REQUIRE(parsed.toArray().size() == 4);
+    BOOST_CHECK_EQUAL(parsed.toArray()[0].toDouble(), 1.5);
+    BOOST_CHECK_EQUAL(parsed.toArray()[1].toDouble(), 22.5);
+    // The separator of the locale separates two elements.
+    BOOST_CHECK(parsed.toArray()[2] == json::Value(1));
+    BOOST_CHECK(parsed.toArray()[3] == json::Value(5));
+    // The locale of the program is unchanged.
+    BOOST_CHECK_EQUAL(std::string(std::localeconv()->decimal_point), ",");
 }
 
 BOOST_AUTO_TEST_CASE(test_Value_Indent) {
