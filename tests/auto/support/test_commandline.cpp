@@ -1,6 +1,7 @@
 ﻿// SPDX-License-Identifier: MIT
 
 #include <array>
+#include <clocale>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -213,6 +214,35 @@ BOOST_AUTO_TEST_CASE(test_floating_point) {
         BOOST_REQUIRE(reads("1e400", &wide));
         BOOST_CHECK(std::isfinite(wide));
     }
+}
+
+// A number on the command line has a period as the decimal separator in a locale whose
+// separator is a comma, as a host program selects with setlocale.
+BOOST_AUTO_TEST_CASE(test_floating_point_ignores_the_locale) {
+    const char *selected = nullptr;
+    for (const char *name : {"de_DE.UTF-8", "de_DE", "de-DE", "German_Germany.1252"}) {
+        if ((selected = std::setlocale(LC_ALL, name))) {
+            break;
+        }
+    }
+    if (!selected) {
+        BOOST_TEST_MESSAGE("No German locale is installed, so the case is skipped.");
+        return;
+    }
+    struct RestoreLocale {
+        ~RestoreLocale() {
+            std::setlocale(LC_ALL, "C");
+        }
+    } restore;
+    BOOST_REQUIRE_EQUAL(std::string(std::localeconv()->decimal_point), ",");
+
+    BOOST_CHECK_EQUAL(read<double>("1.5"), 1.5);
+    BOOST_CHECK_EQUAL(read<float>("0.25"), 0.25f);
+    BOOST_CHECK_EQUAL(read<long double>("2.5"), 2.5L);
+    double out;
+    BOOST_CHECK(!reads("1,5", &out));
+    // The locale of the program is unchanged.
+    BOOST_CHECK_EQUAL(std::string(std::localeconv()->decimal_point), ",");
 }
 
 BOOST_AUTO_TEST_CASE(test_booleans_spell_themselves_several_ways) {
@@ -569,6 +599,7 @@ namespace {
     std::string capturedStdout(F &&body) {
         return captured(stdout, "stdc_cli_stdout.txt", std::forward<F>(body));
     }
+
 }
 
 BOOST_AUTO_TEST_CASE(test_parse_bare_command) {

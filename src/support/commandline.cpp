@@ -3,7 +3,6 @@
 #include "commandline.h"
 #include "commandline_p.h"
 
-#include <cerrno>
 #include <cstdio>
 #include <charconv>
 #include <cstdlib>
@@ -14,6 +13,7 @@
 
 #include "console.h"
 #include "path.h"
+#include "str_p.h"
 #include "utf.h"
 #include "pimpl.h"
 
@@ -38,20 +38,14 @@ namespace stdc::cli {
                 return token;
             }
 
+            /// Reads \a token in the C locale, rejecting a value outside the range of \a T.
             template <class T>
-            bool parse_floating_with(std::string_view token, T *out,
-                                     T (*convert)(const char *, char **)) {
-                if (token.empty()) {
+            bool parse_floating_into(std::string_view token, T *out) {
+                const auto value = str::parse_floating<T>(token, str::floating_range::reject);
+                if (!value) {
                     return false;
                 }
-                std::string buf(token);
-                errno = 0;
-                char *end = nullptr;
-                T value = convert(buf.c_str(), &end);
-                if (end != buf.c_str() + buf.size() || end == buf.c_str() || errno == ERANGE) {
-                    return false;
-                }
-                *out = value;
+                *out = *value;
                 return true;
             }
 
@@ -97,15 +91,15 @@ namespace stdc::cli {
         }
 
         bool parse_floating(std::string_view token, float *out) {
-            return parse_floating_with(token, out, std::strtof);
+            return parse_floating_into(token, out);
         }
 
         bool parse_floating(std::string_view token, double *out) {
-            return parse_floating_with(token, out, std::strtod);
+            return parse_floating_into(token, out);
         }
 
         bool parse_floating(std::string_view token, long double *out) {
-            return parse_floating_with(token, out, std::strtold);
+            return parse_floating_into(token, out);
         }
 
         bool parse_boolean(std::string_view token, bool *out) {
