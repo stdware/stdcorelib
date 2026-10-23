@@ -1,12 +1,16 @@
 #[[
-# Adds Windows version information to a target.
+# Adds Windows version information and an optional icon to a target.
 #
 # stdc_add_win_rc(<target>
 #     COPYRIGHT <copyright>
 #     [DESCRIPTION <description>]
 #     [PRODUCT_NAME <name>]
 #     [VERSION <version>]
+#     [ICON <ico>]
 # )
+#
+# A relative ICON is resolved against the current source directory. A changed icon recompiles the
+# resource at the next build without a configure.
 #]]
 function(stdc_add_win_rc _target)
     if(NOT WIN32)
@@ -18,7 +22,7 @@ function(stdc_add_win_rc _target)
     endif()
 
     set(options)
-    set(oneValueArgs DESCRIPTION COPYRIGHT PRODUCT_NAME VERSION)
+    set(oneValueArgs DESCRIPTION COPYRIGHT PRODUCT_NAME VERSION ICON)
     set(multiValueArgs)
     cmake_parse_arguments(FUNC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -69,12 +73,21 @@ function(stdc_add_win_rc _target)
     list(GET _version_parts 2 _version_patch)
     list(GET _version_parts 3 _version_tweak)
 
+    set(_icon_path)
+    set(_icon_line)
+
+    if(FUNC_ICON)
+        get_filename_component(_icon_path "${FUNC_ICON}" ABSOLUTE)
+        set(_icon_line "IDI_ICON1 ICON \"${_icon_path}\"\n")
+    endif()
+
     set(_rc_content "#include <windows.h>
 
 #ifndef VS_VERSION_INFO
 #define VS_VERSION_INFO 1
 #endif
 
+${_icon_line}
 #define _STRINGIFY(x) #x
 #define STRINGIFY(x) _STRINGIFY(x)
 
@@ -100,7 +113,17 @@ VS_VERSION_INFO VERSIONINFO
     }
 }")
 
+    # No generator records the icon as a dependency of the script, and Visual Studio ignores
+    # OBJECT_DEPENDS. The script is therefore made at build time by a command that depends on it.
     set(_rc_file "${CMAKE_CURRENT_BINARY_DIR}/${_target}_res.rc")
-    file(WRITE "${_rc_file}" "${_rc_content}")
+    file(WRITE "${_rc_file}.in" "${_rc_content}")
+    configure_file("${_rc_file}.in" "${_rc_file}.configured" COPYONLY)
+
+    add_custom_command(OUTPUT "${_rc_file}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${_rc_file}.configured" "${_rc_file}"
+        COMMAND ${CMAKE_COMMAND} -E touch "${_rc_file}"
+        DEPENDS "${_rc_file}.configured" ${_icon_path}
+        VERBATIM
+    )
     target_sources(${_target} PRIVATE "${_rc_file}")
 endfunction()
